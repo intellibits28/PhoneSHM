@@ -339,11 +339,13 @@ private fun StepThreeLocationPrivacy(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                var lastCoordinates by remember { mutableStateOf(Pair(0.0, 0.0)) }
+
                 // Interactive Live Leaflet OpenStreetMap WebView Map
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .height(250.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                 ) {
@@ -351,48 +353,23 @@ private fun StepThreeLocationPrivacy(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
                                 webViewClient = android.webkit.WebViewClient()
-                                webChromeClient = object : android.webkit.WebChromeClient() {
-                                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                                        android.util.Log.d("SHM_MAP_JS", consoleMessage?.message() ?: "")
-                                        return true
-                                    }
-                                }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
-                                val html = """
-                                    <!DOCTYPE html>
-                                    <html>
-                                    <head>
-                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-                                        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-                                        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-                                        <style>
-                                            body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; }
-                                        </style>
-                                    </head>
-                                    <body>
-                                        <div id="map"></div>
-                                        <script>
-                                            var map = L.map('map').setView([${state.resolvedLatitude}, ${state.resolvedLongitude}], 16);
-                                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                                maxZoom: 19,
-                                                attribution: '© OpenStreetMap'
-                                            }).addTo(map);
-                                            var marker = L.marker([${state.resolvedLatitude}, ${state.resolvedLongitude}], { draggable: false }).addTo(map);
-                                            
-                                            function updateMarker(lat, lon) {
-                                                marker.setLatLng([lat, lon]);
-                                                map.setView([lat, lon]);
-                                            }
-                                        </script>
-                                    </body>
-                                    </html>
-                                """.trimIndent()
-                                loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
                             }
                         },
                         update = { webView ->
-                            webView.loadUrl("javascript:if(typeof updateMarker !== 'undefined') { updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude}); }")
+                            val current = Pair(state.resolvedLatitude ?: 0.0, state.resolvedLongitude ?: 0.0)
+                            if (current != lastCoordinates && state.resolvedLatitude != null && state.resolvedLongitude != null) {
+                                lastCoordinates = current
+                                val lat = current.first
+                                val lon = current.second
+                                val minLat = lat - 0.005
+                                val minLon = lon - 0.005
+                                val maxLat = lat + 0.005
+                                val maxLon = lon + 0.005
+                                val embedUrl = "https://www.openstreetmap.org/export/embed.html?bbox=$minLon%2C$minLat%2C$maxLon%2C$maxLat&layer=mapnik&marker=$lat%2C$lon"
+                                webView.loadUrl(embedUrl)
+                            }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
