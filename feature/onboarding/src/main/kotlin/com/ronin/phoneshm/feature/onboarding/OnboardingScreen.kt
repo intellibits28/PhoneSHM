@@ -353,12 +353,28 @@ private fun StepThreeLocationPrivacy(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
                                 webViewClient = object : android.webkit.WebViewClient() {
+                                    override fun onPageStarted(view: android.webkit.WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                        android.util.Log.d("SHM_MAP_LOG", "Page started loading: ${url}")
+                                    }
+
+                                    override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                        android.util.Log.d("SHM_MAP_LOG", "Page finished loading: ${url}")
+                                    }
+
+                                    override fun onReceivedError(
+                                        view: android.webkit.WebView?,
+                                        request: android.webkit.WebResourceRequest?,
+                                        error: android.webkit.WebResourceError?
+                                    ) {
+                                        android.util.Log.e("SHM_MAP_LOG", "Resource Error: ${request?.url} -> ${error?.description} (${error?.errorCode})")
+                                    }
+
                                     override fun onReceivedSslError(
                                         view: android.webkit.WebView?,
                                         handler: android.webkit.SslErrorHandler?,
                                         error: android.net.http.SslError?
                                     ) {
-                                        android.util.Log.e("SHM_MAP_SSL", "SSL Error: ${error?.toString()}")
+                                        android.util.Log.e("SHM_MAP_LOG", "SSL Error: ${error?.toString()}")
                                         handler?.proceed()
                                     }
                                 }
