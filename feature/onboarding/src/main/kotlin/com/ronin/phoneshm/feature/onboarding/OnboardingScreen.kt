@@ -378,6 +378,17 @@ private fun StepThreeLocationPrivacy(
                                         handler?.proceed()
                                     }
                                 }
+                                webChromeClient = object : android.webkit.WebChromeClient() {
+                                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                        consoleMessage?.let {
+                                            android.util.Log.d(
+                                                "SHM_MAP_JS",
+                                                "${it.message()} -- ${it.sourceId()}:${it.lineNumber()}"
+                                            )
+                                        }
+                                        return true
+                                    }
+                                }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
