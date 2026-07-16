@@ -24,6 +24,8 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(project(":core:storage"))
+    implementation(project(":core:device"))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

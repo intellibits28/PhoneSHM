@@ -40,4 +40,70 @@ class VibrationSensorEngineTest {
         assertTrue(meta.sampleJitterStdMs < 3.0f)
         assertEquals(45.0f, meta.clockDriftPpm, 0.001f)
     }
+
+    @Test
+    fun testSensorMetricsCalculatorCalculations() {
+        // Prepare exact 100Hz timestamps with zero jitter and zero drift:
+        // Hardware clock ticks every 10ms (10,000,000 ns)
+        // System clock also ticks every 10ms
+        val hardwareTimestamps = LongArray(101) { 1_000_000_000L + it * 10_000_000L }
+        val systemArrivalTimes = LongArray(101) { 5_000_000_000L + it * 10_000_000L }
+
+        val (rate, jitter, drift) = SensorMetricsCalculator.calculateMetrics(hardwareTimestamps, systemArrivalTimes)
+
+        assertEquals(100.0f, rate, 0.01f)
+        assertEquals(0.0f, jitter, 0.01f)
+        assertEquals(0.0f, drift, 0.01f)
+    }
+
+    @Test
+    fun testSensorMetricsCalculatorWithJitterAndDrift() {
+        // 5 samples: hardware intervals are 10ms, 12ms, 8ms, 10ms
+        // Mean interval = 10ms. Standard deviation = sqrt(((0)^2 + (2)^2 + (-2)^2 + (0)^2)/4) = sqrt(8/4) = sqrt(2.0) = 1.414ms
+        val hardwareTimestamps = longArrayOf(
+            1_000_000_000L,
+            1_010_000_000L, // +10ms
+            1_022_000_000L, // +12ms
+            1_030_000_000L, // +8ms
+            1_040_000_000L  // +10ms
+        )
+
+        // System clock elapsed time:
+        // First sample received at 5_000_000_000L
+        // Last sample received at 5_038_000_000L (+38ms)
+        // Hardware elapsed time = 40ms. System elapsed time = 38ms.
+        // Drift = (40ms - 38ms) / 38ms = 2 / 38 = 0.052631 = 52631.5 PPM
+        val systemArrivalTimes = longArrayOf(
+            5_000_000_000L,
+            5_010_000_000L,
+            5_020_000_000L,
+            5_030_000_000L,
+            5_038_000_000L
+        )
+
+        val (rate, jitter, drift) = SensorMetricsCalculator.calculateMetrics(hardwareTimestamps, systemArrivalTimes)
+
+        // rate = (5 - 1) / 0.04s = 100 Hz
+        assertEquals(100.0f, rate, 0.01f)
+        assertEquals(1.414f, jitter, 0.01f)
+        assertEquals(52631.58f, drift, 0.1f)
+    }
+
+    @Test
+    fun testSensorMetricsCalculatorEdgeCases() {
+        // Less than 2 samples
+        val emptyHW = LongArray(0)
+        val emptySYS = LongArray(0)
+        val (rate0, jitter0, drift0) = SensorMetricsCalculator.calculateMetrics(emptyHW, emptySYS)
+        assertEquals(0.0f, rate0, 0.0f)
+        assertEquals(0.0f, jitter0, 0.0f)
+        assertEquals(0.0f, drift0, 0.0f)
+
+        val singleHW = longArrayOf(1000L)
+        val singleSYS = longArrayOf(5000L)
+        val (rate1, jitter1, drift1) = SensorMetricsCalculator.calculateMetrics(singleHW, singleSYS)
+        assertEquals(0.0f, rate1, 0.0f)
+        assertEquals(0.0f, jitter1, 0.0f)
+        assertEquals(0.0f, drift1, 0.0f)
+    }
 }
