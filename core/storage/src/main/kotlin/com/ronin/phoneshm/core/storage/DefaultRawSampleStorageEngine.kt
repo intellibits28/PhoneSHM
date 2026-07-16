@@ -93,4 +93,59 @@ class DefaultRawSampleStorageEngine(
             Pair(file.length(), sampleCount)
         }
     }
+
+    override suspend fun readSamplesFromFile(file: File): RawSampleSessionData = withContext(Dispatchers.IO) {
+        if (!file.exists()) {
+            return@withContext RawSampleSessionData(LongArray(0), FloatArray(0), FloatArray(0), FloatArray(0))
+        }
+
+        if (file.name.endsWith(".bin")) {
+            val bytes = file.readBytes()
+            val sampleCount = bytes.size / 20
+            val timestamps = LongArray(sampleCount)
+            val x = FloatArray(sampleCount)
+            val y = FloatArray(sampleCount)
+            val z = FloatArray(sampleCount)
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            for (i in 0 until sampleCount) {
+                timestamps[i] = buffer.long
+                x[i] = buffer.float
+                y[i] = buffer.float
+                z[i] = buffer.float
+            }
+            RawSampleSessionData(timestamps, x, y, z)
+        } else {
+            // CSV or CSV.GZ
+            val timestampsList = mutableListOf<Long>()
+            val xList = mutableListOf<Float>()
+            val yList = mutableListOf<Float>()
+            val zList = mutableListOf<Float>()
+
+            val inputStream = if (file.name.endsWith(".gz")) {
+                java.util.zip.GZIPInputStream(FileInputStream(file))
+            } else {
+                FileInputStream(file)
+            }
+
+            inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    if (line.isNotBlank()) {
+                        val parts = line.split(',')
+                        if (parts.size >= 4) {
+                            timestampsList.add(parts[0].toLongOrNull() ?: 0L)
+                            xList.add(parts[1].toFloatOrNull() ?: 0f)
+                            yList.add(parts[2].toFloatOrNull() ?: 0f)
+                            zList.add(parts[3].toFloatOrNull() ?: 0f)
+                        }
+                    }
+                }
+            }
+            RawSampleSessionData(
+                timestampsList.toLongArray(),
+                xList.toFloatArray(),
+                yList.toFloatArray(),
+                zList.toFloatArray()
+            )
+        }
+    }
 }

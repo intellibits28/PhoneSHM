@@ -89,4 +89,40 @@ class RawSampleStorageEngineTest {
         assertEquals("1000000000,0.1,-0.1,9.8", lines[0])
         assertEquals("2000000000,0.2,-0.2,9.7", lines[1])
     }
+
+    @Test
+    fun testReadSamplesFromFileBinary() = runTest {
+        val sessionId = "session_binary_read"
+        val file = storageEngine.createSessionFile(sessionId, StorageFormat.BINARY_LITTLE_ENDIAN)
+        val timestamps = longArrayOf(100L, 200L, 300L)
+        val x = floatArrayOf(1.0f, 2.0f, 3.0f)
+        val y = floatArrayOf(-1.0f, -2.0f, -3.0f)
+        val z = floatArrayOf(9.8f, 9.8f, 9.8f)
+        storageEngine.appendSamplesBatch(file, timestamps, x, y, z)
+        storageEngine.finalizeSessionFile(file)
+
+        val readData = storageEngine.readSamplesFromFile(file)
+        assertEquals(3, readData.sampleCount)
+        assertEquals(100L, readData.timestampsNs[0])
+        assertEquals(2.0f, readData.x[1], 0.001f)
+        assertEquals(-3.0f, readData.y[2], 0.001f)
+    }
+
+    @Test
+    fun testReadSamplesFromFileGzip() = runTest {
+        val sessionId = "session_gzip_read"
+        val file = storageEngine.createSessionFile(sessionId, StorageFormat.CSV_GZIP)
+        val timestamps = longArrayOf(100L, 200L)
+        val x = floatArrayOf(1.5f, 2.5f)
+        val y = floatArrayOf(-1.5f, -2.5f)
+        val z = floatArrayOf(9.8f, 9.8f)
+        storageEngine.appendSamplesBatch(file, timestamps, x, y, z)
+        storageEngine.finalizeSessionFile(file)
+
+        val gzipFile = File(testDir, "$sessionId.csv.gz")
+        val readData = storageEngine.readSamplesFromFile(gzipFile)
+        assertEquals(2, readData.sampleCount)
+        assertEquals(200L, readData.timestampsNs[1])
+        assertEquals(1.5f, readData.x[0], 0.001f)
+    }
 }

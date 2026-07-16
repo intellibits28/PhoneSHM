@@ -30,4 +30,36 @@ interface RawSampleStorageEngine {
      * Finalizes file stream and returns total bytes written and sample count.
      */
     suspend fun finalizeSessionFile(file: File): Pair<Long, Int>
+
+    /**
+     * Reads back all serialized samples from a finalized binary/CSV/GZIP session file.
+     */
+    suspend fun readSamplesFromFile(file: File): RawSampleSessionData
 }
+
+data class RawSampleSessionData(
+    val timestampsNs: LongArray,
+    val x: FloatArray,
+    val y: FloatArray,
+    val z: FloatArray
+) {
+    val sampleCount: Int get() = timestampsNs.size
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is RawSampleSessionData) return false
+        return timestampsNs.contentEquals(other.timestampsNs) &&
+                x.contentEquals(other.x) &&
+                y.contentEquals(other.y) &&
+                z.contentEquals(other.z)
+    }
+
+    override fun hashCode(): Int {
+        var result = timestampsNs.contentHashCode()
+        result = 31 * result + x.contentHashCode()
+        result = 31 * result + y.contentHashCode()
+        result = 31 * result + z.contentHashCode()
+        return result
+    }
+}
+

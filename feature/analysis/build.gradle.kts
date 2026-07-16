@@ -33,6 +33,8 @@ dependencies {
     implementation(project(":core:physics"))
     implementation(project(":core:baseline"))
     implementation(project(":core:quality"))
+    implementation(project(":core:sensor"))
+    implementation(project(":core:storage"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

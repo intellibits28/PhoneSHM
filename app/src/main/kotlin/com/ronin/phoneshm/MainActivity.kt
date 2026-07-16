@@ -29,6 +29,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ronin.phoneshm.core.database.PhoneShmDatabase
 import com.ronin.phoneshm.core.database.repository.ProfileRepositoryImpl
 import com.ronin.phoneshm.core.device.AndroidDeviceCapabilityEngine
+import com.ronin.phoneshm.feature.analysis.AnalysisScreen
+import com.ronin.phoneshm.feature.analysis.AnalysisViewModel
 import com.ronin.phoneshm.feature.measurement.MeasurementScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingViewModel
@@ -101,6 +103,7 @@ fun PhoneShmAppHost(
 
     val onboardingViewModel: OnboardingViewModel = viewModel(factory = onboardingFactory)
     val measurementViewModel: com.ronin.phoneshm.feature.measurement.MeasurementViewModel = viewModel(factory = measurementFactory)
+    val analysisViewModel: AnalysisViewModel = viewModel()
 
     if (currentScreen == "ONBOARDING") {
         OnboardingScreen(
@@ -110,6 +113,11 @@ fun PhoneShmAppHost(
                 activeMeasurementId = mId
                 currentScreen = "MEASUREMENT"
             }
+        )
+    } else if (currentScreen == "ANALYSIS") {
+        AnalysisScreen(
+            viewModel = analysisViewModel,
+            onBackToMeasurement = { currentScreen = "MEASUREMENT" }
         )
     } else {
         Scaffold(
@@ -141,7 +149,14 @@ fun PhoneShmAppHost(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                MeasurementScreen(viewModel = measurementViewModel, modifier = Modifier.weight(1f))
+                MeasurementScreen(
+                    viewModel = measurementViewModel,
+                    modifier = Modifier.weight(1f),
+                    onNavigateToAnalysis = { fileUri ->
+                        analysisViewModel.analyzeSessionFileOrDemo(fileUri)
+                        currentScreen = "ANALYSIS"
+                    }
+                )
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(onClick = { currentScreen = "ONBOARDING" }) {
                     Text("<- Back to Profile Wizard")

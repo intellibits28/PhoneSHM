@@ -34,7 +34,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MeasurementScreen(
     viewModel: MeasurementViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToAnalysis: (String?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -244,11 +245,35 @@ fun MeasurementScreen(
                             Text("Copy ADB Pull Cmd", style = MaterialTheme.typography.labelSmall)
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Phase 5: Analyze Modal & Physics ->", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        // Quick jump to Phase 5 Analysis if not recording
+        if (!uiState.isRecording && !uiState.recordingFinished) {
+            Button(
+                onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Phase 5: Modal & Physics Engine Demo / Analysis ->", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
 
         // Recording Actions
         Row(
