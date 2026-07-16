@@ -40,11 +40,12 @@ class MainActivity : ComponentActivity() {
         val db = PhoneShmDatabase.getDatabase(applicationContext)
         val profileRepo = ProfileRepositoryImpl(db.profileDao())
         val deviceEngine = AndroidDeviceCapabilityEngine(applicationContext)
+        val locationResolver = com.ronin.phoneshm.core.location.AndroidLocationResolver(applicationContext)
 
         val onboardingFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return OnboardingViewModel(profileRepo, deviceEngine) as T
+                return OnboardingViewModel(profileRepo, deviceEngine, locationResolver) as T
             }
         }
 

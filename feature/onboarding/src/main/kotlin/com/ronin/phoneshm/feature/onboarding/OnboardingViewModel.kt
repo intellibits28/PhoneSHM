@@ -8,6 +8,8 @@ import com.ronin.phoneshm.core.database.repository.ProfileRepository
 import com.ronin.phoneshm.core.device.DeviceCapabilityEngine
 import com.ronin.phoneshm.core.device.DeviceCapabilityReport
 import com.ronin.phoneshm.core.device.SensorQualityTier
+import com.ronin.phoneshm.core.location.LocationResolver
+import com.ronin.phoneshm.core.location.PrivacyLevel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +30,13 @@ data class OnboardingState(
     val constructionYear: String = "2020",
     val material: String = "Reinforced Concrete",
 
-    // Step 3: Measurement Placement Setup
+    // Step 3: Location Privacy Setup
+    val privacyLevel: PrivacyLevel = PrivacyLevel.APPROXIMATE_LOCATION,
+    val resolvedLatitude: Double? = null,
+    val resolvedLongitude: Double? = null,
+    val resolvedBuildingHash: String? = null,
+
+    // Step 4: Measurement Placement Setup
     val floorLevel: String = "1",
     val surfaceType: String = "CONCRETE",
     val locationType: String = "CENTER_SPAN",
@@ -43,11 +51,13 @@ data class OnboardingState(
 )
 
 /**
- * OnboardingViewModel manages startup wizard state, hardware capability evaluation, and profile persistence.
+ * OnboardingViewModel manages startup wizard state, hardware capability evaluation,
+ * privacy preferences, location resolution, and profile persistence.
  */
 class OnboardingViewModel(
     private val profileRepository: ProfileRepository? = null,
-    private val deviceCapabilityEngine: DeviceCapabilityEngine? = null
+    private val deviceCapabilityEngine: DeviceCapabilityEngine? = null,
+    private val locationResolver: LocationResolver? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingState())
@@ -55,7 +65,6 @@ class OnboardingViewModel(
 
     fun inspectDevice() {
         if (deviceCapabilityEngine == null) {
-            // Mock or default fallback if engine not injected
             _state.value = _state.value.copy(
                 deviceReport = DeviceCapabilityReport(
                     deviceModel = "Android PhoneSHM Device",
@@ -117,6 +126,10 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(material = material)
     }
 
+    fun updatePrivacyLevel(level: PrivacyLevel) {
+        _state.value = _state.value.copy(privacyLevel = level)
+    }
+
     fun updateFloorLevel(level: String) {
         _state.value = _state.value.copy(floorLevel = level)
     }
@@ -137,6 +150,25 @@ class OnboardingViewModel(
         _state.value = _state.value.copy(step = newStep)
     }
 
+    fun resolveCurrentLocation() {
+        val resolver = locationResolver ?: return
+        viewModelScope.launch {
+            try {
+                val profile = resolver.resolveLocation(_state.value.privacyLevel)
+                profile?.let {
+                    val hash = resolver.generateBuildingHash(it.latitude, it.longitude, _state.value.buildingName)
+                    _state.value = _state.value.copy(
+                        resolvedLatitude = it.latitude,
+                        resolvedLongitude = it.longitude,
+                        resolvedBuildingHash = hash
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(errorMessage = "Location resolution failed: ${e.message}")
+            }
+        }
+    }
+
     fun saveProfileAndFinish() {
         val s = _state.value
         if (s.buildingName.isBlank()) {
@@ -147,46 +179,47 @@ class OnboardingViewModel(
         val bId = "b_" + UUID.randomUUID().toString().substring(0, 8)
         val mId = "m_" + UUID.randomUUID().toString().substring(0, 8)
 
-        val buildingProfile = BuildingProfile(
-            id = bId,
-            name = s.buildingName,
-            type = s.buildingType,
-            floors = s.floors.toIntOrNull() ?: 1,
-            constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
-            material = s.material,
-            buildingHash = "crowd_" + bId
-        )
-
-        val measurementProfile = MeasurementProfile(
-            id = mId,
-            buildingId = bId,
-            floorLevel = s.floorLevel.toIntOrNull() ?: 1,
-            surfaceType = s.surfaceType,
-            locationType = s.locationType,
-            placement = s.placement
-        )
-
-        if (profileRepository == null) {
-            _state.value = s.copy(
-                isCompleted = true,
-                savedBuildingId = bId,
-                savedMeasurementId = mId,
-                step = 4
-            )
-            return
-        }
-
         viewModelScope.launch {
             _state.value = _state.value.copy(isSaving = true, errorMessage = null)
             try {
-                profileRepository.saveBuildingProfile(buildingProfile)
-                profileRepository.saveMeasurementProfile(measurementProfile)
+                var finalHash = s.resolvedBuildingHash
+                if (finalHash == null && locationResolver != null) {
+                    val loc = locationResolver.resolveLocation(s.privacyLevel)
+                    if (loc != null) {
+                        finalHash = locationResolver.generateBuildingHash(loc.latitude, loc.longitude, s.buildingName)
+                    }
+                }
+
+                val buildingProfile = BuildingProfile(
+                    id = bId,
+                    name = s.buildingName,
+                    type = s.buildingType,
+                    floors = s.floors.toIntOrNull() ?: 1,
+                    constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
+                    material = s.material,
+                    buildingHash = finalHash ?: "crowd_anonymized_$bId"
+                )
+
+                val measurementProfile = MeasurementProfile(
+                    id = mId,
+                    buildingId = bId,
+                    floorLevel = s.floorLevel.toIntOrNull() ?: 1,
+                    surfaceType = s.surfaceType,
+                    locationType = s.locationType,
+                    placement = s.placement
+                )
+
+                if (profileRepository != null) {
+                    profileRepository.saveBuildingProfile(buildingProfile)
+                    profileRepository.saveMeasurementProfile(measurementProfile)
+                }
+
                 _state.value = _state.value.copy(
                     isSaving = false,
                     isCompleted = true,
                     savedBuildingId = bId,
                     savedMeasurementId = mId,
-                    step = 4
+                    step = 5
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(isSaving = false, errorMessage = "Save error: ${e.message}")

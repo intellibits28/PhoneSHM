@@ -1,6 +1,10 @@
 package com.ronin.phoneshm.feature.onboarding
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -16,6 +22,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,8 +30,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ronin.phoneshm.core.location.PrivacyLevel
 
 @Composable
 fun OnboardingScreen(
@@ -48,12 +57,12 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "PhoneSHM Phase 1 Wizard",
+            text = "PhoneSHM Phase 2 Wizard",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Citizen-Scale Structural Health Monitoring Setup (Step ${state.step} of 4)",
+            text = "Citizen-Scale Structural Health Monitoring Setup (Step ${state.step} of 5)",
             style = MaterialTheme.typography.bodyMedium
         )
 
@@ -73,8 +82,9 @@ fun OnboardingScreen(
         when (state.step) {
             1 -> StepOneHardwareEvaluation(state, viewModel)
             2 -> StepTwoBuildingTypology(state, viewModel)
-            3 -> StepThreePlacementSetup(state, viewModel)
-            4 -> StepFourSummary(state, onFinished)
+            3 -> StepThreeLocationPrivacy(state, viewModel)
+            4 -> StepFourPlacementSetup(state, viewModel)
+            5 -> StepFiveSummary(state, onFinished)
         }
     }
 }
@@ -168,7 +178,95 @@ private fun StepTwoBuildingTypology(
                 OutlinedButton(onClick = { viewModel.setStep(1) }) {
                     Text("<- Back")
                 }
-                Button(onClick = { viewModel.setStep(3) }) {
+                Button(
+                    onClick = { viewModel.setStep(3) },
+                    enabled = state.buildingName.isNotBlank()
+                ) {
+                    Text("Next: Location & Privacy ->")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepThreeLocationPrivacy(
+    state: OnboardingState,
+    viewModel: OnboardingViewModel
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(text = "3. Spatial Location & Privacy Tiers", style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = "Select how spatial coordinates are clustered and aggregated for global citizen-science monitoring.",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            PrivacyLevel.values().forEach { level ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { viewModel.updatePrivacyLevel(level) }
+                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = state.privacyLevel == level,
+                        onClick = { viewModel.updatePrivacyLevel(level) }
+                    )
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(text = level.name, fontWeight = FontWeight.Bold)
+                        val desc = when (level) {
+                            PrivacyLevel.EXACT_LOCATION -> "Exact GPS coordinates for engineering research precision."
+                            PrivacyLevel.APPROXIMATE_LOCATION -> "Truncated to 3 decimal places (~110 meters accuracy) for spatial clustering privacy."
+                            PrivacyLevel.LOCAL_ONLY -> "Completely anonymous. Coordinates are zeroed, no spatial correlation."
+                        }
+                        Text(text = desc, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            Button(
+                onClick = { viewModel.resolveCurrentLocation() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Resolve coordinates & spatial grid")
+            }
+
+            if (state.resolvedLatitude != null && state.resolvedLongitude != null) {
+                Text(text = "Coordinates: [Lat: ${state.resolvedLatitude}, Lon: ${state.resolvedLongitude}]")
+                Text(text = "Spatial Building Hash: ${state.resolvedBuildingHash}", fontWeight = FontWeight.SemiBold)
+
+                // Mock Offline MapLibre / OpenStreetMap Preview
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Offline MapLibre / OpenStreetMap Active",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Confirmed pin position overlay at Ahlone/Yangon grid",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                OutlinedButton(onClick = { viewModel.setStep(2) }) {
+                    Text("<- Back")
+                }
+                Button(onClick = { viewModel.setStep(4) }) {
                     Text("Next: Placement Setup ->")
                 }
             }
@@ -177,13 +275,13 @@ private fun StepTwoBuildingTypology(
 }
 
 @Composable
-private fun StepThreePlacementSetup(
+private fun StepFourPlacementSetup(
     state: OnboardingState,
     viewModel: OnboardingViewModel
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text = "3. Measurement Placement Setup", style = MaterialTheme.typography.titleLarge)
+            Text(text = "4. Measurement Placement Setup", style = MaterialTheme.typography.titleLarge)
 
             OutlinedTextField(
                 value = state.floorLevel,
@@ -214,7 +312,7 @@ private fun StepThreePlacementSetup(
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                OutlinedButton(onClick = { viewModel.setStep(2) }) {
+                OutlinedButton(onClick = { viewModel.setStep(3) }) {
                     Text("<- Back")
                 }
                 Button(onClick = { viewModel.saveProfileAndFinish() }, enabled = !state.isSaving) {
@@ -226,17 +324,18 @@ private fun StepThreePlacementSetup(
 }
 
 @Composable
-private fun StepFourSummary(
+private fun StepFiveSummary(
     state: OnboardingState,
     onFinished: (String, String) -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text = "4. Profile Configuration Complete!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(text = "5. Profile Configuration Complete!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(text = "Your citizen-scale SHM baseline profile and session placement parameters have been persisted to Room DB.")
 
             Text(text = "Building Name: ${state.buildingName}")
             Text(text = "Typology: ${state.buildingType} (${state.floors} Floors)")
+            Text(text = "Spatial Hash: ${state.resolvedBuildingHash ?: "LOCAL_ONLY"}")
             Text(text = "Building ID: ${state.savedBuildingId ?: "N/A"}")
             Text(text = "Measurement Profile ID: ${state.savedMeasurementId ?: "N/A"}")
 

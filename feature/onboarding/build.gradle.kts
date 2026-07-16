@@ -30,6 +30,7 @@ android {
 dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:device"))
+    implementation(project(":core:location"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
