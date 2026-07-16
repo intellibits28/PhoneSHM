@@ -388,7 +388,7 @@ private fun StepThreeLocationPrivacy(
                                 lastCoordinates = current
                                 val lat = current.first
                                 val lon = current.second
-                                val imageUrl = "https://staticmap.openstreetmap.de/staticmap.php?center=$lat,$lon&zoom=16&size=600x300&maptype=mapnik&markers=$lat,$lon,ol-marker"
+                                val imageUrl = "https://static-maps.yandex.ru/1.x/?ll=$lon,$lat&z=16&l=map&size=600,300&pt=$lon,$lat,pm2rdm"
                                 val html = """
                                     <!DOCTYPE html>
                                     <html>
@@ -400,7 +400,7 @@ private fun StepThreeLocationPrivacy(
                                         </style>
                                     </head>
                                     <body>
-                                        <img src="$imageUrl" />
+                                        <img src="$imageUrl" onerror="this.src='https://staticmap.openstreetmap.de/staticmap.php?center=$lat,$lon&zoom=16&size=600x300&maptype=mapnik&markers=$lat,$lon,ol-marker'" />
                                     </body>
                                     </html>
                                 """.trimIndent()
