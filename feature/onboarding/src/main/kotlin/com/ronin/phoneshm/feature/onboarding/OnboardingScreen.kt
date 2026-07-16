@@ -388,12 +388,23 @@ private fun StepThreeLocationPrivacy(
                                 lastCoordinates = current
                                 val lat = current.first
                                 val lon = current.second
-                                val minLat = lat - 0.005
-                                val minLon = lon - 0.005
-                                val maxLat = lat + 0.005
-                                val maxLon = lon + 0.005
-                                val embedUrl = "https://www.openstreetmap.org/export/embed.html?bbox=$minLon%2C$minLat%2C$maxLon%2C$maxLat&layer=mapnik&marker=$lat%2C$lon"
-                                webView.loadUrl(embedUrl)
+                                val imageUrl = "https://staticmap.openstreetmap.de/staticmap.php?center=$lat,$lon&zoom=16&size=600x300&maptype=mapnik&markers=$lat,$lon,ol-marker"
+                                val html = """
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+                                        <style>
+                                            body, html { margin: 0; padding: 0; height: 100%; width: 100%; display: flex; justify-content: center; align-items: center; background-color: #f4f6fa; }
+                                            img { width: 100%; height: 100%; object-fit: cover; }
+                                        </style>
+                                    </head>
+                                    <body>
+                                        <img src="$imageUrl" />
+                                    </body>
+                                    </html>
+                                """.trimIndent()
+                                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
                             }
                         },
                         modifier = Modifier.fillMaxSize()
