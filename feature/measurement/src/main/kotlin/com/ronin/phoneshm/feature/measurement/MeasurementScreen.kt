@@ -162,13 +162,15 @@ fun MeasurementScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text("Stored Session File Path:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    Text(
-                        text = uiState.rawStorageFileUri ?: "None",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.DarkGray
-                    )
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            text = uiState.rawStorageFileUri ?: "None",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.DarkGray
+                        )
+                    }
                 }
             }
         }
