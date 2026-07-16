@@ -392,7 +392,7 @@ private fun StepThreeLocationPrivacy(
                             }
                         },
                         update = { webView ->
-                            webView.loadUrl("javascript:updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude})")
+                            webView.loadUrl("javascript:if(typeof updateMarker !== 'undefined') { updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude}); }")
                         },
                         modifier = Modifier.fillMaxSize()
                     )
