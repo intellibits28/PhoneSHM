@@ -3,14 +3,34 @@ package com.ronin.phoneshm.feature.onboarding
 import com.ronin.phoneshm.core.database.model.BuildingProfile
 import com.ronin.phoneshm.core.database.model.MeasurementProfile
 import com.ronin.phoneshm.core.database.repository.ProfileRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingViewModelTest {
+
+    private val testDispatcher = UnconfinedTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     private class FakeProfileRepository : ProfileRepository {
         var savedBuilding: BuildingProfile? = null
