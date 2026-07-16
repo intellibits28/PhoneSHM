@@ -1,0 +1,32 @@
+package com.ronin.phoneshm.core.dsp
+
+import com.ronin.phoneshm.core.sensor.AccelerationSample
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Test
+
+class DspEngineTest {
+
+    private class FakeDspEngine : DspEngine {
+        override fun removeGravityAndDetrend(samples: List<AccelerationSample>): List<AccelerationSample> = samples
+        override fun highPassFilter(signal: FloatArray, sampleRateHz: Float, cutoffHz: Float): FloatArray = signal
+        override fun applyHanningWindow(windowSegment: FloatArray): FloatArray = windowSegment
+
+        override fun calculateMultiAxisWelchPsd(
+            samples: List<AccelerationSample>,
+            sampleRateHz: Float,
+            params: WelchPsdParameters
+        ): MultiAxisSpectrumResult {
+            val emptyAxis = AxisPsdResult(floatArrayOf(8.2f), floatArrayOf(1.0f), listOf(Peak(8.2f, 1.0f, 0.8f)))
+            return MultiAxisSpectrumResult(emptyAxis, emptyAxis, emptyAxis, emptyAxis, params)
+        }
+    }
+
+    @Test
+    fun testMultiAxisWelchPsdStructure() {
+        val engine = FakeDspEngine()
+        val result = engine.calculateMultiAxisWelchPsd(listOf(AccelerationSample(0, 0f, 0f, 0f)))
+        assertNotNull(result.psdX)
+        assertEquals(8.2f, result.psdX.peaks.first().frequencyHz, 0.001f)
+    }
+}
