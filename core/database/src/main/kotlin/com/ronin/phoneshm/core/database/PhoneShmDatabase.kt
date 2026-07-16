@@ -1,6 +1,8 @@
 package com.ronin.phoneshm.core.database
 
+import android.content.Context
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.ronin.phoneshm.core.database.dao.ProfileDao
 import com.ronin.phoneshm.core.database.entity.BuildingProfileEntity
@@ -20,4 +22,22 @@ import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
 )
 abstract class PhoneShmDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: PhoneShmDatabase? = null
+
+        fun getDatabase(context: Context): PhoneShmDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    PhoneShmDatabase::class.java,
+                    "phone_shm_database"
+                ).fallbackToDestructiveMigration()
+                    .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
 }
