@@ -391,23 +391,38 @@ private fun StepThreeLocationPrivacy(
                                 lastCoordinates = current
                                 val lat = current.first
                                 val lon = current.second
-                                val imageUrl = "https://static-maps.yandex.ru/1.x/?ll=$lon,$lat&z=16&l=map&size=600,300&pt=$lon,$lat,pm2rdm"
                                 val html = """
                                     <!DOCTYPE html>
                                     <html>
                                     <head>
-                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                                        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+                                        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
                                         <style>
-                                            body, html { margin: 0; padding: 0; height: 100%; width: 100%; display: flex; justify-content: center; align-items: center; background-color: #f4f6fa; }
-                                            img { width: 100%; height: 100%; object-fit: cover; }
+                                            body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #f4f6fa; }
                                         </style>
                                     </head>
                                     <body>
-                                        <img src="$imageUrl" onerror="this.src='https://staticmap.openstreetmap.de/staticmap.php?center=$lat,$lon&zoom=16&size=600x300&maptype=mapnik&markers=$lat,$lon,ol-marker'" />
+                                        <div id="map"></div>
+                                        <script>
+                                            var map = L.map('map').setView([$lat, $lon], 16);
+                                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                                maxZoom: 19,
+                                                attribution: '© OpenStreetMap'
+                                            }).addTo(map);
+                                            var marker = L.marker([$lat, $lon], { draggable: false }).addTo(map);
+                                            
+                                            function updateMarker(newLat, newLon) {
+                                                marker.setLatLng([newLat, newLon]);
+                                                map.setView([newLat, newLon]);
+                                            }
+                                        </script>
                                     </body>
                                     </html>
                                 """.trimIndent()
-                                webView.loadDataWithBaseURL("https://static-maps.yandex.ru", html, "text/html", "UTF-8", null)
+                                webView.loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                            } else if (state.resolvedLatitude != null && state.resolvedLongitude != null) {
+                                webView.loadUrl("javascript:if(typeof updateMarker !== 'undefined') { updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude}); }")
                             }
                         },
                         modifier = Modifier.fillMaxSize()
