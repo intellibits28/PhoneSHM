@@ -352,6 +352,9 @@ private fun StepThreeLocationPrivacy(
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                                    android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+                                }
                                 webViewClient = object : android.webkit.WebViewClient() {
                                     override fun onPageStarted(view: android.webkit.WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                         android.util.Log.d("SHM_MAP_LOG", "Page started loading: ${url}")
@@ -407,16 +410,17 @@ private fun StepThreeLocationPrivacy(
                                     <html>
                                     <head>
                                         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-                                        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-                                        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+                                        <link rel="stylesheet" href="leaflet.min.css" />
+                                        <script src="leaflet.min.js"></script>
                                         <style>
                                             body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #f4f6fa; }
+                                            .custom-svg-marker { display: flex; justify-content: center; align-items: center; }
                                         </style>
                                     </head>
                                     <body>
                                         <div id="map"></div>
                                         <script>
-                                            console.log("Inline script started");
+                                            console.log("Inline script started with local Leaflet assets");
                                             document.addEventListener("DOMContentLoaded", function() {
                                                 console.log("DOMContentLoaded triggered, checking Leaflet");
                                                 if (typeof L !== 'undefined') {
@@ -425,7 +429,21 @@ private fun StepThreeLocationPrivacy(
                                                         maxZoom: 19,
                                                         attribution: '© OpenStreetMap'
                                                     }).addTo(map);
-                                                    var marker = L.marker([$lat, $lon], { draggable: false }).addTo(map);
+                                                    
+                                                    // Resolve hidden container zero-size leaflet bug
+                                                    setTimeout(function() {
+                                                        map.invalidateSize();
+                                                        console.log("Map size invalidated/recalculated");
+                                                    }, 250);
+
+                                                    var customIcon = L.divIcon({
+                                                        html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="#E53935"/></svg>',
+                                                        className: 'custom-svg-marker',
+                                                        iconSize: [24, 24],
+                                                        iconAnchor: [12, 22]
+                                                    });
+
+                                                    var marker = L.marker([$lat, $lon], { icon: customIcon, draggable: false }).addTo(map);
                                                     
                                                     window.updateMarker = function(newLat, newLon) {
                                                         marker.setLatLng([newLat, newLon]);
@@ -440,7 +458,7 @@ private fun StepThreeLocationPrivacy(
                                     </body>
                                     </html>
                                 """.trimIndent()
-                                webView.loadDataWithBaseURL("https://localhost", html, "text/html", "UTF-8", null)
+                                webView.loadDataWithBaseURL("file:///android_asset/leaflet/", html, "text/html", "UTF-8", null)
                             } else if (state.resolvedLatitude != null && state.resolvedLongitude != null) {
                                 webView.loadUrl("javascript:if(typeof updateMarker !== 'undefined') { updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude}); }")
                             }
