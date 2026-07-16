@@ -33,3 +33,5 @@ local.properties
 # Termux / Local temp files
 scratch/
 *.log
+logs_and_others/
+
