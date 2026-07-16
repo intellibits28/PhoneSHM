@@ -351,7 +351,14 @@ private fun StepThreeLocationPrivacy(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
                                 webViewClient = android.webkit.WebViewClient()
+                                webChromeClient = object : android.webkit.WebChromeClient() {
+                                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                        android.util.Log.d("SHM_MAP_JS", consoleMessage?.message() ?: "")
+                                        return true
+                                    }
+                                }
                                 settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
                                 val html = """
                                     <!DOCTYPE html>
                                     <html>
