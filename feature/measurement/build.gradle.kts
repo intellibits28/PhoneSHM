@@ -30,6 +30,7 @@ android {
 dependencies {
     implementation(project(":core:sensor"))
     implementation(project(":core:device"))
+    implementation(project(":core:storage"))
     implementation(project(":core:audio"))
     implementation(project(":core:quality"))
     implementation(libs.androidx.core.ktx)

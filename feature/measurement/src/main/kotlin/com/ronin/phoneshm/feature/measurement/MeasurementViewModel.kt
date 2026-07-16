@@ -1,34 +1,115 @@
 package com.ronin.phoneshm.feature.measurement
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ronin.phoneshm.core.sensor.VibrationSensorEngine
+import java.util.UUID
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class MeasurementUiState(
     val isRecording: Boolean = false,
     val elapsedSeconds: Int = 0,
     val currentSampleRateHz: Float = 0f,
     val clockJitterMs: Float = 0f,
-    val currentQualityScorePct: Int = 100
+    val clockDriftPpm: Float = 0f,
+    val rawStorageFileUri: String? = null,
+    val currentX: Float = 0f,
+    val currentY: Float = 0f,
+    val currentZ: Float = 0f,
+    val totalSamplesCollected: Int = 0,
+    val recordingFinished: Boolean = false
 )
 
 /**
  * MeasurementViewModel controls live sensor recording HUD, circular buffer extraction, and state.
  */
-class MeasurementViewModel : ViewModel() {
+class MeasurementViewModel(
+    private val sensorEngine: VibrationSensorEngine
+) : ViewModel() {
     private val _uiState = MutableStateFlow(MeasurementUiState())
     val uiState: StateFlow<MeasurementUiState> = _uiState.asStateFlow()
 
-    fun toggleRecording(start: Boolean) {
-        _uiState.value = _uiState.value.copy(isRecording = start, elapsedSeconds = if (start) 0 else _uiState.value.elapsedSeconds)
+    private var recordingJob: Job? = null
+    private var streamingJob: Job? = null
+
+    fun startRecording(profileId: String, durationSec: Int) {
+        if (_uiState.value.isRecording) return
+
+        _uiState.value = MeasurementUiState(isRecording = true)
+        val sessionId = UUID.randomUUID().toString()
+
+        // 1. Live stream updates (to update raw accelerometer visualizers and sample counts)
+        streamingJob = viewModelScope.launch {
+            var count = 0
+            val startTime = System.currentTimeMillis()
+            try {
+                sensorEngine.startStreaming(100).collect { sample ->
+                    count++
+                    val elapsed = (System.currentTimeMillis() - startTime) / 1000f
+                    val rate = if (elapsed > 0f) count / elapsed else 100f
+                    _uiState.value = _uiState.value.copy(
+                        currentX = sample.x,
+                        currentY = sample.y,
+                        currentZ = sample.z,
+                        totalSamplesCollected = count,
+                        currentSampleRateHz = rate
+                    )
+                }
+            } catch (e: Exception) {
+                // Handle stream errors
+            }
+        }
+
+        // Timer for elapsed seconds
+        viewModelScope.launch {
+            while (_uiState.value.isRecording && _uiState.value.elapsedSeconds < durationSec) {
+                delay(1000L)
+                if (_uiState.value.isRecording) {
+                    _uiState.value = _uiState.value.copy(
+                        elapsedSeconds = _uiState.value.elapsedSeconds + 1
+                    )
+                }
+            }
+        }
+
+        // 2. Continuous record session
+        recordingJob = viewModelScope.launch {
+            try {
+                val metadata = sensorEngine.recordSession(sessionId, profileId, durationSec)
+                streamingJob?.cancel()
+                _uiState.value = _uiState.value.copy(
+                    isRecording = false,
+                    recordingFinished = true,
+                    currentSampleRateHz = metadata.actualAverageSampleRateHz,
+                    clockJitterMs = metadata.sampleJitterStdMs,
+                    clockDriftPpm = metadata.clockDriftPpm,
+                    rawStorageFileUri = metadata.rawStorageFileUri
+                )
+            } catch (e: Exception) {
+                streamingJob?.cancel()
+                _uiState.value = _uiState.value.copy(
+                    isRecording = false,
+                    rawStorageFileUri = "Error: ${e.message}"
+                )
+            }
+        }
     }
 
-    fun updateMetrics(sampleRateHz: Float, jitterMs: Float, qualityScorePct: Int) {
+    fun stopRecordingEarly() {
+        recordingJob?.cancel()
+        streamingJob?.cancel()
         _uiState.value = _uiState.value.copy(
-            currentSampleRateHz = sampleRateHz,
-            clockJitterMs = jitterMs,
-            currentQualityScorePct = qualityScorePct
+            isRecording = false
         )
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopRecordingEarly()
     }
 }

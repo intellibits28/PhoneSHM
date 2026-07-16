@@ -57,11 +57,20 @@ class MainActivity : ComponentActivity() {
         val profileRepo = ProfileRepositoryImpl(db.profileDao())
         val deviceEngine = AndroidDeviceCapabilityEngine(applicationContext)
         val locationResolver = com.ronin.phoneshm.core.location.AndroidLocationResolver(applicationContext)
+        val storageEngine = com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine(applicationContext)
+        val sensorEngine = com.ronin.phoneshm.core.sensor.AndroidVibrationSensorEngine(applicationContext, storageEngine, deviceEngine)
 
         val onboardingFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return OnboardingViewModel(profileRepo, deviceEngine, locationResolver) as T
+            }
+        }
+
+        val measurementFactory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return com.ronin.phoneshm.feature.measurement.MeasurementViewModel(sensorEngine) as T
             }
         }
 
@@ -71,7 +80,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    PhoneShmAppHost(onboardingFactory = onboardingFactory)
+                    PhoneShmAppHost(
+                        onboardingFactory = onboardingFactory,
+                        measurementFactory = measurementFactory
+                    )
                 }
             }
         }
@@ -79,12 +91,16 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PhoneShmAppHost(onboardingFactory: ViewModelProvider.Factory) {
+fun PhoneShmAppHost(
+    onboardingFactory: ViewModelProvider.Factory,
+    measurementFactory: ViewModelProvider.Factory
+) {
     var currentScreen by remember { mutableStateOf("ONBOARDING") }
     var activeBuildingId by remember { mutableStateOf("") }
     var activeMeasurementId by remember { mutableStateOf("") }
 
     val onboardingViewModel: OnboardingViewModel = viewModel(factory = onboardingFactory)
+    val measurementViewModel: com.ronin.phoneshm.feature.measurement.MeasurementViewModel = viewModel(factory = measurementFactory)
 
     if (currentScreen == "ONBOARDING") {
         OnboardingScreen(
@@ -125,7 +141,7 @@ fun PhoneShmAppHost(onboardingFactory: ViewModelProvider.Factory) {
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                MeasurementScreen(modifier = Modifier.weight(1f))
+                MeasurementScreen(viewModel = measurementViewModel, modifier = Modifier.weight(1f))
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(onClick = { currentScreen = "ONBOARDING" }) {
                     Text("<- Back to Profile Wizard")
