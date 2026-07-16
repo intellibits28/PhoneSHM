@@ -352,7 +352,16 @@ private fun StepThreeLocationPrivacy(
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
-                                webViewClient = android.webkit.WebViewClient()
+                                webViewClient = object : android.webkit.WebViewClient() {
+                                    override fun onReceivedSslError(
+                                        view: android.webkit.WebView?,
+                                        handler: android.webkit.SslErrorHandler?,
+                                        error: android.net.http.SslError?
+                                    ) {
+                                        android.util.Log.e("SHM_MAP_SSL", "SSL Error: ${error?.toString()}")
+                                        handler?.proceed()
+                                    }
+                                }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
                             }
