@@ -22,8 +22,8 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
+    api(libs.androidx.room.runtime)
+    api(libs.androidx.room.ktx)
     annotationProcessor(libs.androidx.room.compiler)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
