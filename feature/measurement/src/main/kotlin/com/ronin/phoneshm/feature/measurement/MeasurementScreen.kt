@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,6 +44,7 @@ fun MeasurementScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -71,7 +74,26 @@ fun MeasurementScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Prominent Top Analyze Button (Always visible when not actively recording)
+        if (!uiState.isRecording) {
+            Button(
+                onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (uiState.recordingFinished) Color(0xFF0284C7) else Color(0xFF0F766E)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = if (uiState.recordingFinished) "⚡ Phase 5: Analyze Recorded Session Now ->" else "⚡ Phase 5: Modal & Physics Engine Demo ->",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         // Realtime Visualizer Card
         Card(
@@ -259,19 +281,25 @@ fun MeasurementScreen(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Quick jump to Phase 5 Analysis if not recording
-        if (!uiState.isRecording && !uiState.recordingFinished) {
+        if (!uiState.isRecording) {
             Button(
                 onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (uiState.recordingFinished) Color(0xFF0284C7) else Color(0xFF0F766E)
+                ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Phase 5: Modal & Physics Engine Demo / Analysis ->", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (uiState.recordingFinished) "⚡ Phase 5: Analyze Recorded Session Now ->" else "Phase 5: Modal & Physics Engine Demo ->",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
