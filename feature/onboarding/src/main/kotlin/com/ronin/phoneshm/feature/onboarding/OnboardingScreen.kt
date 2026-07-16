@@ -337,27 +337,58 @@ private fun StepThreeLocationPrivacy(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Mock Offline MapLibre / OpenStreetMap Preview
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Interactive Live Leaflet OpenStreetMap WebView Map
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .height(220.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Offline MapLibre / OpenStreetMap Active",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Confirmed pin position overlay at Ahlone/Yangon grid",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { ctx ->
+                            android.webkit.WebView(ctx).apply {
+                                webViewClient = android.webkit.WebViewClient()
+                                settings.javaScriptEnabled = true
+                                val html = """
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                                        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                                        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                                        <style>
+                                            body, html, #map { margin: 0; padding: 0; height: 100%; width: 100%; }
+                                        </style>
+                                    </head>
+                                    <body>
+                                        <div id="map"></div>
+                                        <script>
+                                            var map = L.map('map').setView([${state.resolvedLatitude}, ${state.resolvedLongitude}], 16);
+                                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                                maxZoom: 19,
+                                                attribution: '© OpenStreetMap'
+                                            }).addTo(map);
+                                            var marker = L.marker([${state.resolvedLatitude}, ${state.resolvedLongitude}], { draggable: false }).addTo(map);
+                                            
+                                            function updateMarker(lat, lon) {
+                                                marker.setLatLng([lat, lon]);
+                                                map.setView([lat, lon]);
+                                            }
+                                        </script>
+                                    </body>
+                                    </html>
+                                """.trimIndent()
+                                loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                            }
+                        },
+                        update = { webView ->
+                            webView.loadUrl("javascript:updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude})")
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
 
