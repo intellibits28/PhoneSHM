@@ -416,17 +416,26 @@ private fun StepThreeLocationPrivacy(
                                     <body>
                                         <div id="map"></div>
                                         <script>
-                                            var map = L.map('map').setView([$lat, $lon], 16);
-                                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                                                maxZoom: 19,
-                                                attribution: '© OpenStreetMap'
-                                            }).addTo(map);
-                                            var marker = L.marker([$lat, $lon], { draggable: false }).addTo(map);
-                                            
-                                            function updateMarker(newLat, newLon) {
-                                                marker.setLatLng([newLat, newLon]);
-                                                map.setView([newLat, newLon]);
-                                            }
+                                            console.log("Inline script started");
+                                            document.addEventListener("DOMContentLoaded", function() {
+                                                console.log("DOMContentLoaded triggered, checking Leaflet");
+                                                if (typeof L !== 'undefined') {
+                                                    var map = L.map('map').setView([$lat, $lon], 16);
+                                                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                                        maxZoom: 19,
+                                                        attribution: '© OpenStreetMap'
+                                                    }).addTo(map);
+                                                    var marker = L.marker([$lat, $lon], { draggable: false }).addTo(map);
+                                                    
+                                                    window.updateMarker = function(newLat, newLon) {
+                                                        marker.setLatLng([newLat, newLon]);
+                                                        map.setView([newLat, newLon]);
+                                                    };
+                                                    console.log("Leaflet Map initialized successfully");
+                                                } else {
+                                                    console.error("Leaflet library L is undefined!");
+                                                }
+                                            });
                                         </script>
                                     </body>
                                     </html>
