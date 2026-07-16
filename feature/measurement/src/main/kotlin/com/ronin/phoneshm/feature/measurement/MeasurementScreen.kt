@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -161,15 +162,87 @@ fun MeasurementScreen(
                     HorizontalDivider(color = Color(0xFFC8E6C9))
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text("Stored Session File Path:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    androidx.compose.foundation.text.selection.SelectionContainer {
-                        Text(
-                            text = uiState.rawStorageFileUri ?: "None",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.DarkGray
-                        )
+                    val internalPath = uiState.rawStorageFileUri ?: "None"
+                    val fileName = internalPath.substringAfterLast('/')
+                    val publicPath = "/storage/emulated/0/Download/PhoneSHM/$fileName"
+                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                    val context = androidx.compose.ui.platform.LocalContext.current
+
+                    Text("Internal App Storage (Private DB Link):", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        androidx.compose.foundation.text.selection.SelectionContainer(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = internalPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.DarkGray
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(internalPath))
+                                android.widget.Toast.makeText(context, "Copied internal path!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Copy", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Public Mirror (Accessible by Termux & File Manager):", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        androidx.compose.foundation.text.selection.SelectionContainer(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = publicPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1B5E20)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(publicPath))
+                                android.widget.Toast.makeText(context, "Copied public path!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Copy", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(
+                            onClick = {
+                                val cmd = "adb pull $publicPath ."
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(cmd))
+                                android.widget.Toast.makeText(context, "Copied ADB Pull cmd!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("Copy ADB Pull Cmd", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }

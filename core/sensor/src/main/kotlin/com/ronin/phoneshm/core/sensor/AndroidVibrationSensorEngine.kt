@@ -121,6 +121,9 @@ class AndroidVibrationSensorEngine(
 
         storageEngine.finalizeSessionFile(file)
 
+        // Automatically mirror to Public Downloads directory so Termux / File Manager can read without root
+        copyToPublicDownloads(context, file)
+
         val (actualAverageSampleRateHz, sampleJitterStdMs, clockDriftPpm) = SensorMetricsCalculator.calculateMetrics(
             hardwareTimestamps.toLongArray(),
             systemArrivalTimesNs.toLongArray()
@@ -138,4 +141,45 @@ class AndroidVibrationSensorEngine(
             rawStorageFileUri = file.absolutePath
         )
     }
+
+    private fun copyToPublicDownloads(context: Context, sourceFile: File) {
+        try {
+            // First attempt: direct File copy to /sdcard/Download/PhoneSHM (instant for Termux & file managers)
+            val downloadsDir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "PhoneSHM"
+            )
+            if (!downloadsDir.exists()) {
+                downloadsDir.mkdirs()
+            }
+            val destFile = File(downloadsDir, sourceFile.name)
+            sourceFile.copyTo(destFile, overwrite = true)
+        } catch (e: Exception) {
+            // Fallback: MediaStore API for API 29+ scoped storage compliance
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val resolver = context.contentResolver
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
+                        put(
+                            android.provider.MediaStore.MediaColumns.MIME_TYPE,
+                            if (sourceFile.name.endsWith(".gz")) "application/gzip" else "application/octet-stream"
+                        )
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/PhoneSHM")
+                    }
+                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        resolver.openOutputStream(uri)?.use { out ->
+                            sourceFile.inputStream().use { input ->
+                                input.copyTo(out)
+                            }
+                        }
+                    }
+                }
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
+        }
+    }
 }
+
