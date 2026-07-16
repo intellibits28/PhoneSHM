@@ -380,6 +380,9 @@ private fun StepThreeLocationPrivacy(
                                 }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                }
                             }
                         },
                         update = { webView ->
@@ -404,7 +407,7 @@ private fun StepThreeLocationPrivacy(
                                     </body>
                                     </html>
                                 """.trimIndent()
-                                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                                webView.loadDataWithBaseURL("https://static-maps.yandex.ru", html, "text/html", "UTF-8", null)
                             }
                         },
                         modifier = Modifier.fillMaxSize()
