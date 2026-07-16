@@ -26,6 +26,7 @@ dependencies {
     implementation(project(":core:sensor"))
     implementation(project(":core:modal"))
     implementation(project(":core:audio"))
+    implementation(project(":core:physics"))
     implementation(libs.androidx.core.ktx)
     testImplementation(libs.junit)
 }
