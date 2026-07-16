@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -28,6 +31,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -135,6 +141,18 @@ private fun StepTwoBuildingTypology(
     state: OnboardingState,
     viewModel: OnboardingViewModel
 ) {
+    var dropdownExpanded by remember { mutableStateOf(false) }
+    val buildingTypes = listOf(
+        "RC Frame (Concrete Frame)",
+        "RC Shear Wall (Concrete with Shear Wall)",
+        "Steel Frame",
+        "Steel Braced Frame",
+        "Masonry (Brick/Block Wall)",
+        "Timber / Wood",
+        "Composite (Steel + Concrete)",
+        "Others / Unknown"
+    )
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "2. Building Typology Profiler", style = MaterialTheme.typography.titleLarge)
@@ -146,12 +164,37 @@ private fun StepTwoBuildingTypology(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            OutlinedTextField(
-                value = state.buildingType,
-                onValueChange = { viewModel.updateBuildingType(it) },
-                label = { Text("Building Type (e.g. RESIDENTIAL_CONCRETE, COMMERCIAL_STEEL)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Building Type
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.buildingType,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Building Structural Typology") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { dropdownExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    buildingTypes.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(type) },
+                            onClick = {
+                                viewModel.updateBuildingType(type)
+                                dropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = state.floors,
@@ -235,8 +278,64 @@ private fun StepThreeLocationPrivacy(
             }
 
             if (state.resolvedLatitude != null && state.resolvedLongitude != null) {
-                Text(text = "Coordinates: [Lat: ${state.resolvedLatitude}, Lon: ${state.resolvedLongitude}]")
+                Text(text = "Coordinates: [Lat: ${String.format("%.6f", state.resolvedLatitude)}, Lon: ${String.format("%.6f", state.resolvedLongitude)}]")
                 Text(text = "Spatial Building Hash: ${state.resolvedBuildingHash}", fontWeight = FontWeight.SemiBold)
+
+                // Map Pin manual fine-tuning controls
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "GPS Fine-Tuning: Adjust coordinates (±0.0001 deg ≈ 10m) to correctly position the building marker.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            OutlinedButton(
+                                onClick = { viewModel.adjustCoordinates(0.0001, 0.0) },
+                                modifier = Modifier.size(50.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                            ) {
+                                Text("▲")
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OutlinedButton(
+                                    onClick = { viewModel.adjustCoordinates(0.0, -0.0001) },
+                                    modifier = Modifier.size(50.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                ) {
+                                    Text("◀")
+                                }
+                                Spacer(modifier = Modifier.width(36.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.adjustCoordinates(0.0, 0.0001) },
+                                    modifier = Modifier.size(50.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                ) {
+                                    Text("▶")
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.adjustCoordinates(-0.0001, 0.0) },
+                                modifier = Modifier.size(50.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                            ) {
+                                Text("▼")
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Mock Offline MapLibre / OpenStreetMap Preview
                 Box(

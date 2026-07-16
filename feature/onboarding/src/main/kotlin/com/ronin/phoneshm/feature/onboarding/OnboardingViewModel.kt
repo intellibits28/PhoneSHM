@@ -169,6 +169,21 @@ class OnboardingViewModel(
         }
     }
 
+    fun adjustCoordinates(latOffset: Double, lonOffset: Double) {
+        val s = _state.value
+        val currentLat = s.resolvedLatitude ?: return
+        val currentLon = s.resolvedLongitude ?: return
+        val newLat = currentLat + latOffset
+        val newLon = currentLon + lonOffset
+        val finalHash = locationResolver?.generateBuildingHash(newLat, newLon, s.buildingName) ?: s.resolvedBuildingHash
+        _state.value = _state.value.copy(
+            resolvedLatitude = newLat,
+            resolvedLongitude = newLon,
+            resolvedBuildingHash = finalHash
+        )
+    }
+
+
     fun saveProfileAndFinish() {
         val s = _state.value
         if (s.buildingName.isBlank()) {
