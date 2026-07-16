@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
         val profileRepo = ProfileRepositoryImpl(db.profileDao())
         val deviceEngine = AndroidDeviceCapabilityEngine(applicationContext)
         val locationResolver = com.ronin.phoneshm.core.location.AndroidLocationResolver(applicationContext)
-        val storageEngine = com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine(applicationContext)
+        val storageEngine = com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine(applicationContext.filesDir)
         val sensorEngine = com.ronin.phoneshm.core.sensor.AndroidVibrationSensorEngine(applicationContext, storageEngine, deviceEngine)
 
         val onboardingFactory = object : ViewModelProvider.Factory {
