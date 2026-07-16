@@ -352,6 +352,10 @@ private fun StepThreeLocationPrivacy(
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { ctx ->
                             android.webkit.WebView(ctx).apply {
+                                layoutParams = android.view.ViewGroup.LayoutParams(
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                )
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
                                     android.webkit.WebView.setWebContentsDebuggingEnabled(true)
                                 }
@@ -380,6 +384,17 @@ private fun StepThreeLocationPrivacy(
                                         android.util.Log.e("SHM_MAP_LOG", "SSL Error: ${error?.toString()}")
                                         handler?.proceed()
                                     }
+
+                                    override fun shouldInterceptRequest(
+                                        view: android.webkit.WebView?,
+                                        request: android.webkit.WebResourceRequest?
+                                    ): android.webkit.WebResourceResponse? {
+                                        val url = request?.url.toString()
+                                        if (url.contains("tile.openstreetmap.org")) {
+                                            android.util.Log.d("SHM_MAP_TILE", "Tile request: $url")
+                                        }
+                                        return super.shouldInterceptRequest(view, request)
+                                    }
                                 }
                                 webChromeClient = object : android.webkit.WebChromeClient() {
                                     override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
@@ -394,6 +409,9 @@ private fun StepThreeLocationPrivacy(
                                 }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
+                                settings.allowFileAccess = true
+                                settings.allowFileAccessFromFileURLs = true
+                                settings.allowUniversalAccessFromFileURLs = true
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                                     settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                                 }
@@ -433,7 +451,7 @@ private fun StepThreeLocationPrivacy(
                                                     // Resolve hidden container zero-size leaflet bug
                                                     setTimeout(function() {
                                                         map.invalidateSize();
-                                                        console.log("Map size invalidated/recalculated");
+                                                        console.log("Map container size: " + JSON.stringify(map.getSize()));
                                                     }, 250);
 
                                                     var customIcon = L.divIcon({
