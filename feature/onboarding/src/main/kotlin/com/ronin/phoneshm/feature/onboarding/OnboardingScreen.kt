@@ -431,7 +431,7 @@ private fun StepThreeLocationPrivacy(
                                     </body>
                                     </html>
                                 """.trimIndent()
-                                webView.loadDataWithBaseURL("https://openstreetmap.org", html, "text/html", "UTF-8", null)
+                                webView.loadDataWithBaseURL("https://localhost", html, "text/html", "UTF-8", null)
                             } else if (state.resolvedLatitude != null && state.resolvedLongitude != null) {
                                 webView.loadUrl("javascript:if(typeof updateMarker !== 'undefined') { updateMarker(${state.resolvedLatitude}, ${state.resolvedLongitude}); }")
                             }
