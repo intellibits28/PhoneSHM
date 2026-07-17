@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ronin.phoneshm.core.dsp.DspEngine
 import com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult
 import com.ronin.phoneshm.core.dsp.WelchPsdEngine
+import com.ronin.phoneshm.core.dsp.WelchPsdParameters
 import com.ronin.phoneshm.core.modal.DefaultModalAnalyzer
 import com.ronin.phoneshm.core.modal.ModalAnalysisResult
 import com.ronin.phoneshm.core.modal.ModalAnalyzer
@@ -78,18 +79,26 @@ class AnalysisViewModel(
                 }
 
                 val sampleRateHz = 100.0f
-                // 1. Compute multi-axis Welch PSD on full session
-                val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz)
 
-                // 2. Compute sliding window spectra (5-sec segments = 512 samples, step 256 overlap)
+                // Adaptive FFT size: use largest power-of-2 ≤ sample count, capped at 1024
+                val mainFftSize = minOf(1024, Integer.highestOneBit(samples.size))
+                val mainParams = WelchPsdParameters(fftSize = mainFftSize)
+
+                // 1. Compute multi-axis Welch PSD on full session
+                val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz, mainParams)
+
+                // 2. Compute sliding window spectra for persistence tracking
+                //    Window = 512 samples (5.12s), step = 256 (2.56s), fftSize = 256 for each window
                 val windowSize = 512
                 val stepSize = 256
+                val slidingFftSize = 256
+                val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
                 val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
                 if (samples.size >= windowSize) {
                     var i = 0
                     while (i + windowSize <= samples.size) {
                         val winSamples = samples.subList(i, i + windowSize)
-                        slidingSpectra.add(dspEngine.calculateMultiAxisWelchPsd(winSamples, sampleRateHz))
+                        slidingSpectra.add(dspEngine.calculateMultiAxisWelchPsd(winSamples, sampleRateHz, slidingParams))
                         i += stepSize
                     }
                 }
@@ -131,12 +140,14 @@ class AnalysisViewModel(
     }
 
     private fun generateSyntheticStructuralSamples(buildingType: String, floors: Int): List<AccelerationSample> {
-        val count = 2048 // ~20.48 seconds @ 100Hz
+        val count = 4096 // ~40.96 seconds @ 100Hz — enough for robust persistence tracking
         val dt = 0.01 // 10 ms
+        val bt = buildingType.lowercase()
         val targetF0 = when {
-            buildingType.contains("STEEL") -> 12.0 / maxOf(1, floors)
-            buildingType.contains("MASONRY") -> 18.0 / maxOf(1, floors)
-            else -> 10.0 / maxOf(1, floors) // Concrete
+            bt.contains("steel") -> 12.0 / maxOf(1, floors)
+            bt.contains("masonry") || bt.contains("brick") || bt.contains("block") -> 18.0 / maxOf(1, floors)
+            bt.contains("timber") || bt.contains("wood") || bt.contains("clt") -> 8.0 / maxOf(1, floors)
+            else -> 10.0 / maxOf(1, floors) // Concrete / Composite / Unknown
         }
         val targetF1 = targetF0 * 3.1 // Higher harmonic / local mode
         return List(count) { i ->

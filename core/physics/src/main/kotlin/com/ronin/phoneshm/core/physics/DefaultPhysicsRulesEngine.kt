@@ -52,12 +52,16 @@ class DefaultPhysicsRulesEngine : PhysicsRulesEngine {
                 val fExp = 12.0 / effectiveFloors
                 Triple(fExp, max(0.4, fExp * 0.4), min(15.0, max(4.0, fExp * 2.8)))
             }
-            normalizedType.contains("MASONRY") || normalizedType.contains("TIMBER") -> {
+            normalizedType.contains("MASONRY") || normalizedType.contains("BRICK") || normalizedType.contains("BLOCK") -> {
                 val fExp = 18.0 / effectiveFloors
                 Triple(fExp, max(1.5, fExp * 0.5), min(25.0, max(8.0, fExp * 2.5)))
             }
+            normalizedType.contains("TIMBER") || normalizedType.contains("WOOD") || normalizedType.contains("CLT") -> {
+                val fExp = 8.0 / effectiveFloors
+                Triple(fExp, max(0.8, fExp * 0.4), min(20.0, max(5.0, fExp * 3.0)))
+            }
             else -> {
-                // Default concrete or RC frame (f ~ 10 / N_floors)
+                // Default concrete / RC frame / composite / unknown (f ~ 10 / N_floors)
                 val fExp = 10.0 / effectiveFloors
                 Triple(fExp, max(0.5, fExp * 0.45), min(18.0, max(5.0, fExp * 2.6)))
             }

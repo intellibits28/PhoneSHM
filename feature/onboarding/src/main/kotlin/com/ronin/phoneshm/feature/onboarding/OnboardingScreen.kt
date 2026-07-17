@@ -142,6 +142,9 @@ private fun StepTwoBuildingTypology(
     viewModel: OnboardingViewModel
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
+    var floorsDropdownExpanded by remember { mutableStateOf(false) }
+    var yearDropdownExpanded by remember { mutableStateOf(false) }
+    var materialDropdownExpanded by remember { mutableStateOf(false) }
     val buildingTypes = listOf(
         "RC Frame (Concrete Frame)",
         "RC Shear Wall (Concrete with Shear Wall)",
@@ -151,6 +154,22 @@ private fun StepTwoBuildingTypology(
         "Timber / Wood",
         "Composite (Steel + Concrete)",
         "Others / Unknown"
+    )
+    val floorOptions = listOf(
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+        "12", "15", "20", "25", "30", "40", "50+"
+    )
+    val constructionYearOptions = listOf(
+        "Before 1970", "1970-1980", "1980-1990", "1990-2000",
+        "2000-2005", "2005-2010", "2010-2015", "2015-2020",
+        "2020-2025", "After 2025"
+    )
+    val materialOptions = listOf(
+        "Reinforced Concrete (RC)", "Prestressed Concrete",
+        "Structural Steel (S275/S355)", "Steel-Concrete Composite",
+        "Clay Brick Masonry", "Concrete Block Masonry",
+        "Timber Frame", "Cross-Laminated Timber (CLT)",
+        "Mixed / Hybrid", "Unknown"
     )
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -196,26 +215,101 @@ private fun StepTwoBuildingTypology(
                 }
             }
 
-            OutlinedTextField(
-                value = state.floors,
-                onValueChange = { viewModel.updateFloors(it) },
-                label = { Text("Total Floors") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Total Floors
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.floors,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Total Floors") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { floorsDropdownExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = floorsDropdownExpanded,
+                    onDismissRequest = { floorsDropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    floorOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateFloors(option)
+                                floorsDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            OutlinedTextField(
-                value = state.constructionYear,
-                onValueChange = { viewModel.updateConstructionYear(it) },
-                label = { Text("Construction Year") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Construction Year
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.constructionYear,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Construction Year") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { yearDropdownExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = yearDropdownExpanded,
+                    onDismissRequest = { yearDropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    constructionYearOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateConstructionYear(option)
+                                yearDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            OutlinedTextField(
-                value = state.material,
-                onValueChange = { viewModel.updateMaterial(it) },
-                label = { Text("Primary Structural Material") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Primary Structural Material
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.material,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Primary Structural Material") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { materialDropdownExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = materialDropdownExpanded,
+                    onDismissRequest = { materialDropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    materialOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateMaterial(option)
+                                materialDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 OutlinedButton(onClick = { viewModel.setStep(1) }) {
@@ -503,37 +597,163 @@ private fun StepFourPlacementSetup(
     state: OnboardingState,
     viewModel: OnboardingViewModel
 ) {
+    var floorLevelExpanded by remember { mutableStateOf(false) }
+    var surfaceTypeExpanded by remember { mutableStateOf(false) }
+    var locationTypeExpanded by remember { mutableStateOf(false) }
+    var placementExpanded by remember { mutableStateOf(false) }
+
+    val floorLevelOptions = listOf(
+        "Basement", "Ground Floor", "1", "2", "3", "4", "5",
+        "6", "7", "8", "9", "10", "12", "15", "20", "Roof / Terrace"
+    )
+    val surfaceTypeOptions = listOf(
+        "Bare Concrete", "Ceramic / Porcelain Tile", "Marble / Granite",
+        "Timber / Hardwood", "Laminate / Vinyl", "Carpet (Thin)",
+        "Carpet (Thick)", "Steel Deck", "Raised Access Floor"
+    )
+    val locationTypeOptions = listOf(
+        "Center of Span (Mid-Bay)", "Near Column / Wall", "Quarter Span",
+        "Balcony / Cantilever", "Stairwell Landing",
+        "Foundation / Ground Level", "Bridge Deck Center",
+        "Bridge Pier / Abutment"
+    )
+    val placementOptions = listOf(
+        "Flat on Floor (No Weight)", "Flat on Floor (Weighted)",
+        "Mounted on Wall", "Mounted on Column", "Tripod / Rigid Mount",
+        "On Desk / Table", "Handheld (Not Recommended)"
+    )
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "4. Measurement Placement Setup", style = MaterialTheme.typography.titleLarge)
 
-            OutlinedTextField(
-                value = state.floorLevel,
-                onValueChange = { viewModel.updateFloorLevel(it) },
-                label = { Text("Current Measurement Floor Level") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Floor Level
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.floorLevel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Current Measurement Floor Level") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { floorLevelExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = floorLevelExpanded,
+                    onDismissRequest = { floorLevelExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    floorLevelOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateFloorLevel(option)
+                                floorLevelExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            OutlinedTextField(
-                value = state.surfaceType,
-                onValueChange = { viewModel.updateSurfaceType(it) },
-                label = { Text("Surface Type (CONCRETE, CERAMIC_TILE, TIMBER, CARPET)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Surface Type
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.surfaceType,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Surface Type") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { surfaceTypeExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = surfaceTypeExpanded,
+                    onDismissRequest = { surfaceTypeExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    surfaceTypeOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateSurfaceType(option)
+                                surfaceTypeExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            OutlinedTextField(
-                value = state.locationType,
-                onValueChange = { viewModel.updateLocationType(it) },
-                label = { Text("Location Type (CENTER_SPAN, NEAR_COLUMN, BALCONY, FOUNDATION)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Location Type
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.locationType,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Location Type") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { locationTypeExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = locationTypeExpanded,
+                    onDismissRequest = { locationTypeExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    locationTypeOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updateLocationType(option)
+                                locationTypeExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
-            OutlinedTextField(
-                value = state.placement,
-                onValueChange = { viewModel.updatePlacement(it) },
-                label = { Text("Phone Placement (FLAT_ON_FLOOR, FLAT_WITH_WEIGHT, MOUNTED_WALL)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Dropdown Selector for Phone Placement
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = state.placement,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Phone Placement") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = true
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { placementExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = placementExpanded,
+                    onDismissRequest = { placementExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    placementOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                viewModel.updatePlacement(option)
+                                placementExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 OutlinedButton(onClick = { viewModel.setStep(3) }) {
