@@ -4,6 +4,7 @@ import com.ronin.phoneshm.core.dsp.AxisPsdResult
 import com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult
 import com.ronin.phoneshm.core.dsp.Peak
 import com.ronin.phoneshm.core.dsp.WelchPsdParameters
+import com.ronin.phoneshm.core.dsp.WelchPsdOutput
 import com.ronin.phoneshm.core.physics.FrequencyClassification
 import com.ronin.phoneshm.core.physics.PlausibilityClassificationResult
 import org.junit.Assert.assertEquals
@@ -28,7 +29,7 @@ class DefaultModalAnalyzerTest {
         val zAxis = AxisPsdResult(freqs, psd, zPeak?.let { listOf(it) } ?: emptyList())
         val magAxis = AxisPsdResult(freqs, psd, magPeak?.let { listOf(it) } ?: emptyList())
 
-        return MultiAxisSpectrumResult(xAxis, yAxis, zAxis, magAxis, WelchPsdParameters())
+        return MultiAxisSpectrumResult(xAxis, yAxis, zAxis, magAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))
     }
 
     @Test
