@@ -1,6 +1,7 @@
 package com.ronin.phoneshm.feature.analysis
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ronin.phoneshm.core.baseline.BaselineComparisonResult
 import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
@@ -44,19 +45,23 @@ data class AnalysisUiState(
     val errorMessage: String? = null
 )
 
+
 /**
  * AnalysisViewModel drives modal frequency display, multi-axis Welch PSD rendering,
  * domain physics plausibility classification, and adaptive persistence tracking.
  */
-class AnalysisViewModel(
-    private val dspEngine: DspEngine = WelchPsdEngine(),
-    private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine(),
-    private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer(),
-    private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(File("/data/data/com.termux/files/home/")),
-    private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
-        File("/data/data/com.termux/files/home/play-ground/ronin_shm/baseline_data")
+class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
+    
+    private val dspEngine: DspEngine = WelchPsdEngine()
+    private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
+    private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
+    private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
+        File(application.filesDir, "raw_sessions")
     )
-) : ViewModel() {
+    private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
+        File(application.filesDir, "baseline_data")
+    )
+    
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
 
