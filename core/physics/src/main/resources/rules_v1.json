@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "source": "Eurocode 8 / ASCE 7 / Rayleigh T≈0.1N approximation",
+  "bands": {
+    "RESIDENTIAL_CONCRETE": {
+      "formula": "K_OVER_FLOORS",
+      "kExpected": 10.0,
+      "bandWidthLow": 0.45,
+      "bandWidthHigh": 2.6,
+      "clampMinHz": 0.5,
+      "clampMaxHz": 18.0,
+      "fallbackMinHz": 0.8,
+      "fallbackMaxHz": 25.0,
+      "aliases": ["CONCRETE", "RC", "REINFORCED_CONCRETE", "PRESTRESSED_CONCRETE", "COMPOSITE"]
+    },
+    "STEEL_FRAME": {
+      "formula": "K_OVER_FLOORS",
+      "kExpected": 12.0,
+      "bandWidthLow": 0.4,
+      "bandWidthHigh": 2.8,
+      "clampMinHz": 0.4,
+      "clampMaxHz": 15.0,
+      "fallbackMinHz": 0.6,
+      "fallbackMaxHz": 30.0,
+      "aliases": ["STEEL", "S275", "S355", "STEEL_CONCRETE_COMPOSITE"]
+    },
+    "MASONRY": {
+      "formula": "K_OVER_FLOORS",
+      "kExpected": 18.0,
+      "bandWidthLow": 0.5,
+      "bandWidthHigh": 2.5,
+      "clampMinHz": 1.5,
+      "clampMaxHz": 25.0,
+      "fallbackMinHz": 1.0,
+      "fallbackMaxHz": 20.0,
+      "aliases": ["BRICK", "BLOCK", "CLAY_BRICK", "CONCRETE_BLOCK"]
+    },
+    "TIMBER_FRAME": {
+      "formula": "K_OVER_FLOORS",
+      "kExpected": 8.0,
+      "bandWidthLow": 0.4,
+      "bandWidthHigh": 3.0,
+      "clampMinHz": 0.8,
+      "clampMaxHz": 20.0,
+      "fallbackMinHz": 1.2,
+      "fallbackMaxHz": 22.0,
+      "aliases": ["TIMBER", "WOOD", "CLT", "CROSS_LAMINATED_TIMBER"]
+    },
+    "MIXED_HYBRID": {
+      "formula": "K_OVER_FLOORS",
+      "kExpected": 10.0,
+      "bandWidthLow": 0.45,
+      "bandWidthHigh": 2.6,
+      "clampMinHz": 0.5,
+      "clampMaxHz": 18.0,
+      "fallbackMinHz": 0.8,
+      "fallbackMaxHz": 25.0,
+      "aliases": ["MIXED", "HYBRID", "UNKNOWN"]
+    }
+  },
+  "sensorArtifactBoundary": {
+    "lowHz": 0.3,
+    "highHz": 45.0,
+    "note": "0.3Hz boundary is a classifier-level safety net for HPF edge leakage. HPF cutoff at 0.5Hz attenuates this band; the 0.3Hz boundary catches residual leakage or misconfigured cutoffs. Only practically meaningful for >30-floor buildings where minExpectedHz < 0.5Hz."
+  }
+}

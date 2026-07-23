@@ -7,11 +7,24 @@ import kotlin.math.min
 /**
  * Default implementation of [PhysicsRulesEngine].
  *
- * Applies structural engineering empirical rules and frequency bounds to classify
- * detected vibration peaks as global fundamental modes, local slab/element vibrations,
- * or non-structural sensor artifacts without hard-rejecting complex structural behaviors.
+ * v1.4.1 changes:
+ * - (B4) Uses [PhysicsRulesConfig] loaded from rules_v1.json for frequency band lookup
+ *   instead of hardcoded thresholds. Structured coefficients + enum dispatch — no
+ *   runtime expression parsing, injection-safe.
+ * - (A3) BELOW_EXPECTED_RANGE classification for sub-band frequencies (orientation drift,
+ *   gravity artifact) — distinct from LOCAL_MODE (high-frequency slab vibration).
+ * - (B3) 0.3Hz SENSOR_ARTIFACT boundary documented as classifier-level safety net
+ *   for HPF edge leakage. Practically unreachable for most buildings since HPF cutoff
+ *   is at 0.5Hz; meaningful only for >30-floor buildings where minExpectedHz < 0.5Hz.
  */
-class DefaultPhysicsRulesEngine : PhysicsRulesEngine {
+class DefaultPhysicsRulesEngine(
+    private val config: PhysicsRulesConfig = try {
+        PhysicsRulesConfig.loadBundledConfig()
+    } catch (_: Exception) {
+        // Fallback: create minimal default config if bundled JSON not available
+        createFallbackConfig()
+    }
+) : PhysicsRulesEngine {
 
     override fun classifyFrequency(
         f0Hz: Double,
@@ -27,68 +40,97 @@ class DefaultPhysicsRulesEngine : PhysicsRulesEngine {
             )
         }
 
-        if (f0Hz < 0.3) {
+        // B3: 0.3Hz boundary is a classifier-level safety net for HPF edge leakage.
+        // HPF cutoff at 0.5Hz attenuates this band; this boundary catches residual
+        // leakage or misconfigured cutoffs. Only meaningful for >30-floor buildings
+        // where minExpectedHz < 0.5Hz.
+        if (f0Hz < config.sensorArtifactLowHz) {
             return PlausibilityClassificationResult(
                 classification = FrequencyClassification.SENSOR_ARTIFACT,
                 confidence = 0.95,
-                explanation = "Frequency under 0.3 Hz corresponds to DC drift, thermal transient, or zero-velocity baseline shift."
+                explanation = "Frequency under ${config.sensorArtifactLowHz} Hz corresponds to DC drift, thermal transient, or zero-velocity baseline shift."
             )
         }
 
-        if (f0Hz > 45.0) {
+        if (f0Hz > config.sensorArtifactHighHz) {
             return PlausibilityClassificationResult(
                 classification = FrequencyClassification.SENSOR_ARTIFACT,
                 confidence = 0.95,
-                explanation = "Frequency above 45.0 Hz exceeds structural resonance limits and indicates electrical/acoustic noise or internal device vibration."
+                explanation = "Frequency above ${config.sensorArtifactHighHz} Hz exceeds structural resonance limits and indicates electrical/acoustic noise or internal device vibration."
             )
         }
 
         val effectiveFloors = if (floors != null && floors > 0) floors else 3
-        val normalizedType = buildingType.uppercase()
+        val bandConfig = config.resolveBand(buildingType)
 
-        // Empirical building frequency estimation (f ~ C / N_floors)
-        val (expectedF0, minGlobalHz, maxGlobalHz) = when {
-            normalizedType.contains("STEEL") -> {
-                val fExp = 12.0 / effectiveFloors
-                Triple(fExp, max(0.4, fExp * 0.4), min(15.0, max(4.0, fExp * 2.8)))
+        // B4: Compute frequency band using structured coefficients (enum dispatch)
+        val (minGlobalHz, maxGlobalHz) = bandConfig.computeBand(effectiveFloors)
+        val expectedF0 = bandConfig.computeExpectedF0(effectiveFloors)
+
+        return when {
+            f0Hz in minGlobalHz..maxGlobalHz -> {
+                // GLOBAL_MODE: within expected structural resonance band
+                val proximityBonus = max(0.0, 0.15 * (1.0 - abs(f0Hz - expectedF0) / expectedF0))
+                val conf = min(0.98, 0.70 + (prominence.toDouble() * 0.25) + proximityBonus)
+                PlausibilityClassificationResult(
+                    classification = FrequencyClassification.GLOBAL_MODE,
+                    confidence = conf,
+                    explanation = String.format(
+                        "Frequency %.2f Hz falls within the expected global fundamental resonance band (%.1f-%.1f Hz) for %s (%d floors, config v%d).",
+                        f0Hz, minGlobalHz, maxGlobalHz, buildingType, effectiveFloors, config.version
+                    )
+                )
             }
-            normalizedType.contains("MASONRY") || normalizedType.contains("BRICK") || normalizedType.contains("BLOCK") -> {
-                val fExp = 18.0 / effectiveFloors
-                Triple(fExp, max(1.5, fExp * 0.5), min(25.0, max(8.0, fExp * 2.5)))
-            }
-            normalizedType.contains("TIMBER") || normalizedType.contains("WOOD") || normalizedType.contains("CLT") -> {
-                val fExp = 8.0 / effectiveFloors
-                Triple(fExp, max(0.8, fExp * 0.4), min(20.0, max(5.0, fExp * 3.0)))
+            f0Hz < minGlobalHz -> {
+                // A3: BELOW_EXPECTED_RANGE — sub-band frequency (orientation drift, gravity artifact)
+                val conf = min(0.90, 0.60 + (prominence.toDouble() * 0.20))
+                PlausibilityClassificationResult(
+                    classification = FrequencyClassification.BELOW_EXPECTED_RANGE,
+                    confidence = conf,
+                    explanation = String.format(
+                        "Frequency %.2f Hz is below the expected global mode band (%.1f-%.1f Hz). Likely orientation drift, gravity artifact, or sub-structural low-frequency excitation.",
+                        f0Hz, minGlobalHz, maxGlobalHz
+                    )
+                )
             }
             else -> {
-                // Default concrete / RC frame / composite / unknown (f ~ 10 / N_floors)
-                val fExp = 10.0 / effectiveFloors
-                Triple(fExp, max(0.5, fExp * 0.45), min(18.0, max(5.0, fExp * 2.6)))
+                // LOCAL_MODE: above expected global band — genuine high-frequency slab/element vibration
+                val conf = min(0.92, 0.65 + (prominence.toDouble() * 0.25))
+                PlausibilityClassificationResult(
+                    classification = FrequencyClassification.LOCAL_MODE,
+                    confidence = conf,
+                    explanation = String.format(
+                        "Frequency %.2f Hz exceeds the primary global mode band (%.1f-%.1f Hz) and represents local slab/element resonance.",
+                        f0Hz, minGlobalHz, maxGlobalHz
+                    )
+                )
             }
         }
+    }
 
-        return if (f0Hz in minGlobalHz..maxGlobalHz) {
-            val proximityBonus = max(0.0, 0.15 * (1.0 - abs(f0Hz - expectedF0) / expectedF0))
-            val conf = min(0.98, 0.70 + (prominence.toDouble() * 0.25) + proximityBonus)
-            PlausibilityClassificationResult(
-                classification = FrequencyClassification.GLOBAL_MODE,
-                confidence = conf,
-                explanation = String.format(
-                    "Frequency %.2f Hz falls within the expected global fundamental resonance band (%.1f-%.1f Hz) for %s (%d floors).",
-                    f0Hz, minGlobalHz, maxGlobalHz, buildingType, effectiveFloors
-                )
-            )
-        } else {
-            // Higher frequencies up to 45 Hz represent local modes (slab vibration, high-stiffness secondary spans)
-            val conf = min(0.92, 0.65 + (prominence.toDouble() * 0.25))
-            PlausibilityClassificationResult(
-                classification = FrequencyClassification.LOCAL_MODE,
-                confidence = conf,
-                explanation = String.format(
-                    "Frequency %.2f Hz exceeds the primary global mode band (%.1f-%.1f Hz) and represents local slab/element resonance.",
-                    f0Hz, minGlobalHz, maxGlobalHz
-                )
-            )
+    companion object {
+        /**
+         * Creates a minimal fallback config when bundled JSON is unavailable
+         * (e.g., during unit tests without classpath resources).
+         */
+        internal fun createFallbackConfig(): PhysicsRulesConfig {
+            val fallbackJson = """
+            {
+              "version": 1,
+              "source": "Hardcoded fallback",
+              "bands": {
+                "MIXED_HYBRID": {
+                  "formula": "K_OVER_FLOORS",
+                  "kExpected": 10.0, "bandWidthLow": 0.45, "bandWidthHigh": 2.6,
+                  "clampMinHz": 0.5, "clampMaxHz": 18.0,
+                  "fallbackMinHz": 0.8, "fallbackMaxHz": 25.0,
+                  "aliases": ["CONCRETE", "RC", "STEEL", "MASONRY", "TIMBER", "UNKNOWN"]
+                }
+              },
+              "sensorArtifactBoundary": { "lowHz": 0.3, "highHz": 45.0 }
+            }
+            """.trimIndent()
+            return PhysicsRulesConfig.parseJson(fallbackJson)
         }
     }
 }

@@ -1,23 +1,18 @@
-name: PhoneSHM CI/CD & APK Builder
+name: PhoneSHM CI/CD
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "master" ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+    branches: [ "main" ]
 
 jobs:
-  build_and_test:
-    name: Build & Test Research-Grade APK
+  build:
+    name: Build & Test PhoneSHM
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -30,15 +25,22 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Run Unit Tests (16 Modules)
-        run: ./gradlew testDebugUnitTest --continue
+      - name: Run Core Unit Tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK Artifact for Android Phone Installation
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PhoneSHM-Debug-APK
+          name: phoneshm-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            */build/reports/tests/

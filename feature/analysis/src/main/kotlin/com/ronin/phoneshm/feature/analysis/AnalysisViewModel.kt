@@ -2,6 +2,9 @@ package com.ronin.phoneshm.feature.analysis
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ronin.phoneshm.core.baseline.BaselineComparisonResult
+import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
+import com.ronin.phoneshm.core.baseline.DefaultBaselineManagerEngine
 import com.ronin.phoneshm.core.dsp.DspEngine
 import com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult
 import com.ronin.phoneshm.core.dsp.WelchPsdEngine
@@ -30,11 +33,13 @@ data class AnalysisUiState(
     val fundamentalFrequencyHz: Double = 0.0,
     val dominantAxis: String = "MAGNITUDE",
     val qualityScorePct: Int = 98,
-    val baselineShiftPct: Double = -0.4,
+    val baselineShiftPct: Double = 0.0,
+    val baselineComparison: BaselineComparisonResult? = null,
     val classificationLabel: String = "GLOBAL_MODE",
     val modalResult: ModalAnalysisResult? = null,
     val buildingType: String = "RESIDENTIAL_CONCRETE",
     val floors: Int = 3,
+    val buildingHash: String = "",
     val analyzedFilePath: String? = null,
     val errorMessage: String? = null
 )
@@ -47,18 +52,27 @@ class AnalysisViewModel(
     private val dspEngine: DspEngine = WelchPsdEngine(),
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine(),
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer(),
-    private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(File("/data/data/com.termux/files/home/"))
+    private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(File("/data/data/com.termux/files/home/")),
+    private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
+        File("/data/data/com.termux/files/home/play-ground/ronin_shm/baseline_data")
+    )
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
 
-    fun analyzeSessionFileOrDemo(filePath: String?, buildingType: String = "RESIDENTIAL_CONCRETE", floors: Int = 3) {
+    fun analyzeSessionFileOrDemo(
+        filePath: String?,
+        buildingType: String = "RESIDENTIAL_CONCRETE",
+        floors: Int = 3,
+        buildingHash: String = "demo_building"
+    ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isAnalyzing = true,
                 errorMessage = null,
                 buildingType = buildingType,
                 floors = floors,
+                buildingHash = buildingHash,
                 analyzedFilePath = filePath
             )
 
@@ -123,12 +137,27 @@ class AnalysisViewModel(
                     plausibilityClassification = plausibility
                 )
 
+                // 5. Compare with baseline and update
+                val baselineResult = baselineEngine.compareWithBaseline(
+                    buildingHash = buildingHash,
+                    currentF0Hz = modalRes.fundamentalFrequencyHz
+                )
+
+                // Auto-update baseline with this session (quality score placeholder = 80)
+                baselineEngine.updateBaselineWithSession(
+                    buildingHash = buildingHash,
+                    currentF0Hz = modalRes.fundamentalFrequencyHz,
+                    qualityScorePct = 80
+                )
+
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,
                     fundamentalFrequencyHz = modalRes.fundamentalFrequencyHz,
                     dominantAxis = modalRes.dominantAxis,
                     classificationLabel = modalRes.classification.classification.name,
-                    modalResult = modalRes
+                    modalResult = modalRes,
+                    baselineShiftPct = baselineResult.percentageShift,
+                    baselineComparison = baselineResult
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

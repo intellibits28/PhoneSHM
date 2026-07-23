@@ -17,17 +17,17 @@ class BaselineManagerEngineTest {
         override suspend fun compareWithBaseline(buildingHash: String, currentF0Hz: Double): BaselineComparisonResult {
             val baseline = storage[buildingHash]
             if (baseline == null) {
-                return BaselineComparisonResult(currentF0Hz, null, 0.0, false, "No prior baseline established.")
+                return BaselineComparisonResult(currentF0Hz, null, 0.0, false, false, "No prior baseline established.")
             }
             val shift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
             val isAnomaly = Math.abs(currentF0Hz - baseline.meanF0Hz) > (2.0 * baseline.stdF0Hz)
-            return BaselineComparisonResult(currentF0Hz, baseline, shift, isAnomaly, "Shift calculated: $shift%")
+            return BaselineComparisonResult(currentF0Hz, baseline, shift, isAnomaly, false, "Shift calculated: $shift%")
         }
 
         override suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int) {
             val existing = storage[buildingHash]
             if (existing == null) {
-                storage[buildingHash] = BaselineProfile(buildingHash, currentF0Hz, 0.1, 1, System.currentTimeMillis())
+                storage[buildingHash] = BaselineProfile(buildingHash, currentF0Hz, 0.1, 1, 0, System.currentTimeMillis())
             } else {
                 val newCount = existing.measurementCount + 1
                 val newMean = (existing.meanF0Hz * existing.measurementCount + currentF0Hz) / newCount

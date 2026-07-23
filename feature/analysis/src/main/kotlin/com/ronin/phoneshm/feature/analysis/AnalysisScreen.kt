@@ -243,6 +243,69 @@ fun AnalysisScreen(
                         }
                     }
 
+                    // Baseline Comparison Card
+                    val baseline = uiState.baselineComparison
+                    if (baseline != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (baseline.isConfirmedAnomaly) Color(0xFF7F1D1D)
+                                    else if (baseline.isAnomaly) Color(0xFF78350F)
+                                    else Color(0xFF065F46)
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "BASELINE LONGITUDINAL TRACKING",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFFE2E8F0),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (baseline.isConfirmedAnomaly) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "⚠ CONFIRMED ANOMALY",
+                                                color = Color(0xFFFCA5A5),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    } else if (baseline.isAnomaly) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "MONITORING",
+                                                color = Color(0xFFFCD34D),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = baseline.diagnosticSummary,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+
                     // Adaptive Persistence Tracking Card
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),

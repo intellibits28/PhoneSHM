@@ -3,23 +3,33 @@ package com.ronin.phoneshm.core.baseline
 /**
  * BaselineProfile records historical mean fundamental frequency and standard deviation
  * for a specific physical structure identified by its buildingHash.
+ *
+ * v1.4.1 (C5): consecutiveAnomalyCount tracks sequential anomalous sessions.
+ * Alert is only surfaced to user after N≥2 consecutive anomalies (isConfirmedAnomaly).
+ * Reset policy: HARD RESET on any normal (non-anomalous) session.
  */
 data class BaselineProfile(
     val buildingHash: String,
     val meanF0Hz: Double,
     val stdF0Hz: Double,
     val measurementCount: Int,
+    val consecutiveAnomalyCount: Int = 0,
     val lastUpdatedAt: Long
 )
 
 /**
  * BaselineComparisonResult contrasts current session f0 against established historical baseline.
+ *
+ * v1.4.1 (C5): isAnomaly is the raw single-session detection flag.
+ * isConfirmedAnomaly requires N≥2 consecutive anomalous sessions to prevent
+ * false-positive user panic from single noisy measurements.
  */
 data class BaselineComparisonResult(
     val currentF0Hz: Double,
     val baselineProfile: BaselineProfile?,
     val percentageShift: Double,
-    val isAnomaly: Boolean,
+    val isAnomaly: Boolean,           // Internal: single-session anomaly detection
+    val isConfirmedAnomaly: Boolean,  // User-facing: requires N≥2 consecutive anomalous sessions
     val diagnosticSummary: String
 )
 
@@ -40,6 +50,7 @@ interface BaselineManagerEngine {
 
     /**
      * Updates baseline statistics with a newly verified high-quality session.
+     * Also updates consecutiveAnomalyCount based on whether the session is anomalous.
      */
     suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int)
 }
