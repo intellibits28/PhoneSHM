@@ -330,11 +330,19 @@ fun MeasurementScreen(
                     Text("30s Quick")
                 }
                 Button(
-                    onClick = { viewModel.startRecording("building_profile_active", 66) },
+                    onClick = {
+                        // In a full implementation, we'd fetch the actual building type and floors from DataStore.
+                        // For the demo, we use a placeholder lookup.
+                        val config = com.ronin.phoneshm.core.physics.PhysicsRulesConfig.loadBundledConfig()
+                        val duration = config.getRecommendedDurationSec("RESIDENTIAL_CONCRETE", 3)
+                        viewModel.startRecording("building_profile_active", duration) 
+                    },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                 ) {
-                    Text("66s SHM")
+                    // We can't know the exact duration here synchronously without side-effects, 
+                    // but we can label it as 'Adaptive SHM'.
+                    Text("Adaptive SHM")
                 }
             }
         }

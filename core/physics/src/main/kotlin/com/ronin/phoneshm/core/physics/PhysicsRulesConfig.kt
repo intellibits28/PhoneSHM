@@ -43,6 +43,7 @@ class PhysicsRulesConfig private constructor(
         val clampMaxHz: Double,
         val fallbackMinHz: Double,
         val fallbackMaxHz: Double,
+        val minCyclesRequired: Int?,
         val aliases: List<String>
     ) {
         /**
@@ -103,6 +104,18 @@ class PhysicsRulesConfig private constructor(
         return bands["MIXED_HYBRID"] ?: bands.values.first()
     }
 
+    /**
+     * Returns the recommended session recording duration in seconds based on building typology.
+     * Ensures minimum oscillation cycles are captured for low frequency analysis.
+     */
+    fun getRecommendedDurationSec(buildingType: String, floors: Int): Int {
+        val band = resolveBand(buildingType)
+        val expectedMinHz = band.computeExpectedF0(floors)
+        val minCycles = band.minCyclesRequired ?: 40
+        val computedDuration = Math.ceil(minCycles / expectedMinHz).toInt() + 6 // 6s settling guard
+        return computedDuration.coerceIn(66, 300) // Cap between 66s and 5 minutes
+    }
+
     companion object {
         fun loadFromStream(inputStream: InputStream): PhysicsRulesConfig {
             val jsonText = inputStream.bufferedReader().readText()
@@ -149,6 +162,7 @@ class PhysicsRulesConfig private constructor(
                     clampMaxHz = extractDouble(bandBlock, "\"clampMaxHz\"") ?: 18.0,
                     fallbackMinHz = extractDouble(bandBlock, "\"fallbackMinHz\"") ?: 0.8,
                     fallbackMaxHz = extractDouble(bandBlock, "\"fallbackMaxHz\"") ?: 25.0,
+                    minCyclesRequired = extractInt(bandBlock, "\"minCyclesRequired\""),
                     aliases = extractStringArray(bandBlock, "\"aliases\"")
                 )
 

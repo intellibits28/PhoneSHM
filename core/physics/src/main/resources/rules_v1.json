@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "source": "Eurocode 8 / ASCE 7 / Rayleigh T≈0.1N approximation",
+  "version": 2,
+  "source": "Rayleigh T≈0.1N & Adaptive SSI Duration Criteria",
   "bands": {
     "RESIDENTIAL_CONCRETE": {
       "formula": "K_OVER_FLOORS",
@@ -11,6 +11,7 @@
       "clampMaxHz": 18.0,
       "fallbackMinHz": 0.8,
       "fallbackMaxHz": 25.0,
+      "minCyclesRequired": 40,
       "aliases": ["CONCRETE", "RC", "REINFORCED_CONCRETE", "PRESTRESSED_CONCRETE", "COMPOSITE"]
     },
     "STEEL_FRAME": {
@@ -22,6 +23,7 @@
       "clampMaxHz": 15.0,
       "fallbackMinHz": 0.6,
       "fallbackMaxHz": 30.0,
+      "minCyclesRequired": 40,
       "aliases": ["STEEL", "S275", "S355", "STEEL_CONCRETE_COMPOSITE"]
     },
     "MASONRY": {
@@ -33,6 +35,7 @@
       "clampMaxHz": 25.0,
       "fallbackMinHz": 1.0,
       "fallbackMaxHz": 20.0,
+      "minCyclesRequired": 40,
       "aliases": ["BRICK", "BLOCK", "CLAY_BRICK", "CONCRETE_BLOCK"]
     },
     "TIMBER_FRAME": {
@@ -44,6 +47,7 @@
       "clampMaxHz": 20.0,
       "fallbackMinHz": 1.2,
       "fallbackMaxHz": 22.0,
+      "minCyclesRequired": 40,
       "aliases": ["TIMBER", "WOOD", "CLT", "CROSS_LAMINATED_TIMBER"]
     },
     "MIXED_HYBRID": {
@@ -55,6 +59,7 @@
       "clampMaxHz": 18.0,
       "fallbackMinHz": 0.8,
       "fallbackMaxHz": 25.0,
+      "minCyclesRequired": 40,
       "aliases": ["MIXED", "HYBRID", "UNKNOWN"]
     }
   },
