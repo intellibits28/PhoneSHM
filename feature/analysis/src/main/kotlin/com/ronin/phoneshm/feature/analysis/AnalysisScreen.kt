@@ -147,7 +147,8 @@ fun AnalysisScreen(
                                     text = "PRIMARY STRUCTURAL MODE (f₀)",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFF94A3B8),
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Card(
                                     colors = CardDefaults.cardColors(
@@ -165,6 +166,8 @@ fun AnalysisScreen(
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
+                                        maxLines = 1,
+softWrap = false,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
@@ -218,7 +221,8 @@ fun AnalysisScreen(
                                     text = "PHYSICS DOMAIN CLASSIFICATION",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFFE2E8F0),
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
@@ -229,6 +233,8 @@ fun AnalysisScreen(
                                         color = Color.White,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 11.sp,
+                                        maxLines = 1,
+softWrap = false,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
@@ -265,7 +271,8 @@ fun AnalysisScreen(
                                         text = "BASELINE LONGITUDINAL TRACKING",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = Color(0xFFE2E8F0),
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
                                     )
                                     if (baseline.isConfirmedAnomaly) {
                                         Card(
@@ -277,6 +284,8 @@ fun AnalysisScreen(
                                                 color = Color(0xFFFCA5A5),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
+                                                maxLines = 1,
+softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
@@ -290,6 +299,8 @@ fun AnalysisScreen(
                                                 color = Color(0xFFFCD34D),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
+                                                maxLines = 1,
+softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
