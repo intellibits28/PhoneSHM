@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -32,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: ReportViewModel = viewModel()
 ) {
@@ -51,6 +53,15 @@ fun ReportScreen(
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
+            },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = Color(0xFF0F172A)

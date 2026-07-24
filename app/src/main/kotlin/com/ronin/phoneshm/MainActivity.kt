@@ -34,6 +34,8 @@ import com.ronin.phoneshm.feature.analysis.AnalysisViewModel
 import com.ronin.phoneshm.feature.measurement.MeasurementScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingViewModel
+import com.ronin.phoneshm.feature.report.ReportScreen
+import com.ronin.phoneshm.feature.report.ReportViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,6 +106,7 @@ fun PhoneShmAppHost(
     val onboardingViewModel: OnboardingViewModel = viewModel(factory = onboardingFactory)
     val measurementViewModel: com.ronin.phoneshm.feature.measurement.MeasurementViewModel = viewModel(factory = measurementFactory)
     val analysisViewModel: AnalysisViewModel = viewModel()
+    val reportViewModel: ReportViewModel = viewModel()
 
     if (currentScreen == "ONBOARDING") {
         OnboardingScreen(
@@ -114,10 +117,24 @@ fun PhoneShmAppHost(
                 currentScreen = "MEASUREMENT"
             }
         )
+    } else if (currentScreen == "REPORT") {
+        ReportScreen(
+            onBack = { currentScreen = "ANALYSIS" },
+            viewModel = reportViewModel
+        )
     } else if (currentScreen == "ANALYSIS") {
         AnalysisScreen(
             viewModel = analysisViewModel,
-            onBackToMeasurement = { currentScreen = "MEASUREMENT" }
+            onBackToMeasurement = { currentScreen = "MEASUREMENT" },
+            onNavigateToReport = { f0, anomaly, quality, building ->
+                reportViewModel.setReportSummary(
+                    building = building,
+                    quality = quality,
+                    f0 = f0,
+                    anomaly = anomaly
+                )
+                currentScreen = "REPORT"
+            }
         )
     } else {
         Scaffold(

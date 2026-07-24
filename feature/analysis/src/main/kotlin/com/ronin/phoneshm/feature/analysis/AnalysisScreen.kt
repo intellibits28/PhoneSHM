@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 fun AnalysisScreen(
     viewModel: AnalysisViewModel,
     onBackToMeasurement: () -> Unit = {},
+    onNavigateToReport: (f0: Double, anomaly: Boolean, quality: String, building: String) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -434,14 +435,33 @@ softWrap = false,
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
                     onClick = { viewModel.analyzeSessionFileOrDemo(uiState.analyzedFilePath) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(text = "Re-Analyze PSD", color = Color(0xFF38BDF8))
+                    Text(text = "Re-Analyze", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                }
+                Button(
+                    onClick = {
+                        val f0 = uiState.fundamentalFrequencyHz
+                        val anomaly = uiState.baselineComparison?.isAnomaly ?: false
+                        val quality = when {
+                            uiState.qualityScorePct >= 85 -> "RESEARCH_GRADE"
+                            uiState.qualityScorePct >= 70 -> "GOOD"
+                            uiState.qualityScorePct >= 50 -> "FAIR"
+                            else -> "UNRELIABLE"
+                        }
+                        val building = uiState.buildingType
+                        onNavigateToReport(f0, anomaly, quality, building)
+                    },
+                    modifier = Modifier.weight(1.2f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(text = "Citizen Report ->", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
                 Button(
                     onClick = onBackToMeasurement,
@@ -449,7 +469,7 @@ softWrap = false,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(text = "<- Back to HUD", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(text = "HUD", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
