@@ -438,7 +438,14 @@ softWrap = false,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
-                    onClick = { viewModel.analyzeSessionFileOrDemo(uiState.analyzedFilePath) },
+                    onClick = {
+                        viewModel.analyzeSessionFileOrDemo(
+                            filePath = uiState.analyzedFilePath,
+                            buildingType = uiState.buildingType,
+                            floors = uiState.floors,
+                            buildingHash = uiState.buildingHash
+                        )
+                    },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
