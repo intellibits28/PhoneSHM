@@ -321,13 +321,20 @@ fun MeasurementScreen(
                     onClick = { viewModel.startRecording("building_profile_active", 10) },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Record 10s")
+                    Text("10s Demo")
                 }
                 Button(
                     onClick = { viewModel.startRecording("building_profile_active", 30) },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Record 30s")
+                    Text("30s Quick")
+                }
+                Button(
+                    onClick = { viewModel.startRecording("building_profile_active", 66) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                ) {
+                    Text("66s SHM")
                 }
             }
         }

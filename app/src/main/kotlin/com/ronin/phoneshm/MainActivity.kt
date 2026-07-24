@@ -153,7 +153,16 @@ fun PhoneShmAppHost(
                     viewModel = measurementViewModel,
                     modifier = Modifier.weight(1f),
                     onNavigateToAnalysis = { fileUri ->
-                        analysisViewModel.analyzeSessionFileOrDemo(fileUri)
+                        val onboardState = onboardingViewModel.state.value
+                        val bType = onboardState.buildingType
+                        val bFloors = onboardState.floors.toIntOrNull() ?: 3
+                        val bHash = onboardState.resolvedBuildingHash ?: activeBuildingId
+                        analysisViewModel.analyzeSessionFileOrDemo(
+                            filePath = fileUri,
+                            buildingType = bType,
+                            floors = bFloors,
+                            buildingHash = bHash
+                        )
                         currentScreen = "ANALYSIS"
                     }
                 )
