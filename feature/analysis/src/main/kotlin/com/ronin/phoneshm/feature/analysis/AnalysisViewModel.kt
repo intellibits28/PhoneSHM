@@ -108,33 +108,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         val metaFile = File(file.parentFile, "$sessionId.meta.json")
                         if (metaFile.exists()) {
                             try {
-                                val json = org.json.JSONObject(metaFile.readText())
-                                val metaJson = json.getJSONObject("metadata")
-                                sessionMeta = MeasurementSessionMetadata(
-                                    sessionId = metaJson.getString("sessionId"),
-                                    measurementProfileId = metaJson.getString("measurementProfileId"),
-                                    deviceCapabilityReportId = metaJson.getString("deviceCapabilityReportId"),
-                                    targetDurationSeconds = metaJson.getInt("targetDurationSeconds"),
-                                    targetSampleRateHz = metaJson.getInt("targetSampleRateHz"),
-                                    actualAverageSampleRateHz = metaJson.getDouble("actualAverageSampleRateHz").toFloat(),
-                                    sampleJitterStdMs = metaJson.getDouble("sampleJitterStdMs").toFloat(),
-                                    clockDriftPpm = metaJson.getDouble("clockDriftPpm").toFloat(),
-                                    rawStorageFileUri = metaJson.getString("rawStorageFileUri")
-                                )
-
-                                val devJson = json.getJSONObject("deviceReport")
-                                val biasArr = devJson.getJSONArray("accelerometerBias")
-                                val bias = FloatArray(biasArr.length()) { i -> biasArr.getDouble(i).toFloat() }
-                                deviceReport = DeviceCapabilityReport(
-                                    deviceModel = devJson.getString("deviceModel"),
-                                    sensorVendor = devJson.getString("sensorVendor"),
-                                    maxSupportedSampleRateHz = devJson.getInt("maxSupportedSampleRateHz"),
-                                    estimatedNoiseFloorMg = devJson.getDouble("estimatedNoiseFloorMg").toFloat(),
-                                    accelerometerBias = bias,
-                                    qualityTier = com.ronin.phoneshm.core.device.SensorQualityTier.valueOf(devJson.getString("qualityTier"))
-                                )
-                            } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
-                                android.util.Log.e("Analysis", "Failed to parse meta file: ${e.message}")
+                                val (meta, report) = com.ronin.phoneshm.core.sensor.SessionMetadataJsonCodec.decode(metaFile.readText())
+                                sessionMeta = meta
+                                deviceReport = report
+                            } catch (e: Exception) {
+                                // Task 1c: Do not crash on malformed/partial JSON; treat as metadata missing.
+                                android.util.Log.e("Analysis", "Failed to parse sidecar meta file $metaFile: ${e.message}")
+                                sessionMeta = null
+                                deviceReport = null
                             }
                         }
 

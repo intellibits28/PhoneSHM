@@ -141,32 +141,14 @@ class AndroidVibrationSensorEngine(
             rawStorageFileUri = file.absolutePath
         )
 
-        // Task 1: Persist session metadata and device report to a sidecar JSON file
+        // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject
         val metaFile = File(file.parentFile, "$sessionId.meta.json")
-        val json = """
-        {
-            "metadata": {
-                "sessionId": "${metadata.sessionId}",
-                "measurementProfileId": "${metadata.measurementProfileId}",
-                "deviceCapabilityReportId": "${metadata.deviceCapabilityReportId}",
-                "targetDurationSeconds": ${metadata.targetDurationSeconds},
-                "targetSampleRateHz": ${metadata.targetSampleRateHz},
-                "actualAverageSampleRateHz": ${metadata.actualAverageSampleRateHz},
-                "sampleJitterStdMs": ${metadata.sampleJitterStdMs},
-                "clockDriftPpm": ${metadata.clockDriftPpm},
-                "rawStorageFileUri": "${metadata.rawStorageFileUri.replace("\\", "\\\\")}"
-            },
-            "deviceReport": {
-                "deviceModel": "${capabilityReport.deviceModel}",
-                "sensorVendor": "${capabilityReport.sensorVendor}",
-                "maxSupportedSampleRateHz": ${capabilityReport.maxSupportedSampleRateHz},
-                "estimatedNoiseFloorMg": ${capabilityReport.estimatedNoiseFloorMg},
-                "accelerometerBias": [${capabilityReport.accelerometerBias.joinToString(",")}],
-                "qualityTier": "${capabilityReport.qualityTier.name}"
-            }
+        try {
+            val jsonString = SessionMetadataJsonCodec.encode(metadata, capabilityReport)
+            metaFile.writeText(jsonString)
+        } catch (e: Exception) {
+            android.util.Log.e("SensorEngine", "Failed to write JSON metadata", e)
         }
-        """.trimIndent()
-        metaFile.writeText(json)
         
         // Also copy the meta file to public downloads if applicable
         try {
