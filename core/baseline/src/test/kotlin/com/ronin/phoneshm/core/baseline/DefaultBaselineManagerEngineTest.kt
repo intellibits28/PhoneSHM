@@ -128,9 +128,10 @@ class DefaultBaselineManagerEngineTest {
     @Test
     fun testCompareWithBaselineAnomalousLargeShift() = runTest {
         // Use identical values so std=0, no accidental 2σ anomaly during baseline building
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 85)
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 90)
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 82)
+        // E2: must be n >= 10 to establish reliable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_steel", 8.0, 85)
+        }
 
         val profile = engine.getOrCreateBaseline("bldg_steel")!!
         assertEquals(0, profile.consecutiveAnomalyCount)
@@ -149,9 +150,10 @@ class DefaultBaselineManagerEngineTest {
     @Test
     fun testConsecutiveAnomalyConfirmation() = runTest {
         // Build stable baseline with identical values (std=0, no accidental 2σ anomaly)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 85)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 90)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 82)
+        // E2: must be n >= 10 to establish reliable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_c5", 5.0, 85)
+        }
 
         val profileBefore = engine.getOrCreateBaseline("bldg_c5")!!
         assertEquals("Baseline should have 0 anomalies", 0, profileBefore.consecutiveAnomalyCount)
@@ -369,5 +371,109 @@ class DefaultBaselineManagerEngineTest {
         // Ensure old file was renamed
         assertFalse(file.exists())
         assertTrue(java.io.File(baselineDir, "baseline_profiles.txt.bak").exists())
+    }
+
+    // --- ITEM E1: Gating Comparison by Quality ---
+    @Test
+    fun testLowConfidenceGatingScenario() = runTest {
+        // Scenario: baseline mean = 25.195, std = 10.0184, n = 5
+        // Current measurement: currentF0Hz = 43.457, confidence = 0.20
+        val hash = "low_conf_bldg"
+        // Setup baseline manually
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.20)
+
+        assertTrue(result.comparisonSkippedLowQuality)
+        assertFalse("isAnomaly must be false on low confidence", result.isAnomaly)
+        assertFalse("isConfirmedAnomaly must be false on low confidence", result.isConfirmedAnomaly)
+        assertEquals("⚠️ Measurement quality too low for reliable comparison — retry recommended", result.diagnosticSummary)
+    }
+
+    // --- ITEM E2: Minimum Baseline Samples Gating ---
+    @Test
+    fun testBaselineCalibratingScenario() = runTest {
+        val hash = "calibrating_bldg"
+        // Setup baseline manually with n = 5
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        // High confidence reading (0.90) with real shift (43.457 Hz)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.90)
+
+        assertTrue("Should be in calibrating state", result.isCalibrating)
+        assertFalse("Confirmed anomaly must be suppressed during calibration", result.isConfirmedAnomaly)
+        assertTrue("isAnomaly can still be true for tracking", result.isAnomaly)
+        assertTrue(result.diagnosticSummary.startsWith("CALIBRATING BASELINE (5/10)."))
+    }
+
+    // --- E1 & E2 Interaction: Low confidence AND Low n ---
+    @Test
+    fun testLowConfidenceAndLowNPrecedence() = runTest {
+        val hash = "low_conf_low_n_bldg"
+        // Setup baseline manually with n = 5
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        // Low confidence reading (0.20) and low n (5)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.20)
+
+        // E1 has precedence: we flag skipped comparison over calibration message in main diagnostics
+        assertTrue(result.comparisonSkippedLowQuality)
+        assertTrue(result.isCalibrating) // calibration state is still tracked
+        assertFalse(result.isAnomaly)
+        assertFalse(result.isConfirmedAnomaly)
+        assertEquals("⚠️ Measurement quality too low for reliable comparison — retry recommended", result.diagnosticSummary)
+    }
+
+    // --- Regression Alert Case: n >= 10, confidence >= 50%, real shift ---
+    @Test
+    fun testConfirmedAnomalySurfacesWhenReliable() = runTest {
+        val hash = "reliable_anomaly_bldg"
+        // Setup baseline manually with n = 10 (meets MIN_BASELINE_SAMPLES)
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 10,
+                consecutiveAnomalyCount = 1, // Already has 1 consecutive anomaly tracked
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 802.94
+            )
+        )
+
+        // Second anomalous session (currentF0Hz = 43.457, confidence = 0.90)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.90)
+        assertTrue(result.isAnomaly)
+        assertTrue("Should confirm anomaly with n >= 10 and N >= 2 consecutive anomalies", result.isConfirmedAnomaly)
     }
 }

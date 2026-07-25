@@ -14,7 +14,11 @@ class BaselineManagerEngineTest {
             return storage[buildingHash]
         }
 
-        override suspend fun compareWithBaseline(buildingHash: String, currentF0Hz: Double): BaselineComparisonResult {
+        override suspend fun compareWithBaseline(
+            buildingHash: String,
+            currentF0Hz: Double,
+            confidence: Double
+        ): BaselineComparisonResult {
             val baseline = storage[buildingHash]
             if (baseline == null) {
                 return BaselineComparisonResult(currentF0Hz, null, 0.0, false, false, "No prior baseline established.")

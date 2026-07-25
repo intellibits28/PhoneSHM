@@ -312,7 +312,9 @@ softWrap = false,
                     if (baseline != null) {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = if (baseline.isConfirmedAnomaly) Color(0xFF7F1D1D)
+                                containerColor = if (baseline.comparisonSkippedLowQuality) Color(0xFF334155) // Neutral slate
+                                    else if (baseline.isCalibrating) Color(0xFF1E293B) // Neutral calibrating slate/dark
+                                    else if (baseline.isConfirmedAnomaly) Color(0xFF7F1D1D)
                                     else if (baseline.isAnomaly) Color(0xFF78350F)
                                     else Color(0xFF065F46)
                             ),
@@ -332,7 +334,37 @@ softWrap = false,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    if (baseline.isConfirmedAnomaly) {
+                                    if (baseline.comparisonSkippedLowQuality) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "⚠️ LOW QUALITY",
+                                                color = Color(0xFFFCD34D),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    } else if (baseline.isCalibrating) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "CALIBRATING",
+                                                color = Color(0xFFCBD5E1),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    } else if (baseline.isConfirmedAnomaly) {
                                         Card(
                                             colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
                                             shape = RoundedCornerShape(6.dp)
@@ -343,7 +375,7 @@ softWrap = false,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
                                                 maxLines = 1,
-softWrap = false,
+                                                softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
@@ -358,7 +390,7 @@ softWrap = false,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
                                                 maxLines = 1,
-softWrap = false,
+                                                softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }

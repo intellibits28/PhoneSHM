@@ -131,9 +131,14 @@ class DefaultBaselineManagerEngine(
         }
     }
 
+    companion object {
+        private const val MIN_BASELINE_SAMPLES = 10
+    }
+
     override suspend fun compareWithBaseline(
         buildingHash: String,
-        currentF0Hz: Double
+        currentF0Hz: Double,
+        confidence: Double
     ): BaselineComparisonResult {
         ensureMigrated()
         val baseline = getOrCreateBaseline(buildingHash)
@@ -151,15 +156,33 @@ class DefaultBaselineManagerEngine(
 
         val percentageShift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
 
+        if (confidence < 0.50) {
+            return BaselineComparisonResult(
+                currentF0Hz = currentF0Hz,
+                baselineProfile = baseline,
+                percentageShift = percentageShift,
+                isAnomaly = false,
+                isConfirmedAnomaly = false,
+                diagnosticSummary = "⚠️ Measurement quality too low for reliable comparison — retry recommended",
+                comparisonSkippedLowQuality = true,
+                isCalibrating = baseline.measurementCount < MIN_BASELINE_SAMPLES
+            )
+        }
+
         val isTwoSigmaAnomaly = baseline.stdF0Hz > 0.0 &&
                 abs(currentF0Hz - baseline.meanF0Hz) > 2.0 * baseline.stdF0Hz
         val isLargeShift = abs(percentageShift) > 5.0
         val isAnomaly = isLargeShift || isTwoSigmaAnomaly
 
+        val isCalibrating = baseline.measurementCount < MIN_BASELINE_SAMPLES
         val projectedCount = if (isAnomaly) baseline.consecutiveAnomalyCount + 1 else 0
-        val isConfirmedAnomaly = projectedCount >= 2
+        // E2: Do not confirm anomalies when baseline is calibrating (n < 10)
+        val isConfirmedAnomaly = !isCalibrating && projectedCount >= 2
 
         val diagnosticSummary = buildString {
+            if (isCalibrating) {
+                append("CALIBRATING BASELINE (${baseline.measurementCount}/$MIN_BASELINE_SAMPLES). ")
+            }
             append(String.format("Current f₀ = %.3f Hz vs baseline μ = %.3f Hz (σ = %.4f Hz, n = %d). ",
                 currentF0Hz, baseline.meanF0Hz, baseline.stdF0Hz, baseline.measurementCount))
             append(String.format("Shift: %+.2f%%. ", percentageShift))
@@ -173,6 +196,8 @@ class DefaultBaselineManagerEngine(
                 }
                 if (isConfirmedAnomaly) {
                     append("⚠ CONFIRMED: ${projectedCount} consecutive anomalous sessions. Investigate potential structural degradation.")
+                } else if (isCalibrating) {
+                    append("Calibrating — anomaly detected but baseline establishment in progress.")
                 } else {
                     append("Monitoring — confirm with additional measurement (${projectedCount}/2 consecutive anomalies).")
                 }
@@ -187,7 +212,9 @@ class DefaultBaselineManagerEngine(
             percentageShift = percentageShift,
             isAnomaly = isAnomaly,
             isConfirmedAnomaly = isConfirmedAnomaly,
-            diagnosticSummary = diagnosticSummary
+            diagnosticSummary = diagnosticSummary,
+            comparisonSkippedLowQuality = false,
+            isCalibrating = isCalibrating
         )
     }
 

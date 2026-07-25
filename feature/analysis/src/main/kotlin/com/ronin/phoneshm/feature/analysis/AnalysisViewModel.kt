@@ -146,7 +146,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 // 5. Compare with baseline and update
                 val baselineResult = baselineEngine.compareWithBaseline(
                     buildingHash = buildingHash,
-                    currentF0Hz = modalRes.fundamentalFrequencyHz
+                    currentF0Hz = modalRes.fundamentalFrequencyHz,
+                    confidence = modalRes.confidence
                 )
 
                 // Auto-update baseline with this session (quality score placeholder = 80)
