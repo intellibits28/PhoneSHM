@@ -21,7 +21,7 @@ class DefaultModalAnalyzer : ModalAnalyzer {
     override fun analyzeMultiAxisSpectrum(
         spectrum: MultiAxisSpectrumResult,
         slidingWindowSpectra: List<MultiAxisSpectrumResult>,
-        plausibilityClassification: PlausibilityClassificationResult
+        evaluatePhysics: (f0Hz: Double, prominence: Double) -> PlausibilityClassificationResult
     ): ModalAnalysisResult {
         // Collect candidate peaks from X, Y, Z, and Magnitude within valid structural bounds (0.3 Hz to 45.0 Hz)
         val candidatePeaks = mutableListOf<Pair<String, Peak>>()
@@ -50,7 +50,7 @@ class DefaultModalAnalyzer : ModalAnalyzer {
                     confidence = 0.0,
                     persistence = 0.0,
                     adaptiveToleranceHz = 0.1,
-                    classification = plausibilityClassification,
+                    classification = evaluatePhysics(0.0, 0.0),
                     dominantPeaksTable = emptyList()
                 )
             }
@@ -88,6 +88,9 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         } else {
             listOf(Pair(fundamentalFrequencyHz, dominantPeakPower))
         }
+
+        // Evaluate physics plausibility using the final resolved f0 and prominence
+        val plausibilityClassification = evaluatePhysics(fundamentalFrequencyHz, dominantPeakProminence)
 
         // Calculate combined confidence (0.0 to 1.0)
         val peakConf = min(1.0, dominantPeakProminence * 1.5)

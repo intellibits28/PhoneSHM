@@ -125,24 +125,19 @@ class AnalysisViewModel(
                     }
                 }
 
-                // 3. Identify initial top candidate frequency from magnitude/axes to evaluate physics plausibility
-                val allPeaks = mainSpectrum.psdX.peaks + mainSpectrum.psdY.peaks + mainSpectrum.psdZ.peaks + mainSpectrum.psdMagnitude.peaks
-                val bestCandidate = allPeaks.filter { it.frequencyHz in 0.3f..45.0f }.maxByOrNull { it.powerMagnitude }
-                val candidateF0 = bestCandidate?.frequencyHz?.toDouble() ?: 3.2
-                val candidateProminence = bestCandidate?.prominence ?: 0.65f
-
-                val plausibility = physicsEngine.classifyFrequency(
-                    f0Hz = candidateF0,
-                    prominence = candidateProminence,
-                    buildingType = buildingType,
-                    floors = floors
-                )
-
-                // 4. Run ModalAnalyzer across spectra with adaptive persistence tracking
+                // 3. Run ModalAnalyzer across spectra with adaptive persistence tracking
+                //    Physics plausibility is evaluated inline on the final selected modal frequency
                 val modalRes = modalAnalyzer.analyzeMultiAxisSpectrum(
                     spectrum = mainSpectrum,
                     slidingWindowSpectra = slidingSpectra,
-                    plausibilityClassification = plausibility
+                    evaluatePhysics = { f0Hz, prominence ->
+                        physicsEngine.classifyFrequency(
+                            f0Hz = f0Hz,
+                            prominence = prominence.toFloat(),
+                            buildingType = buildingType,
+                            floors = floors
+                        )
+                    }
                 )
 
                 // 5. Compare with baseline and update

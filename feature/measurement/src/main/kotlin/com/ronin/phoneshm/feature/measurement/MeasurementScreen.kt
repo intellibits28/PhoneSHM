@@ -41,6 +41,19 @@ fun MeasurementScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    androidx.compose.runtime.LaunchedEffect(uiState.recordingFinished) {
+        if (uiState.recordingFinished) {
+            try {
+                val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 100)
+                toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 500)
+                kotlinx.coroutines.delay(600)
+                toneGen.release()
+            } catch (e: Exception) {
+                // Ignore if tone generation fails
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()

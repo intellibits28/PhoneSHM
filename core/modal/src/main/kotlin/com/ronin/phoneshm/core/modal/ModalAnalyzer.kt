@@ -28,6 +28,6 @@ interface ModalAnalyzer {
     fun analyzeMultiAxisSpectrum(
         spectrum: MultiAxisSpectrumResult,
         slidingWindowSpectra: List<MultiAxisSpectrumResult>,
-        plausibilityClassification: PlausibilityClassificationResult
+        evaluatePhysics: (f0Hz: Double, prominence: Double) -> PlausibilityClassificationResult
     ): ModalAnalysisResult
 }
