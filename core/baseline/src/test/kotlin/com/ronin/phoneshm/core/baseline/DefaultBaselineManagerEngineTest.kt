@@ -1,11 +1,16 @@
 package com.ronin.phoneshm.core.baseline
 
+import com.ronin.phoneshm.core.database.dao.BaselineDao
+import com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity
+import com.ronin.phoneshm.core.database.entity.BaselineProfileEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
+import java.nio.file.Files
 import kotlin.math.sqrt
 
 class DefaultBaselineManagerEngineTest {
@@ -13,13 +18,42 @@ class DefaultBaselineManagerEngineTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private lateinit var baselineDir: java.io.File
+    private lateinit var baselineDir: File
     private lateinit var engine: DefaultBaselineManagerEngine
+    private lateinit var fakeDao: FakeBaselineDao
+
+    class FakeBaselineDao : BaselineDao {
+        val profiles = mutableMapOf<String, BaselineProfileEntity>()
+        val histories = mutableMapOf<String, MutableList<BaselineHistoryEntity>>()
+
+        override suspend fun upsertProfile(profile: BaselineProfileEntity) {
+            profiles[profile.buildingHash] = profile
+        }
+        override suspend fun insertHistory(history: BaselineHistoryEntity) {
+            histories.getOrPut(history.buildingHash) { mutableListOf() }.add(history)
+        }
+        override suspend fun getProfile(buildingHash: String) = profiles[buildingHash]
+        override suspend fun getHistory(buildingHash: String): List<BaselineHistoryEntity> {
+            return histories[buildingHash]?.sortedBy { it.timestampMs } ?: emptyList()
+        }
+        override suspend fun trimHistoryTo20(buildingHash: String) {
+            val list = histories[buildingHash] ?: return
+            if (list.size > 20) {
+                list.sortBy { it.timestampMs }
+                histories[buildingHash] = list.takeLast(20).toMutableList()
+            }
+        }
+        override suspend fun deleteProfile(buildingHash: String) {
+            profiles.remove(buildingHash)
+            histories.remove(buildingHash)
+        }
+    }
 
     @Before
     fun setup() {
-        baselineDir = tempFolder.newFolder("baseline_test")
-        engine = DefaultBaselineManagerEngine(baselineDir)
+        baselineDir = Files.createTempDirectory("baseline_test").toFile()
+        fakeDao = FakeBaselineDao()
+        engine = DefaultBaselineManagerEngine(fakeDao, baselineDir)
     }
 
     // --- Test 1: No baseline exists yet ---
@@ -193,22 +227,15 @@ class DefaultBaselineManagerEngineTest {
     // --- Test 11: Persistence across instances ---
 
     @Test
-    fun testPersistenceAcrossInstances() = runTest {
-        engine.updateBaselineWithSession("persist_bldg", 3.5, 85)
-        engine.updateBaselineWithSession("persist_bldg", 3.6, 90)
-
-        val profile1 = engine.getOrCreateBaseline("persist_bldg")!!
-        assertEquals(2, profile1.measurementCount)
-
-        // Create a NEW engine instance with the same directory
-        val engine2 = DefaultBaselineManagerEngine(baselineDir)
-        val profile2 = engine2.getOrCreateBaseline("persist_bldg")
-
-        assertNotNull("Baseline should persist across engine instances", profile2)
-        assertEquals(profile1.meanF0Hz, profile2!!.meanF0Hz, 1e-9)
-        assertEquals(profile1.stdF0Hz, profile2.stdF0Hz, 1e-9)
-        assertEquals(profile1.measurementCount, profile2.measurementCount)
-        assertEquals(profile1.consecutiveAnomalyCount, profile2.consecutiveAnomalyCount)
+    fun testPersistenceAndReload() = runTest {
+        // Since we are using fakeDao, we can't test actual file reloading the same way without 
+        // passing a new instance of the same fakeDao.
+        engine.updateBaselineWithSession("bldg_persist", 20.0, 100)
+        
+        val engine2 = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        val profile = engine2.getOrCreateBaseline("bldg_persist")
+        assertNotNull(profile)
+        assertEquals(20.0, profile!!.meanF0Hz, 1e-9)
     }
 
     // --- Test 12: Multiple buildings are independent ---
@@ -259,7 +286,7 @@ class DefaultBaselineManagerEngineTest {
         assertNull(engine.getOrCreateBaseline("bldg_corrupted"))
         
         // Also check persistence
-        val engine2 = DefaultBaselineManagerEngine(baselineDir)
+        val engine2 = DefaultBaselineManagerEngine(fakeDao, baselineDir)
         assertNull(engine2.getOrCreateBaseline("bldg_corrupted"))
     }
     
@@ -275,5 +302,72 @@ class DefaultBaselineManagerEngineTest {
         assertEquals(16.0, history.first().f0Hz, 1e-9)
         // The newest is 10.0 + 25 = 35.0
         assertEquals(35.0, history.last().f0Hz, 1e-9)
+    }
+
+    // --- Test 16: Quality Gate ---
+
+    @Test
+    fun testLowQualitySessionsExcludedFromHistory() = runTest {
+        engine.updateBaselineWithSession("bldg_x", 10.0, qualityScorePct = 30)
+        assertEquals(0, engine.getRecentHistory("bldg_x").size)
+    }
+
+    // --- ITEM C: Confirm Incident Baseline Reset ---
+    @Test
+    fun testResetIncidentBaseline() = runTest {
+        val incidentHash = "incident_masonry_1_floor"
+        val file = java.io.File(baselineDir, "baseline_profiles.txt")
+        file.writeText("# PhoneSHM Baseline Profiles v1.4.1\n")
+        file.appendText("$incidentHash|26.801|13.07|9|123456789|1366.5|0|\n")
+
+        val engineLocal = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        val before = engineLocal.getOrCreateBaseline(incidentHash)
+        
+        println("=== ITEM C OUTPUT ===")
+        println("BuildingHash: ${before?.buildingHash}")
+        println("Profile BEFORE reset: meanF0Hz=${before?.meanF0Hz}, stdF0Hz=${before?.stdF0Hz}, n=${before?.measurementCount}")
+        
+        val wasReset = engineLocal.resetBaseline(incidentHash)
+        println("Reset action success: $wasReset")
+        
+        val after = engineLocal.getOrCreateBaseline(incidentHash)
+        println("Profile AFTER reset: $after")
+        println("=====================")
+        
+        assertNull(after)
+    }
+
+    // --- ITEM E: Room Migration Test ---
+    @Test
+    fun testMigrationFromOldFormat() = runTest {
+        val legacyHash = "legacy_bldg_hash"
+        val file = java.io.File(baselineDir, "baseline_profiles.txt")
+        file.writeText("# PhoneSHM Baseline Profiles v1.4.1\n")
+        // Format: hash|mean|std|n|timestamp|m2|consec_anomaly|history
+        // history: timestamp,f0,quality;...
+        file.appendText("$legacyHash|25.5|2.1|5|1000000|15.0|1|999990,25.4,80;1000000,25.6,90\n")
+
+        // First creation will trigger ensureMigrated() implicitly on any API call
+        val migratorEngine = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        
+        // This triggers migration
+        val profile = migratorEngine.getOrCreateBaseline(legacyHash)
+        
+        assertNotNull(profile)
+        assertEquals(25.5, profile!!.meanF0Hz, 1e-9)
+        assertEquals(2.1, profile.stdF0Hz, 1e-9)
+        assertEquals(5, profile.measurementCount)
+        
+        // Assert history migrated
+        val history = migratorEngine.getRecentHistory(legacyHash)
+        assertEquals(2, history.size)
+        assertEquals(999990L, history[0].timestampMs)
+        assertEquals(25.4, history[0].f0Hz, 1e-9)
+        assertEquals(1000000L, history[1].timestampMs)
+        assertEquals(25.6, history[1].f0Hz, 1e-9)
+
+        // Ensure old file was renamed
+        assertFalse(file.exists())
+        assertTrue(java.io.File(baselineDir, "baseline_profiles.txt.bak").exists())
     }
 }

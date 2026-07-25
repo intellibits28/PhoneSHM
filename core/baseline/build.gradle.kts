@@ -22,8 +22,11 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:database"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

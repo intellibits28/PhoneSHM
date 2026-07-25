@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -25,10 +26,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,15 +41,38 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun AnalysisScreen(
-    viewModel: AnalysisViewModel,
+    viewModel: AnalysisViewModel = viewModel(),
     onBackToMeasurement: () -> Unit = {},
     onNavigateToReport: (f0: Double, anomaly: Boolean, quality: String, building: String) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Delete baseline for this building?") },
+            text = { Text("This will permanently discard the meanF0Hz, stdF0Hz, and history. It cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetDialog = false
+                    viewModel.resetBaseline(uiState.buildingHash)
+                }) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     LaunchedEffect(Unit) {
         if (uiState.modalResult == null && !uiState.isAnalyzing) {
@@ -337,15 +365,17 @@ softWrap = false,
                                     }
                                     
                                     // Debug/Admin Action: Hidden Baseline Reset
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "RESET",
-                                        color = Color.White.copy(alpha = 0.1f), // Barely visible debug button
-                                        fontSize = 9.sp,
-                                        modifier = Modifier.clickable {
-                                            viewModel.resetBaseline(uiState.buildingHash)
-                                        }
-                                    )
+                                    if (com.ronin.phoneshm.feature.analysis.BuildConfig.DEBUG) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "RESET",
+                                            color = Color.White.copy(alpha = 0.1f), // Barely visible debug button
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.clickable {
+                                                showResetDialog = true
+                                            }
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(

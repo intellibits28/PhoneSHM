@@ -50,10 +50,8 @@ data class AnalysisUiState(
  * AnalysisViewModel drives modal frequency display, multi-axis Welch PSD rendering,
  * domain physics plausibility classification, and adaptive persistence tracking.
  */
-class AnalysisViewModel(
-    application: Application? = null
-) : ViewModel() {
-    private val baseDir: File = application?.filesDir ?: File(System.getProperty("java.io.tmpdir"), "phoneshm_data")
+class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
+    private val baseDir: File = application.filesDir ?: File(System.getProperty("java.io.tmpdir"), "phoneshm_data")
 
     private val dspEngine: DspEngine = WelchPsdEngine()
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
@@ -61,7 +59,9 @@ class AnalysisViewModel(
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
+    private val baselineDao = PhoneShmDatabase.getDatabase(application).baselineDao()
     private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
+        baselineDao,
         File(baseDir, "baseline_data")
     )
     
@@ -203,6 +203,10 @@ class AnalysisViewModel(
 
     fun resetBaseline(buildingHash: String) {
         viewModelScope.launch {
+            val previous = baselineEngine.getOrCreateBaseline(buildingHash)
+            if (previous != null) {
+                android.util.Log.w("BaselineAudit", "Manual debug reset of baseline for building $buildingHash. Previous: mean=${previous.meanF0Hz}, std=${previous.stdF0Hz}, n=${previous.measurementCount}. Time=${System.currentTimeMillis()}")
+            }
             baselineEngine.resetBaseline(buildingHash)
             if (_uiState.value.buildingHash == buildingHash) {
                 _uiState.value = _uiState.value.copy(

@@ -107,4 +107,26 @@ class DefaultModalAnalyzerTest {
         // the returned f0 is identical to what the physics classifier was handed.
         assertEquals("Lambda must receive the exact chosen f0", result.fundamentalFrequencyHz, capturedF0, 1e-9)
     }
+
+    @Test
+    fun testAdaptivePersistenceLambdaInput() {
+        val mainSpec = createDummySpectrum(xPeak = Peak(8.17f, 10.0f, 0.8f))
+        
+        // Window 1: exact peak at 8.17 Hz -> match
+        val win1 = createDummySpectrum(xPeak = Peak(8.17f, 9.5f, 0.8f))
+        // Window 2: peak at 8.25 Hz -> within adaptive tolerance -> match
+        val win2 = createDummySpectrum(yPeak = Peak(8.25f, 9.0f, 0.75f))
+        // Window 3: far peak -> no match
+        val win3 = createDummySpectrum(zPeak = Peak(25.0f, 5.0f, 0.5f))
+        
+        var capturedF0 = -1.0
+        
+        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3)) { f0Hz, _ ->
+            capturedF0 = f0Hz
+            PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "")
+        }
+        
+        assertEquals("Lambda must receive final f0Hz even with sliding windows", result.fundamentalFrequencyHz, capturedF0, 1e-9)
+        assertEquals(8.17, capturedF0, 1e-9)
+    }
 }
