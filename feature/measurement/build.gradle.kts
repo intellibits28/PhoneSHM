@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:storage"))
     implementation(project(":core:audio"))
     implementation(project(":core:quality"))
+    implementation(project(":core:physics"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
