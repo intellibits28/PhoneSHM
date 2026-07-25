@@ -46,7 +46,7 @@ class DefaultModalAnalyzerTest {
             explanation = "Valid global fundamental mode"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), classification)
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { _, _ -> classification }
 
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals("Y", result.dominantAxis)
@@ -72,7 +72,7 @@ class DefaultModalAnalyzerTest {
             explanation = "Valid"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3), classification)
+        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3)) { _, _ -> classification }
 
         // 2 out of 3 windows contain a peak matching f0 (8.17 Hz) within adaptive tolerance
         assertEquals(2.0 / 3.0, result.persistence, 0.001)
@@ -87,7 +87,7 @@ class DefaultModalAnalyzerTest {
             explanation = "No peaks"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(emptySpec, emptyList(), classification)
+        val result = analyzer.analyzeMultiAxisSpectrum(emptySpec, emptyList()) { _, _ -> classification }
         // Should fallback to highest PSD bin in valid range (in dummy spectrum, 8.17 Hz has psd 10.0)
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals("MAGNITUDE", result.dominantAxis)

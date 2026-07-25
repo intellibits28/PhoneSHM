@@ -16,7 +16,7 @@ class ModalAnalyzerTest {
         override fun analyzeMultiAxisSpectrum(
             spectrum: MultiAxisSpectrumResult,
             slidingWindowSpectra: List<MultiAxisSpectrumResult>,
-            plausibilityClassification: PlausibilityClassificationResult
+            evaluatePhysics: (f0Hz: Double, prominence: Double) -> PlausibilityClassificationResult
         ): ModalAnalysisResult {
             return ModalAnalysisResult(
                 fundamentalFrequencyHz = 8.17,
@@ -24,7 +24,7 @@ class ModalAnalyzerTest {
                 confidence = 0.92,
                 persistence = 0.95,
                 adaptiveToleranceHz = 0.194, // max(0.0817, 0.097 * 2)
-                classification = plausibilityClassification,
+                classification = evaluatePhysics(8.17, 0.8),
                 dominantPeaksTable = listOf(Pair(8.17, 12.5), Pair(24.3, 3.2))
             )
         }
@@ -41,7 +41,7 @@ class ModalAnalyzerTest {
             explanation = "Valid"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(dummySpec, emptyList(), classification)
+        val result = analyzer.analyzeMultiAxisSpectrum(dummySpec, emptyList()) { _, _ -> classification }
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals(0.95, result.persistence, 0.001)
     }
