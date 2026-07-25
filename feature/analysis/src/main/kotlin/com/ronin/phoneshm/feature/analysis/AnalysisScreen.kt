@@ -53,17 +53,17 @@ fun AnalysisScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showResetDialog by remember { mutableStateOf(false) }
 
-    if (showResetDialog) {
+    if (com.ronin.phoneshm.feature.analysis.BuildConfig.DEBUG && showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text("Delete baseline for this building?") },
-            text = { Text("This will permanently discard the meanF0Hz, stdF0Hz, and history. It cannot be undone.") },
+            text = { Text("This will permanently discard the meanF0Hz, stdF0Hz, and history for this building. It cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     showResetDialog = false
                     viewModel.resetBaseline(uiState.buildingHash)
                 }) {
-                    Text("Confirm")
+                    Text("Confirm", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

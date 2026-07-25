@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":core:quality"))
     implementation(project(":core:sensor"))
     implementation(project(":core:storage"))
+    implementation(project(":core:database"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

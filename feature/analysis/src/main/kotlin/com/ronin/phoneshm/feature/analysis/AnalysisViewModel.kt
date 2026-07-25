@@ -1,7 +1,8 @@
 package com.ronin.phoneshm.feature.analysis
 
 import android.app.Application
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import com.ronin.phoneshm.core.database.PhoneShmDatabase
 import androidx.lifecycle.viewModelScope
 import com.ronin.phoneshm.core.baseline.BaselineComparisonResult
 import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
