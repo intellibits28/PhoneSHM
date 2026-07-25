@@ -60,11 +60,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
-    private val baselineDao = PhoneShmDatabase.getDatabase(application).baselineDao()
-    private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
-        baselineDao,
-        File(baseDir, "baseline_data")
-    )
+    private val baselineDao by lazy { PhoneShmDatabase.getDatabase(application).baselineDao() }
+    private val baselineEngine: BaselineManagerEngine by lazy {
+        DefaultBaselineManagerEngine(
+            baselineDao,
+            File(baseDir, "baseline_data")
+        )
+    }
     
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
