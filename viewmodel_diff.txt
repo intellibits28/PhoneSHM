@@ -1,0 +1,45 @@
+commit 22f8d395009acd1c3757f8d211353a2372e6901a
+Author: intellibits28 <intellibits@gmail.com>
+Date:   Sat Jul 25 09:31:07 2026 +0630
+
+    fix: physics domain classification logic mismatch and add completion beep
+
+diff --git a/feature/analysis/src/main/kotlin/com/ronin/phoneshm/feature/analysis/AnalysisViewModel.kt b/feature/analysis/src/main/kotlin/com/ronin/phoneshm/feature/analysis/AnalysisViewModel.kt
+index f1ba4e6..f055731 100644
+--- a/feature/analysis/src/main/kotlin/com/ronin/phoneshm/feature/analysis/AnalysisViewModel.kt
++++ b/feature/analysis/src/main/kotlin/com/ronin/phoneshm/feature/analysis/AnalysisViewModel.kt
+@@ -125,24 +125,19 @@ class AnalysisViewModel(
+                     }
+                 }
+ 
+-                // 3. Identify initial top candidate frequency from magnitude/axes to evaluate physics plausibility
+-                val allPeaks = mainSpectrum.psdX.peaks + mainSpectrum.psdY.peaks + mainSpectrum.psdZ.peaks + mainSpectrum.psdMagnitude.peaks
+-                val bestCandidate = allPeaks.filter { it.frequencyHz in 0.3f..45.0f }.maxByOrNull { it.powerMagnitude }
+-                val candidateF0 = bestCandidate?.frequencyHz?.toDouble() ?: 3.2
+-                val candidateProminence = bestCandidate?.prominence ?: 0.65f
+-
+-                val plausibility = physicsEngine.classifyFrequency(
+-                    f0Hz = candidateF0,
+-                    prominence = candidateProminence,
+-                    buildingType = buildingType,
+-                    floors = floors
+-                )
+-
+-                // 4. Run ModalAnalyzer across spectra with adaptive persistence tracking
++                // 3. Run ModalAnalyzer across spectra with adaptive persistence tracking
++                //    Physics plausibility is evaluated inline on the final selected modal frequency
+                 val modalRes = modalAnalyzer.analyzeMultiAxisSpectrum(
+                     spectrum = mainSpectrum,
+                     slidingWindowSpectra = slidingSpectra,
+-                    plausibilityClassification = plausibility
++                    evaluatePhysics = { f0Hz, prominence ->
++                        physicsEngine.classifyFrequency(
++                            f0Hz = f0Hz,
++                            prominence = prominence.toFloat(),
++                            buildingType = buildingType,
++                            floors = floors
++                        )
++                    }
+                 )
+ 
+                 // 5. Compare with baseline and update

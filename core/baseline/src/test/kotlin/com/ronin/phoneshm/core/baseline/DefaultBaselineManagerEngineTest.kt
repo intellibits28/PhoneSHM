@@ -244,4 +244,36 @@ class DefaultBaselineManagerEngineTest {
         val result2 = engine.compareWithBaseline("bldg_evolve", 5.0)
         assertTrue(result2.percentageShift < 0)
     }
+
+    // --- Test 14: Reset Baseline ---
+
+    @Test
+    fun testResetBaseline() = runTest {
+        engine.updateBaselineWithSession("bldg_corrupted", 26.8, 90)
+        engine.updateBaselineWithSession("bldg_corrupted", 3.2, 90) // pollute
+        
+        assertNotNull(engine.getOrCreateBaseline("bldg_corrupted"))
+        
+        val wasReset = engine.resetBaseline("bldg_corrupted")
+        assertTrue(wasReset)
+        assertNull(engine.getOrCreateBaseline("bldg_corrupted"))
+        
+        // Also check persistence
+        val engine2 = DefaultBaselineManagerEngine(baselineDir)
+        assertNull(engine2.getOrCreateBaseline("bldg_corrupted"))
+    }
+    
+    // --- Test 15: History Ring Buffer ---
+    @Test
+    fun testHistoryRingBuffer() = runTest {
+        for (i in 1..25) {
+            engine.updateBaselineWithSession("bldg_history", 10.0 + i, 80)
+        }
+        val history = engine.getRecentHistory("bldg_history")
+        assertEquals(20, history.size)
+        // The first 5 should be evicted. The oldest remaining is 10.0 + 6 = 16.0
+        assertEquals(16.0, history.first().f0Hz, 1e-9)
+        // The newest is 10.0 + 25 = 35.0
+        assertEquals(35.0, history.last().f0Hz, 1e-9)
+    }
 }

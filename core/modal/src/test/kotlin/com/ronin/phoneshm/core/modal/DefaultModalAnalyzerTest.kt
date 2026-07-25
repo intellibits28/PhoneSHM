@@ -92,4 +92,19 @@ class DefaultModalAnalyzerTest {
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals("MAGNITUDE", result.dominantAxis)
     }
+
+    @Test
+    fun testLambdaReceivesExactF0() {
+        val spec = createDummySpectrum(xPeak = Peak(3.2f, 5.0f, 0.6f))
+        var capturedF0 = -1.0
+        
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { f0Hz, _ ->
+            capturedF0 = f0Hz
+            PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "")
+        }
+        
+        // This assertion structurally proves the compiler-enforced invariant: 
+        // the returned f0 is identical to what the physics classifier was handed.
+        assertEquals("Lambda must receive the exact chosen f0", result.fundamentalFrequencyHz, capturedF0, 1e-9)
+    }
 }

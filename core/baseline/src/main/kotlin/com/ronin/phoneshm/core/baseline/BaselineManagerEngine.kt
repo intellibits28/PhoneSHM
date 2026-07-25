@@ -1,5 +1,11 @@
 package com.ronin.phoneshm.core.baseline
 
+data class BaselineHistoryEntry(
+    val timestampMs: Long,
+    val f0Hz: Double,
+    val qualityScorePct: Int
+)
+
 /**
  * BaselineProfile records historical mean fundamental frequency and standard deviation
  * for a specific physical structure identified by its buildingHash.
@@ -14,7 +20,8 @@ data class BaselineProfile(
     val stdF0Hz: Double,
     val measurementCount: Int,
     val consecutiveAnomalyCount: Int = 0,
-    val lastUpdatedAt: Long
+    val lastUpdatedAt: Long,
+    val recentHistory: List<BaselineHistoryEntry> = emptyList()
 )
 
 /**
@@ -53,4 +60,15 @@ interface BaselineManagerEngine {
      * Also updates consecutiveAnomalyCount based on whether the session is anomalous.
      */
     suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int)
+
+    /**
+     * Resets/clears the baseline profile for the given building hash.
+     * Use this when baseline is corrupted.
+     */
+    suspend fun resetBaseline(buildingHash: String): Boolean
+
+    /**
+     * Retrieves the bounded ring-buffer history (last 20 readings).
+     */
+    suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry>
 }

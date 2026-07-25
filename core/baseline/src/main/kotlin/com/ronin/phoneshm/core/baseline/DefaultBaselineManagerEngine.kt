@@ -48,6 +48,22 @@ class DefaultBaselineManagerEngine(
         return cache[buildingHash]?.profile
     }
 
+    override suspend fun resetBaseline(buildingHash: String): Boolean {
+        ensureLoaded()
+        val hashMutex = hashMutexes.computeIfAbsent(buildingHash) { Mutex() }
+        hashMutex.withLock {
+            if (!cache.containsKey(buildingHash)) return false
+            cache.remove(buildingHash)
+            persistProfilesAtomic()
+            return true
+        }
+    }
+
+    override suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry> {
+        ensureLoaded()
+        return cache[buildingHash]?.profile?.recentHistory ?: emptyList()
+    }
+
     override suspend fun compareWithBaseline(
         buildingHash: String,
         currentF0Hz: Double
@@ -149,7 +165,8 @@ class DefaultBaselineManagerEngine(
                         stdF0Hz = 0.0,
                         measurementCount = 1,
                         consecutiveAnomalyCount = 0, // First measurement is never anomalous
-                        lastUpdatedAt = now
+                        lastUpdatedAt = now,
+                        recentHistory = listOf(BaselineHistoryEntry(now, currentF0Hz, qualityScorePct))
                     ),
                     m2 = 0.0
                 )
@@ -175,6 +192,10 @@ class DefaultBaselineManagerEngine(
                     0 // Hard reset
                 }
 
+                val newHistory = (existing.profile.recentHistory).plus(
+                    BaselineHistoryEntry(now, currentF0Hz, qualityScorePct)
+                ).takeLast(20)
+
                 BaselineRecord(
                     profile = BaselineProfile(
                         buildingHash = buildingHash,
@@ -182,7 +203,8 @@ class DefaultBaselineManagerEngine(
                         stdF0Hz = newStd,
                         measurementCount = nNew,
                         consecutiveAnomalyCount = newAnomalyCount,
-                        lastUpdatedAt = now
+                        lastUpdatedAt = now,
+                        recentHistory = newHistory
                     ),
                     m2 = newM2
                 )
@@ -227,6 +249,15 @@ class DefaultBaselineManagerEngine(
                     val m2 = parts[5].toDoubleOrNull() ?: return@forEach
                     // C5: backwards-compatible — default to 0 if field not present
                     val anomalyCount = if (parts.size >= 7) parts[6].toIntOrNull() ?: 0 else 0
+                    val historyStr = if (parts.size >= 8) parts[7] else ""
+                    val history = if (historyStr.isNotEmpty()) {
+                        historyStr.split(";").mapNotNull {
+                            val hParts = it.split(",")
+                            if (hParts.size == 3) {
+                                BaselineHistoryEntry(hParts[0].toLong(), hParts[1].toDouble(), hParts[2].toInt())
+                            } else null
+                        }
+                    } else emptyList()
 
                     cache[hash] = BaselineRecord(
                         profile = BaselineProfile(
@@ -235,7 +266,8 @@ class DefaultBaselineManagerEngine(
                             stdF0Hz = std,
                             measurementCount = count,
                             consecutiveAnomalyCount = anomalyCount,
-                            lastUpdatedAt = updatedAt
+                            lastUpdatedAt = updatedAt,
+                            recentHistory = history
                         ),
                         m2 = m2
                     )
@@ -251,8 +283,9 @@ class DefaultBaselineManagerEngine(
         sb.appendLine("# PhoneSHM Baseline Profiles v1.4.1 (do not edit manually)")
         cache.forEach { (_, record) ->
             val p = record.profile
-            // Format: buildingHash|meanF0Hz|stdF0Hz|measurementCount|lastUpdatedAt|m2|consecutiveAnomalyCount
-            sb.appendLine("${p.buildingHash}|${p.meanF0Hz}|${p.stdF0Hz}|${p.measurementCount}|${p.lastUpdatedAt}|${record.m2}|${p.consecutiveAnomalyCount}")
+            val historyStr = p.recentHistory.joinToString(";") { "${it.timestampMs},${it.f0Hz},${it.qualityScorePct}" }
+            // Format: buildingHash|meanF0Hz|stdF0Hz|measurementCount|lastUpdatedAt|m2|consecutiveAnomalyCount|history
+            sb.appendLine("${p.buildingHash}|${p.meanF0Hz}|${p.stdF0Hz}|${p.measurementCount}|${p.lastUpdatedAt}|${record.m2}|${p.consecutiveAnomalyCount}|$historyStr")
         }
         return sb.toString()
     }

@@ -34,6 +34,16 @@ class BaselineManagerEngineTest {
                 storage[buildingHash] = existing.copy(meanF0Hz = newMean, measurementCount = newCount)
             }
         }
+
+        override suspend fun resetBaseline(buildingHash: String): Boolean {
+            if (!storage.containsKey(buildingHash)) return false
+            storage.remove(buildingHash)
+            return true
+        }
+
+        override suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry> {
+            return storage[buildingHash]?.recentHistory ?: emptyList()
+        }
     }
 
     @Test

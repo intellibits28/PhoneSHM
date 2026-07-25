@@ -200,4 +200,16 @@ class AnalysisViewModel(
             isAnalyzing = false
         )
     }
+
+    fun resetBaseline(buildingHash: String) {
+        viewModelScope.launch {
+            baselineEngine.resetBaseline(buildingHash)
+            if (_uiState.value.buildingHash == buildingHash) {
+                _uiState.value = _uiState.value.copy(
+                    baselineComparison = null,
+                    baselineShiftPct = 0.0
+                )
+            }
+        }
+    }
 }

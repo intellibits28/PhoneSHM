@@ -1,6 +1,7 @@
 package com.ronin.phoneshm.feature.analysis
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -151,6 +152,21 @@ fun AnalysisScreen(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.weight(1f)
                                 )
+                                if (modal.confidence < 0.50) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF9A3412)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "LOW CONFIDENCE",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
                                 Card(
                                     colors = CardDefaults.cardColors(
                                         containerColor = when (uiState.dominantAxis) {
@@ -197,16 +213,29 @@ softWrap = false,
                                 color = Color(0xFFCBD5E1),
                                 fontSize = 13.sp
                             )
+                            if (modal.confidence < 0.50) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Low confidence — verify with another measurement",
+                                    color = Color(0xFFFCD34D),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     // Physics Classification Card
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = when (modal.classification.classification.name) {
-                                "GLOBAL_MODE" -> Color(0xFF064E3B)
-                                "LOCAL_MODE" -> Color(0xFF78350F)
-                                else -> Color(0xFF450A0A)
+                            containerColor = if (modal.confidence < 0.50) {
+                                Color(0xFF334155) // Neutral unconfident styling
+                            } else {
+                                when (modal.classification.classification.name) {
+                                    "GLOBAL_MODE" -> Color(0xFF064E3B)
+                                    "LOCAL_MODE" -> Color(0xFF78350F)
+                                    else -> Color(0xFF450A0A)
+                                }
                             }
                         ),
                         shape = RoundedCornerShape(16.dp),
@@ -306,6 +335,17 @@ softWrap = false,
                                             )
                                         }
                                     }
+                                    
+                                    // Debug/Admin Action: Hidden Baseline Reset
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "RESET",
+                                        color = Color.White.copy(alpha = 0.1f), // Barely visible debug button
+                                        fontSize = 9.sp,
+                                        modifier = Modifier.clickable {
+                                            viewModel.resetBaseline(uiState.buildingHash)
+                                        }
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
