@@ -22,6 +22,11 @@ import com.ronin.phoneshm.core.physics.PlausibilityClassificationResult
 import com.ronin.phoneshm.core.sensor.AccelerationSample
 import com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine
 import com.ronin.phoneshm.core.storage.RawSampleStorageEngine
+import com.ronin.phoneshm.core.device.DeviceCapabilityReport
+import com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata
+import com.ronin.phoneshm.core.quality.MeasurementQualityReport
+import com.ronin.phoneshm.core.quality.QualityScoreEngine
+import com.ronin.phoneshm.core.quality.DefaultQualityScoreEngine
 import java.io.File
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +41,7 @@ data class AnalysisUiState(
     val fundamentalFrequencyHz: Double = 0.0,
     val dominantAxis: String = "MAGNITUDE",
     val qualityScorePct: Int = 98,
+    val qualityReport: MeasurementQualityReport? = null,
     val baselineShiftPct: Double = 0.0,
     val baselineComparison: BaselineComparisonResult? = null,
     val classificationLabel: String = "GLOBAL_MODE",
@@ -58,6 +64,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val dspEngine: DspEngine = WelchPsdEngine()
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
+    private val qualityScoreEngine: QualityScoreEngine = DefaultQualityScoreEngine()
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
@@ -89,9 +96,49 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             )
 
             try {
+                var sessionMeta: MeasurementSessionMetadata? = null
+                var deviceReport: DeviceCapabilityReport? = null
+
                 val samples = withContext(Dispatchers.IO) {
                     if (filePath != null && File(filePath).exists()) {
-                        val data = storageEngine.readSamplesFromFile(File(filePath))
+                        val file = File(filePath)
+                        
+                        // Attempt to load sidecar JSON metadata (Task 1 & 2)
+                        val sessionId = file.nameWithoutExtension
+                        val metaFile = File(file.parentFile, "$sessionId.meta.json")
+                        if (metaFile.exists()) {
+                            try {
+                                val json = org.json.JSONObject(metaFile.readText())
+                                val metaJson = json.getJSONObject("metadata")
+                                sessionMeta = MeasurementSessionMetadata(
+                                    sessionId = metaJson.getString("sessionId"),
+                                    measurementProfileId = metaJson.getString("measurementProfileId"),
+                                    deviceCapabilityReportId = metaJson.getString("deviceCapabilityReportId"),
+                                    targetDurationSeconds = metaJson.getInt("targetDurationSeconds"),
+                                    targetSampleRateHz = metaJson.getInt("targetSampleRateHz"),
+                                    actualAverageSampleRateHz = metaJson.getDouble("actualAverageSampleRateHz").toFloat(),
+                                    sampleJitterStdMs = metaJson.getDouble("sampleJitterStdMs").toFloat(),
+                                    clockDriftPpm = metaJson.getDouble("clockDriftPpm").toFloat(),
+                                    rawStorageFileUri = metaJson.getString("rawStorageFileUri")
+                                )
+
+                                val devJson = json.getJSONObject("deviceReport")
+                                val biasArr = devJson.getJSONArray("accelerometerBias")
+                                val bias = FloatArray(biasArr.length()) { i -> biasArr.getDouble(i).toFloat() }
+                                deviceReport = DeviceCapabilityReport(
+                                    deviceModel = devJson.getString("deviceModel"),
+                                    sensorVendor = devJson.getString("sensorVendor"),
+                                    maxSupportedSampleRateHz = devJson.getInt("maxSupportedSampleRateHz"),
+                                    estimatedNoiseFloorMg = devJson.getDouble("estimatedNoiseFloorMg").toFloat(),
+                                    accelerometerBias = bias,
+                                    qualityTier = com.ronin.phoneshm.core.device.SensorQualityTier.valueOf(devJson.getString("qualityTier"))
+                                )
+                            } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
+                                android.util.Log.e("Analysis", "Failed to parse meta file: ${e.message}")
+                            }
+                        }
+
+                        val data = storageEngine.readSamplesFromFile(file)
                         if (data.sampleCount > 100) {
                             List(data.sampleCount) { i ->
                                 AccelerationSample(data.timestampsNs[i], data.x[i], data.y[i], data.z[i])
@@ -158,11 +205,32 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     confidence = effectiveConfidence
                 )
 
-                // Auto-update baseline with this session (quality score placeholder = 80)
+                // Task 2: Compute QualityScore
+                val finalQualityScorePct: Int
+                val qualityReportRes: MeasurementQualityReport?
+
+                if (sessionMeta != null && deviceReport != null) {
+                    qualityReportRes = qualityScoreEngine.calculateQualityScore(
+                        session = sessionMeta!!,
+                        device = deviceReport!!,
+                        audio = null, // Audio context not yet captured in recording flow
+                        modal = modalRes
+                    )
+                    finalQualityScorePct = qualityReportRes.totalScorePct
+                } else {
+                    // Task 3: Fallback path for sessions without metadata
+                    // Explicit choice: Exclude from baseline updates entirely.
+                    // We set quality to 49 (which strictly fails the 50% baseline gate in DefaultBaselineManagerEngine)
+                    // so that synthetic data or old recordings never pollute the real baseline Welford statistics.
+                    qualityReportRes = null
+                    finalQualityScorePct = 49
+                }
+
+                // Auto-update baseline with this session (using real qualityScorePct, not hardcoded 80)
                 baselineEngine.updateBaselineWithSession(
                     buildingHash = buildingHash,
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
-                    qualityScorePct = 80
+                    qualityScorePct = finalQualityScorePct
                 )
 
                 _uiState.value = _uiState.value.copy(
@@ -172,9 +240,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     classificationLabel = modalRes.classification.classification.name,
                     modalResult = modalRes,
                     baselineShiftPct = baselineResult.percentageShift,
-                    baselineComparison = baselineResult
+                    baselineComparison = baselineResult,
+                    qualityScorePct = finalQualityScorePct,
+                    qualityReport = qualityReportRes
                 )
-            } catch (e: Exception) {
+            } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,
                     errorMessage = "Analysis error: ${e.message}"

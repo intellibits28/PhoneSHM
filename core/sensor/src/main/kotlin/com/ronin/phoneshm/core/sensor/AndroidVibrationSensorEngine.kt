@@ -129,7 +129,7 @@ class AndroidVibrationSensorEngine(
             systemArrivalTimesNs.toLongArray()
         )
 
-        MeasurementSessionMetadata(
+        val metadata = MeasurementSessionMetadata(
             sessionId = sessionId,
             measurementProfileId = profileId,
             deviceCapabilityReportId = capabilityReport.qualityTier.name,
@@ -140,6 +140,48 @@ class AndroidVibrationSensorEngine(
             clockDriftPpm = clockDriftPpm,
             rawStorageFileUri = file.absolutePath
         )
+
+        // Task 1: Persist session metadata and device report to a sidecar JSON file
+        val metaFile = File(file.parentFile, "$sessionId.meta.json")
+        val json = """
+        {
+            "metadata": {
+                "sessionId": "${metadata.sessionId}",
+                "measurementProfileId": "${metadata.measurementProfileId}",
+                "deviceCapabilityReportId": "${metadata.deviceCapabilityReportId}",
+                "targetDurationSeconds": ${metadata.targetDurationSeconds},
+                "targetSampleRateHz": ${metadata.targetSampleRateHz},
+                "actualAverageSampleRateHz": ${metadata.actualAverageSampleRateHz},
+                "sampleJitterStdMs": ${metadata.sampleJitterStdMs},
+                "clockDriftPpm": ${metadata.clockDriftPpm},
+                "rawStorageFileUri": "${metadata.rawStorageFileUri.replace("\\", "\\\\")}"
+            },
+            "deviceReport": {
+                "deviceModel": "${capabilityReport.deviceModel}",
+                "sensorVendor": "${capabilityReport.sensorVendor}",
+                "maxSupportedSampleRateHz": ${capabilityReport.maxSupportedSampleRateHz},
+                "estimatedNoiseFloorMg": ${capabilityReport.estimatedNoiseFloorMg},
+                "accelerometerBias": [${capabilityReport.accelerometerBias.joinToString(",")}],
+                "qualityTier": "${capabilityReport.qualityTier.name}"
+            }
+        }
+        """.trimIndent()
+        metaFile.writeText(json)
+        
+        // Also copy the meta file to public downloads if applicable
+        try {
+            val downloadsDir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "PhoneSHM"
+            )
+            if (downloadsDir.exists() || downloadsDir.mkdirs()) {
+                metaFile.copyTo(File(downloadsDir, metaFile.name), overwrite = true)
+            }
+        } catch (e: Exception) {
+            // Ignore error
+        }
+
+        metadata
     }
 
     private fun copyToPublicDownloads(context: Context, sourceFile: File) {
