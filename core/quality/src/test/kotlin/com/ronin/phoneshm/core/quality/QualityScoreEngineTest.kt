@@ -47,7 +47,9 @@ class QualityScoreEngineTest {
         val mod = ModalAnalysisResult(
             8.2, "X", 0.95, 0.95, 0.19,
             PlausibilityClassificationResult(FrequencyClassification.GLOBAL_MODE, 0.9, ""),
-            emptyList()
+            emptyList(),
+            6.0,
+            com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT
         )
 
         val report = engine.calculateQualityScore(meta, dev, aud, mod)

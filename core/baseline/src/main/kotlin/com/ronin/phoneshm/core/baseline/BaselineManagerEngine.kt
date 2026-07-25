@@ -47,6 +47,10 @@ data class BaselineComparisonResult(
  * calculating percentage drift and identifying anomalous degradation over time.
  */
 interface BaselineManagerEngine {
+    companion object {
+        const val MIN_QUALITY_CONFIDENCE_THRESHOLD = 0.50
+    }
+
     /**
      * Retrieves or initializes baseline profile for the given building hash.
      */
@@ -58,7 +62,7 @@ interface BaselineManagerEngine {
     suspend fun compareWithBaseline(
         buildingHash: String,
         currentF0Hz: Double,
-        confidence: Double = 1.0
+        confidence: Double
     ): BaselineComparisonResult
 
     /**

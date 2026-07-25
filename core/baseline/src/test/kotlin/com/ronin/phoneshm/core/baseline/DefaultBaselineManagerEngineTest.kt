@@ -95,7 +95,7 @@ class DefaultBaselineManagerEngineTest {
 
     @Test
     fun testCompareWithNoBaseline() = runTest {
-        val result = engine.compareWithBaseline("unknown_building", 4.2)
+        val result = engine.compareWithBaseline("unknown_building", 4.2, 1.0)
 
         assertEquals(4.2, result.currentF0Hz, 1e-9)
         assertNull(result.baselineProfile)
@@ -116,7 +116,7 @@ class DefaultBaselineManagerEngineTest {
         engine.updateBaselineWithSession("bldg_rc", 3.34, 90)
 
         val profile = engine.getOrCreateBaseline("bldg_rc")!!
-        val result = engine.compareWithBaseline("bldg_rc", profile.meanF0Hz + 0.01)
+        val result = engine.compareWithBaseline("bldg_rc", profile.meanF0Hz + 0.01, 1.0)
 
         assertFalse("Small shift should not be anomalous", result.isAnomaly)
         assertFalse("Small shift should not be confirmed anomaly", result.isConfirmedAnomaly)
@@ -137,7 +137,7 @@ class DefaultBaselineManagerEngineTest {
         assertEquals(0, profile.consecutiveAnomalyCount)
 
         // 10% shift
-        val result = engine.compareWithBaseline("bldg_steel", 7.2)
+        val result = engine.compareWithBaseline("bldg_steel", 7.2, 1.0)
 
         assertTrue("Large shift (>5%) should be anomalous", result.isAnomaly)
         // First anomaly — not yet confirmed (consecutiveAnomalyCount is 0, projected = 1)
@@ -169,7 +169,7 @@ class DefaultBaselineManagerEngineTest {
         assertEquals("Second anomaly should set count to 2", 2, profile2.consecutiveAnomalyCount)
 
         // Compare should now show confirmed anomaly
-        val result = engine.compareWithBaseline("bldg_c5", 4.3)
+        val result = engine.compareWithBaseline("bldg_c5", 4.3, 1.0)
         assertTrue("Should be anomalous", result.isAnomaly)
         assertTrue("Should be CONFIRMED anomaly after 2 consecutive", result.isConfirmedAnomaly)
         assertTrue(result.diagnosticSummary.contains("CONFIRMED"))
@@ -179,9 +179,10 @@ class DefaultBaselineManagerEngineTest {
 
     @Test
     fun testConsecutiveAnomalyHardReset() = runTest {
-        // Build baseline
-        engine.updateBaselineWithSession("bldg_reset", 5.0, 85)
-        engine.updateBaselineWithSession("bldg_reset", 5.01, 90)
+        // Build stable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_reset", 5.0, 85)
+        }
 
         // Anomalous session
         engine.updateBaselineWithSession("bldg_reset", 4.7, 85) // >5% shift
@@ -189,7 +190,7 @@ class DefaultBaselineManagerEngineTest {
         assertTrue("Should have anomaly count > 0", profile1.consecutiveAnomalyCount > 0)
 
         // Normal session (close to current mean) — should hard-reset
-        val currentMean = engine.getOrCreateBaseline("bldg_reset")!!.meanF0Hz
+        val currentMean = profile1.meanF0Hz
         engine.updateBaselineWithSession("bldg_reset", currentMean, 85)
         val profile2 = engine.getOrCreateBaseline("bldg_reset")!!
         assertEquals("Normal session should hard-reset anomaly count", 0, profile2.consecutiveAnomalyCount)
@@ -263,14 +264,14 @@ class DefaultBaselineManagerEngineTest {
     fun testComparisonReflectsUpdatedBaseline() = runTest {
         engine.updateBaselineWithSession("bldg_evolve", 5.0, 85)
 
-        val result1 = engine.compareWithBaseline("bldg_evolve", 5.0)
+        val result1 = engine.compareWithBaseline("bldg_evolve", 5.0, 1.0)
         assertEquals(0.0, result1.percentageShift, 1e-9)
         assertFalse(result1.isAnomaly)
         assertFalse(result1.isConfirmedAnomaly)
 
         engine.updateBaselineWithSession("bldg_evolve", 5.2, 90)
 
-        val result2 = engine.compareWithBaseline("bldg_evolve", 5.0)
+        val result2 = engine.compareWithBaseline("bldg_evolve", 5.0, 1.0)
         assertTrue(result2.percentageShift < 0)
     }
 
@@ -475,5 +476,19 @@ class DefaultBaselineManagerEngineTest {
         val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.90)
         assertTrue(result.isAnomaly)
         assertTrue("Should confirm anomaly with n >= 10 and N >= 2 consecutive anomalies", result.isConfirmedAnomaly)
+    }
+
+    @Test
+    fun testConsecutiveAnomalyCountNotIncrementedDuringCalibration() = runTest {
+        val hash = "calibration_anomaly_test"
+        
+        // 1. Send 5 anomalous sessions while n < 10 (calibration period)
+        repeat(5) {
+            engine.updateBaselineWithSession(hash, 43.457, qualityScorePct = 80) // Mean f0 evolves, but these are anomalous compared to first reading
+        }
+        
+        // Retrieve the profile and verify consecutiveAnomalyCount is still 0
+        val profile = engine.getOrCreateBaseline(hash)!!
+        assertEquals("consecutiveAnomalyCount must remain 0 during calibration", 0, profile.consecutiveAnomalyCount)
     }
 }

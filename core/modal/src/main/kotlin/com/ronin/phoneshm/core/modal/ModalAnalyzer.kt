@@ -14,8 +14,16 @@ data class ModalAnalysisResult(
     val persistence: Double, // Percentage of windows containing candidate within adaptive tolerance
     val adaptiveToleranceHz: Double,
     val classification: PlausibilityClassificationResult,
-    val dominantPeaksTable: List<Pair<Double, Double>>
+    val dominantPeaksTable: List<Pair<Double, Double>>,
+    val prominenceRatio: Double,
+    val excitationSufficiency: ExcitationSufficiency
 )
+
+enum class ExcitationSufficiency {
+    SUFFICIENT,
+    INSUFFICIENT,
+    UNKNOWN
+}
 
 /**
  * ModalAnalyzer identifies structural resonance anomalies across multi-axis power spectra,

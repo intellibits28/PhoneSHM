@@ -14,6 +14,7 @@ import com.ronin.phoneshm.core.dsp.WelchPsdParameters
 import com.ronin.phoneshm.core.modal.DefaultModalAnalyzer
 import com.ronin.phoneshm.core.modal.ModalAnalysisResult
 import com.ronin.phoneshm.core.modal.ModalAnalyzer
+import com.ronin.phoneshm.core.modal.ExcitationSufficiency
 import com.ronin.phoneshm.core.physics.DefaultPhysicsRulesEngine
 import com.ronin.phoneshm.core.physics.FrequencyClassification
 import com.ronin.phoneshm.core.physics.PhysicsRulesEngine
@@ -144,10 +145,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 )
 
                 // 5. Compare with baseline and update
+                
+                val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
+                    0.0
+                } else {
+                    modalRes.confidence
+                }
+
                 val baselineResult = baselineEngine.compareWithBaseline(
                     buildingHash = buildingHash,
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
-                    confidence = modalRes.confidence
+                    confidence = effectiveConfidence
                 )
 
                 // Auto-update baseline with this session (quality score placeholder = 80)

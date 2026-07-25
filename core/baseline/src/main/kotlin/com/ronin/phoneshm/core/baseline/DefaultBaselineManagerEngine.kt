@@ -156,7 +156,7 @@ class DefaultBaselineManagerEngine(
 
         val percentageShift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
 
-        if (confidence < 0.50) {
+        if (confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
             return BaselineComparisonResult(
                 currentF0Hz = currentF0Hz,
                 baselineProfile = baseline,
@@ -264,7 +264,8 @@ class DefaultBaselineManagerEngine(
                     abs(currentF0Hz - oldMean) > 2.0 * existing.stdF0Hz
             val isAnomaly = abs(pctShift) > 5.0 || isTwoSigma
 
-            val newAnomalyCount = if (isAnomaly) {
+            // Do not track/increment consecutive anomalies while the baseline is still calibrating (n < 10)
+            val newAnomalyCount = if (isAnomaly && nNew >= MIN_BASELINE_SAMPLES) {
                 existing.consecutiveAnomalyCount + 1
             } else {
                 0

@@ -55,7 +55,9 @@ class DefaultQualityScoreEngineTest {
             confidence = 0.9,
             explanation = "Valid"
         ),
-        dominantPeaksTable = listOf(Pair(8.17, 12.5))
+        dominantPeaksTable = listOf(Pair(8.17, 12.5)),
+        prominenceRatio = 6.0,
+        excitationSufficiency = com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT
     )
 
     @Test

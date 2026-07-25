@@ -54,7 +54,7 @@ class BaselineManagerEngineTest {
     fun testBaselineComparison() = runTest {
         val engine = FakeBaselineManagerEngine()
         engine.updateBaselineWithSession("hash_123", 8.2, 95)
-        val result = engine.compareWithBaseline("hash_123", 8.0)
+        val result = engine.compareWithBaseline("hash_123", 8.0, 1.0)
         assertTrue(result.percentageShift < 0.0)
         assertEquals(8.0, result.currentF0Hz, 0.001)
     }

@@ -39,9 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import com.ronin.phoneshm.core.modal.ExcitationSufficiency
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
 
 @Composable
 fun AnalysisScreen(
@@ -180,7 +182,7 @@ fun AnalysisScreen(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.weight(1f)
                                 )
-                                if (modal.confidence < 0.50) {
+                                 if (modal.excitationSufficiency != ExcitationSufficiency.INSUFFICIENT && modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                     Card(
                                         colors = CardDefaults.cardColors(containerColor = Color(0xFF9A3412)),
                                         shape = RoundedCornerShape(6.dp),
@@ -220,17 +222,18 @@ softWrap = false,
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
+                                val isInsufficient = modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT
                                 Text(
                                     text = String.format("%.2f", modal.fundamentalFrequencyHz),
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = Color(0xFF38BDF8),
+                                    style = if (isInsufficient) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
+                                    color = if (isInsufficient) Color(0xFF64748B) else Color(0xFF38BDF8),
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Hz",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = if (isInsufficient) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                                     color = Color(0xFF94A3B8),
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
@@ -241,7 +244,30 @@ softWrap = false,
                                 color = Color(0xFFCBD5E1),
                                 fontSize = 13.sp
                             )
-                            if (modal.confidence < 0.50) {
+                            if (modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3F2121)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "⚠️ INSUFFICIENT AMBIENT EXCITATION",
+                                            color = Color(0xFFFCA5A5),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "The detected signal is close to the phone's sensor noise floor — this reading is likely not a genuine structural frequency. Try: measuring during higher activity (traffic, footsteps, wind); verifying the phone is firmly coupled to a rigid surface; recording for a longer duration.",
+                                            color = Color(0xFFFECACA),
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            } else if (modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Low confidence — verify with another measurement",
@@ -256,7 +282,7 @@ softWrap = false,
                     // Physics Classification Card
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (modal.confidence < 0.50) {
+                            containerColor = if (modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                 Color(0xFF334155) // Neutral unconfident styling
                             } else {
                                 when (modal.classification.classification.name) {

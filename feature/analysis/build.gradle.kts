@@ -44,4 +44,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
     testImplementation("io.mockk:mockk:1.13.11")
+    testImplementation(libs.kotlinx.coroutines.test)
 }
