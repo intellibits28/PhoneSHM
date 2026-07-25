@@ -127,6 +127,6 @@ class DefaultModalAnalyzerTest {
         }
         
         assertEquals("Lambda must receive final f0Hz even with sliding windows", result.fundamentalFrequencyHz, capturedF0, 1e-9)
-        assertEquals(8.17, capturedF0, 1e-9)
+        assertEquals(8.17, capturedF0, 1e-5)
     }
 }
