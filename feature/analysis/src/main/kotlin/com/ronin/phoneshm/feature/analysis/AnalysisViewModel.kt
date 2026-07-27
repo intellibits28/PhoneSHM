@@ -142,7 +142,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
                 val rms = kotlin.math.sqrt(gravityRemoved.gravityFreeSamples.map { (it.x * it.x + it.y * it.y + it.z * it.z).toDouble() }.average())
                 val rmsMg = rms * 1000.0 / 9.80665
-                val noiseFloor = deviceReport?.estimatedNoiseFloorMg ?: 0.45
+                val noiseFloor = deviceReport?.estimatedNoiseFloorMg?.toDouble() ?: 0.45
                 var snrWarning: String? = null
                 val isSynthetic = (sessionMeta == null)
                 if (rmsMg < noiseFloor && !isSynthetic) {
