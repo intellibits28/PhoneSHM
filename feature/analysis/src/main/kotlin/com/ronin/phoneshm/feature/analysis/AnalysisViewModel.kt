@@ -138,11 +138,21 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
+                // Recommendation #3: On-device SNR/quality gate
+                val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
+                val rms = kotlin.math.sqrt(gravityRemoved.gravityFreeSamples.map { (it.x * it.x + it.y * it.y + it.z * it.z).toDouble() }.average())
+                val rmsMg = rms * 1000.0 / 9.80665
+                var snrWarning: String? = null
+                if (rmsMg < 0.45 && filePath != null && !filePath.contains("demo")) {
+                    snrWarning = "Signal too weak (RMS < 0.45 mg) — building may not have been excited, retry?"
+                }
+
                 val sampleRateHz = 100.0f
 
-                // Adaptive FFT size: use largest power-of-2 ≤ sample count, capped at 1024
-                val mainFftSize = minOf(1024, Integer.highestOneBit(samples.size))
-                val mainParams = WelchPsdParameters(fftSize = mainFftSize)
+                // Recommendation #1: Welch's Method (Adaptive overlapping segments)
+                // Use 2048 samples (20.48s) to enable periodogram averaging over 66s data (reduces variance)
+                val mainFftSize = minOf(2048, Integer.highestOneBit(samples.size))
+                val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
 
                 // 1. Compute multi-axis Welch PSD on full session
                 val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz, mainParams)
@@ -229,7 +239,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     baselineShiftPct = baselineResult.percentageShift,
                     baselineComparison = baselineResult,
                     qualityScorePct = finalQualityScorePct,
-                    qualityReport = qualityReportRes
+                    qualityReport = qualityReportRes,
+                    errorMessage = snrWarning
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
