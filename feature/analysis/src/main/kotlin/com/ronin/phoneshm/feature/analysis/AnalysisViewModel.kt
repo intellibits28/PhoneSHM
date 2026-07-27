@@ -108,12 +108,18 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         val metaFile = File(file.parentFile, "$sessionId.meta.json")
                         if (metaFile.exists()) {
                             try {
-                                val (meta, report) = com.ronin.phoneshm.core.sensor.SessionMetadataJsonCodec.decode(metaFile.readText())
-                                sessionMeta = meta
-                                deviceReport = report
+                                val decoded = com.ronin.phoneshm.core.sensor.SessionMetadataJsonCodec.decode(metaFile.readText())
+                                if (decoded != null) {
+                                    sessionMeta = decoded.first
+                                    deviceReport = decoded.second
+                                } else {
+                                    android.util.Log.e("Analysis", "Failed to parse sidecar meta file $metaFile: decode returned null")
+                                    sessionMeta = null
+                                    deviceReport = null
+                                }
                             } catch (e: Exception) {
                                 // Task 1c: Do not crash on malformed/partial JSON; treat as metadata missing.
-                                android.util.Log.e("Analysis", "Failed to parse sidecar meta file $metaFile: ${e.message}")
+                                android.util.Log.e("Analysis", "Failed to read sidecar meta file $metaFile: ${e.message}")
                                 sessionMeta = null
                                 deviceReport = null
                             }
