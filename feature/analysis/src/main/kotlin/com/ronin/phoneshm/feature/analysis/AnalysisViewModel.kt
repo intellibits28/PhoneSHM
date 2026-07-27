@@ -142,9 +142,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
                 val rms = kotlin.math.sqrt(gravityRemoved.gravityFreeSamples.map { (it.x * it.x + it.y * it.y + it.z * it.z).toDouble() }.average())
                 val rmsMg = rms * 1000.0 / 9.80665
+                val noiseFloor = deviceReport?.estimatedNoiseFloorMg ?: 0.45
                 var snrWarning: String? = null
-                if (rmsMg < 0.45 && filePath != null && !filePath.contains("demo")) {
-                    snrWarning = "Signal too weak (RMS < 0.45 mg) — building may not have been excited, retry?"
+                val isSynthetic = (sessionMeta == null)
+                if (rmsMg < noiseFloor && !isSynthetic) {
+                    snrWarning = "Signal too weak (RMS < %.2f mg) — building may not have been excited, retry?".format(noiseFloor)
                 }
 
                 val sampleRateHz = 100.0f
