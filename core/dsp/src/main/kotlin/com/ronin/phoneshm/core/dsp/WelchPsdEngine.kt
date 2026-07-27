@@ -257,17 +257,9 @@ class WelchPsdEngine : DspEngine {
         val rawY = FloatArray(usableN) { gfSamples[it + settlingN].y }
         val rawZ = FloatArray(usableN) { gfSamples[it + settlingN].z }
 
-        // A1: Magnitude from gravity-free samples
-        val rawMag = FloatArray(usableN) { i ->
-            val s = gfSamples[i + settlingN]
-            sqrt(s.x * s.x + s.y * s.y + s.z * s.z)
-        }
-
-        // HPF filtfilt on each axis
         val filtX = highPassFilter(rawX, sampleRateHz, 0.5f)
         val filtY = highPassFilter(rawY, sampleRateHz, 0.5f)
         val filtZ = highPassFilter(rawZ, sampleRateHz, 0.5f)
-        val filtMag = highPassFilter(rawMag, sampleRateHz, 0.5f)
 
         // Welch PSD for each axis
         val frequencies = FloatArray(freqBins) { it * sampleRateHz / fftSize }
@@ -275,13 +267,28 @@ class WelchPsdEngine : DspEngine {
         val psdX = welchPsdSingleAxis(filtX, fftSize, params.overlapPercentage, sampleRateHz)
         val psdY = welchPsdSingleAxis(filtY, fftSize, params.overlapPercentage, sampleRateHz)
         val psdZ = welchPsdSingleAxis(filtZ, fftSize, params.overlapPercentage, sampleRateHz)
-        val psdMag = welchPsdSingleAxis(filtMag, fftSize, params.overlapPercentage, sampleRateHz)
+        
+        val psdMag = FloatArray(freqBins) { k -> psdX[k] + psdY[k] + psdZ[k] }
 
-        // Peak detection
-        val peaksX = findPeaks(frequencies, psdX)
-        val peaksY = findPeaks(frequencies, psdY)
-        val peaksZ = findPeaks(frequencies, psdZ)
-        val peaksMag = findPeaks(frequencies, psdMag)
+        // Peak detection with persistence across halves
+        val halfUsable = usableN / 2
+        
+        val psdX_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdX_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        
+        val psdY_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdY_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        
+        val psdZ_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdZ_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        
+        val psdMag_h1 = if (psdX_h1 != null && psdY_h1 != null && psdZ_h1 != null) FloatArray(freqBins) { k -> psdX_h1[k] + psdY_h1[k] + psdZ_h1[k] } else null
+        val psdMag_h2 = if (psdX_h2 != null && psdY_h2 != null && psdZ_h2 != null) FloatArray(freqBins) { k -> psdX_h2[k] + psdY_h2[k] + psdZ_h2[k] } else null
+
+        val peaksX = findPeaks(frequencies, psdX, psdX_h1, psdX_h2)
+        val peaksY = findPeaks(frequencies, psdY, psdY_h1, psdY_h2)
+        val peaksZ = findPeaks(frequencies, psdZ, psdZ_h1, psdZ_h2)
+        val peaksMag = findPeaks(frequencies, psdMag, psdMag_h1, psdMag_h2)
 
         // Auto-derived segment count (A5)
         val stepSize = (fftSize * (1.0f - params.overlapPercentage)).toInt()
@@ -469,33 +476,69 @@ class WelchPsdEngine : DspEngine {
     // Internal: Peak Detection
     // ─────────────────────────────────────────────────────────────
 
-    internal fun findPeaks(frequencies: FloatArray, psd: FloatArray): List<Peak> {
+    internal fun findPeaks(frequencies: FloatArray, psd: FloatArray, psdH1: FloatArray? = null, psdH2: FloatArray? = null): List<Peak> {
         val n = psd.size
         if (n < 3) return emptyList()
 
-        val sorted = psd.copyOf().also { it.sort() }
-        val median = sorted[sorted.size / 2]
-        val threshold = median * 3.0f
-
         val peaks = mutableListOf<Peak>()
+        val localWindowHalf = 20
+        val guardBand = 2
+
         for (k in 1 until n - 1) {
-            if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1] && psd[k] > threshold) {
-                var leftMin = psd[k]
-                for (j in k - 1 downTo 0) {
-                    if (psd[j] < leftMin) leftMin = psd[j]
-                    if (j < k - 1 && psd[j] > psd[j + 1]) break
+            if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1]) {
+                // Calculate local noise floor in dB
+                val localBins = mutableListOf<Float>()
+                for (j in maxOf(0, k - localWindowHalf)..minOf(n - 1, k + localWindowHalf)) {
+                    if (abs(j - k) > guardBand) localBins.add(psd[j])
                 }
-                var rightMin = psd[k]
-                for (j in k + 1 until n) {
-                    if (psd[j] < rightMin) rightMin = psd[j]
-                    if (j > k + 1 && psd[j] > psd[j - 1]) break
+                
+                if (localBins.isEmpty()) continue
+                localBins.sort()
+                val localMedian = localBins[localBins.size / 2]
+                if (localMedian <= 0.0f) continue
+                
+                val peakDb = 10.0f * log10(psd[k])
+                val noiseDb = 10.0f * log10(localMedian)
+                val snrDb = peakDb - noiseDb
+                
+                if (snrDb > 4.0f) { // 4 dB peak-to-noise ratio threshold
+                    // Persistence check across halves
+                    var persists = true
+                    if (psdH1 != null && psdH2 != null) {
+                        val inH1 = checkLocalPeak(psdH1, k, guardBand)
+                        val inH2 = checkLocalPeak(psdH2, k, guardBand)
+                        persists = inH1 && inH2
+                    }
+                    
+                    if (persists) {
+                        var leftMin = psd[k]
+                        for (j in k - 1 downTo 0) {
+                            if (psd[j] < leftMin) leftMin = psd[j]
+                            if (j < k - 1 && psd[j] > psd[j + 1]) break
+                        }
+                        var rightMin = psd[k]
+                        for (j in k + 1 until n) {
+                            if (psd[j] < rightMin) rightMin = psd[j]
+                            if (j > k + 1 && psd[j] > psd[j - 1]) break
+                        }
+                        val referenceLevel = maxOf((leftMin + rightMin) / 2.0f, 1e-15f)
+                        val prominence = psd[k] / referenceLevel
+                        peaks.add(Peak(frequencyHz = frequencies[k], powerMagnitude = psd[k], prominence = prominence))
+                    }
                 }
-                val referenceLevel = maxOf((leftMin + rightMin) / 2.0f, 1e-15f)
-                val prominence = psd[k] / referenceLevel
-                peaks.add(Peak(frequencyHz = frequencies[k], powerMagnitude = psd[k], prominence = prominence))
             }
         }
         return peaks.sortedByDescending { it.prominence }.take(20)
+    }
+
+    private fun checkLocalPeak(psdHalf: FloatArray, kTarget: Int, searchRadius: Int): Boolean {
+        val n = psdHalf.size
+        for (k in maxOf(1, kTarget - searchRadius)..minOf(n - 2, kTarget + searchRadius)) {
+            if (psdHalf[k] > psdHalf[k - 1] && psdHalf[k] > psdHalf[k + 1]) {
+                return true
+            }
+        }
+        return false
     }
 
     // ─────────────────────────────────────────────────────────────
