@@ -50,13 +50,16 @@ class MainActivity : ComponentActivity() {
                 // Permission granted, can fetch real GPS coordinates
             }
         }
-        requestPermissionLauncher.launch(
-            arrayOf(
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
-                android.Manifest.permission.RECORD_AUDIO
-            )
+        val permissionsToRequest = mutableListOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.RECORD_AUDIO
         )
+        if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
+            permissionsToRequest.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        
+        requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
 
         val db = PhoneShmDatabase.getDatabase(applicationContext)
         val profileRepo = ProfileRepositoryImpl(db.profileDao())
