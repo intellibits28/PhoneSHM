@@ -124,8 +124,15 @@ class AndroidVibrationSensorEngine(
         // Automatically mirror to Public Downloads directory so Termux / File Manager can read without root
         copyToPublicDownloads(context, file)
 
+        val hwTsArray = hardwareTimestamps.toLongArray()
+        for (i in 1 until hwTsArray.size) {
+            if (hwTsArray[i] <= hwTsArray[i - 1]) {
+                throw IllegalStateException("Data corruption detected: timestamps are not strictly monotonic.")
+            }
+        }
+
         val (actualAverageSampleRateHz, sampleJitterStdMs, clockDriftPpm) = SensorMetricsCalculator.calculateMetrics(
-            hardwareTimestamps.toLongArray(),
+            hwTsArray,
             systemArrivalTimesNs.toLongArray()
         )
 

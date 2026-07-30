@@ -65,10 +65,12 @@ class AndroidDeviceCapabilityEngine(
             sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_FASTEST)
         }
         
-        kotlinx.coroutines.delay(durationSec * 1000L)
-        
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-            sensorManager.unregisterListener(listener)
+        try {
+            kotlinx.coroutines.delay(durationSec * 1000L)
+        } finally {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                sensorManager.unregisterListener(listener)
+            }
         }
         
         if (xVals.isEmpty()) {
