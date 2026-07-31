@@ -146,18 +146,123 @@ fun AnalysisScreen(
                 }
             } else if (uiState.errorMessage != null) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF451A03)),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Analysis Failed",
-                            color = Color(0xFFFCA5A5),
-                            fontWeight = FontWeight.Bold
+                            text = if (uiState.isWeakSignalFailure) "📊 Signal Not Strong Enough" else "Analysis Error",
+                            color = Color(0xFFFDE68A),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = uiState.errorMessage!!, color = Color.White, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (uiState.isWeakSignalFailure)
+                                "ဒီ recording မှာ building ရဲ့ လှုပ်ခတ်မှု လုံလောက်စွာ မတွေ့ရပါ။\nWe couldn't detect enough building movement in this recording."
+                            else
+                                uiState.errorMessage!!,
+                            color = Color(0xFFFEF3C7),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+
+                        if (uiState.isWeakSignalFailure) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "💡 Tips to get better results:",
+                                color = Color(0xFFFDE68A),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val tips = listOf(
+                                "Try recording when there's more activity nearby — traffic, wind, or people walking can help.",
+                                "Make sure the phone is lying flat on a hard surface (not carpet or a soft table).",
+                                "If a gentle heel-drop is possible without damaging your floor, that can help — but it's not required."
+                            )
+                            tips.forEachIndexed { index, tip ->
+                                Row(modifier = Modifier.padding(bottom = 6.dp)) {
+                                    Text(
+                                        text = "${index + 1}.",
+                                        color = Color(0xFFFCD34D),
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.width(20.dp)
+                                    )
+                                    Text(
+                                        text = tip,
+                                        color = Color(0xFFFEF3C7),
+                                        fontSize = 12.sp,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+
+                            // After 3+ consecutive failures, suggest Ambient Baseline Mode
+                            if (uiState.consecutiveFailureCount >= 3) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF164E63)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "🌊 Try Ambient Baseline Mode",
+                                            color = Color(0xFF67E8F9),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "This building may not respond well to short recordings. Ambient Baseline Mode records for 10 minutes using only natural vibrations (traffic, wind) — no impact needed. Go back to HUD and tap the \"Ambient Baseline\" button.",
+                                            color = Color(0xFFA5F3FC),
+                                            fontSize = 12.sp,
+                                            lineHeight = 17.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.analyzeSessionFileOrDemo(
+                                        filePath = uiState.analyzedFilePath,
+                                        buildingType = uiState.buildingType,
+                                        floors = uiState.floors,
+                                        buildingHash = uiState.buildingHash
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "🔄 Re-analyze This Recording",
+                                    color = Color(0xFF38BDF8),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Button(
+                                onClick = onBackToMeasurement,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "🎙️ Record Again",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
             } else {

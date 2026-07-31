@@ -50,7 +50,9 @@ data class AnalysisUiState(
     val floors: Int = 3,
     val buildingHash: String = "",
     val analyzedFilePath: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val consecutiveFailureCount: Int = 0,
+    val isWeakSignalFailure: Boolean = false
 )
 
 
@@ -145,25 +147,41 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val noiseFloor = deviceReport?.estimatedNoiseFloorMg?.toDouble() ?: 0.45
                 var snrWarning: String? = null
                 val isSynthetic = (sessionMeta == null)
-                if (rmsMg < noiseFloor && !isSynthetic) {
-                    snrWarning = "Signal too weak (RMS < %.2f mg) — building may not have been excited, retry?".format(noiseFloor)
+                val isAmbientMode = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                val effectiveNoiseThreshold = if (isAmbientMode) noiseFloor * 0.3 else noiseFloor
+                if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
+                    snrWarning = if (isAmbientMode) {
+                        "Ambient signal extremely weak — even with extended averaging, structural frequencies may not be recoverable. Try recording when there is more environmental activity (traffic, wind, footfall)."
+                    } else {
+                        "Signal too weak (RMS < %.2f mg) — building may not have been excited, retry?".format(noiseFloor)
+                    }
                 }
 
                 val sampleRateHz = 100.0f
 
-                // Recommendation #1: Welch's Method (Adaptive overlapping segments)
-                // Use 2048 samples (20.48s) to enable periodogram averaging over 66s data (reduces variance)
-                val mainFftSize = minOf(2048, Integer.highestOneBit(samples.size))
-                val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
+                // Profile-dependent Welch PSD parameters
+                val mainFftSize: Int
+                val windowSize: Int
+                val stepSize: Int
+                val slidingFftSize: Int
 
-                // 1. Compute multi-axis Welch PSD on full session
+                if (isAmbientMode) {
+                    // Ambient mode: larger FFT for better frequency resolution, longer sliding windows
+                    mainFftSize = minOf(4096, Integer.highestOneBit(samples.size))
+                    windowSize = 6000   // 60s segments
+                    stepSize = 3000     // 50% overlap
+                    slidingFftSize = 2048
+                } else {
+                    // Impulse mode: standard parameters for 66s capture
+                    mainFftSize = minOf(2048, Integer.highestOneBit(samples.size))
+                    windowSize = 512    // 5.12s windows
+                    stepSize = 256      // 2.56s step
+                    slidingFftSize = 256
+                }
+
+                val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
                 val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz, mainParams)
 
-                // 2. Compute sliding window spectra for persistence tracking
-                //    Window = 512 samples (5.12s), step = 256 (2.56s), fftSize = 256 for each window
-                val windowSize = 512
-                val stepSize = 256
-                val slidingFftSize = 256
                 val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
                 val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
                 if (samples.size >= windowSize) {
@@ -242,7 +260,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     baselineComparison = baselineResult,
                     qualityScorePct = finalQualityScorePct,
                     qualityReport = qualityReportRes,
-                    errorMessage = snrWarning
+                    errorMessage = snrWarning,
+                    isWeakSignalFailure = snrWarning != null,
+                    consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
