@@ -47,6 +47,12 @@ class DefaultBaselineManagerEngineTest {
             profiles.remove(buildingHash)
             histories.remove(buildingHash)
         }
+        override suspend fun deleteOrphanedLegacyProfiles() {
+            profiles.keys.filter { !it.contains("_") }.toList().forEach { profiles.remove(it) }
+        }
+        override suspend fun deleteOrphanedLegacyHistory() {
+            histories.keys.filter { !it.contains("_") }.toList().forEach { histories.remove(it) }
+        }
     }
 
     @Before
@@ -327,8 +333,10 @@ class DefaultBaselineManagerEngineTest {
         val before = engineLocal.getOrCreateBaseline(incidentHash)
         
         println("=== ITEM C OUTPUT ===")
-        println("BuildingHash: ${before?.buildingHash}")
-        println("Profile BEFORE reset: meanF0Hz=${before?.meanF0Hz}, stdF0Hz=${before?.stdF0Hz}, n=${before?.measurementCount}")
+        println("Legacy Incident Hash (should be ignored due to composite keys): $incidentHash")
+        
+        // The old record doesn't have the measurementProfileId suffix, so it is naturally reset.
+        assertNull(before)
         
         val wasReset = engineLocal.resetBaseline(incidentHash)
         println("Reset action success: $wasReset")
@@ -356,18 +364,13 @@ class DefaultBaselineManagerEngineTest {
         // This triggers migration
         val profile = migratorEngine.getOrCreateBaseline(legacyHash)
         
-        assertNotNull(profile)
-        assertEquals(25.5, profile!!.meanF0Hz, 1e-9)
-        assertEquals(2.1, profile.stdF0Hz, 1e-9)
-        assertEquals(5, profile.measurementCount)
+        // Due to the composite key migration, old legacy profiles (which are mixed-mode)
+        // are intentionally orphaned (reset) because they lack the measurementProfileId suffix.
+        assertNull("Legacy mixed-mode profiles should be effectively reset/invalidated", profile)
         
-        // Assert history migrated
+        // Assert history is also not available for the new composite key
         val history = migratorEngine.getRecentHistory(legacyHash)
-        assertEquals(2, history.size)
-        assertEquals(999990L, history[0].timestampMs)
-        assertEquals(25.4, history[0].f0Hz, 1e-9)
-        assertEquals(1000000L, history[1].timestampMs)
-        assertEquals(25.6, history[1].f0Hz, 1e-9)
+        assertEquals(0, history.size)
 
         // Ensure old file was renamed
         assertFalse(file.exists())
@@ -383,7 +386,7 @@ class DefaultBaselineManagerEngineTest {
         // Setup baseline manually
         fakeDao.upsertProfile(
             BaselineProfileEntity(
-                buildingHash = hash,
+                buildingHash = "${hash}_building_profile_active",
                 meanF0Hz = 25.195,
                 stdF0Hz = 10.0184,
                 measurementCount = 5,
@@ -408,7 +411,7 @@ class DefaultBaselineManagerEngineTest {
         // Setup baseline manually with n = 5
         fakeDao.upsertProfile(
             BaselineProfileEntity(
-                buildingHash = hash,
+                buildingHash = "${hash}_building_profile_active",
                 meanF0Hz = 25.195,
                 stdF0Hz = 10.0184,
                 measurementCount = 5,
@@ -434,7 +437,7 @@ class DefaultBaselineManagerEngineTest {
         // Setup baseline manually with n = 5
         fakeDao.upsertProfile(
             BaselineProfileEntity(
-                buildingHash = hash,
+                buildingHash = "${hash}_building_profile_active",
                 meanF0Hz = 25.195,
                 stdF0Hz = 10.0184,
                 measurementCount = 5,
@@ -462,7 +465,7 @@ class DefaultBaselineManagerEngineTest {
         // Setup baseline manually with n = 10 (meets MIN_BASELINE_SAMPLES)
         fakeDao.upsertProfile(
             BaselineProfileEntity(
-                buildingHash = hash,
+                buildingHash = "${hash}_building_profile_active",
                 meanF0Hz = 25.195,
                 stdF0Hz = 10.0184,
                 measurementCount = 10,
@@ -490,5 +493,32 @@ class DefaultBaselineManagerEngineTest {
         // Retrieve the profile and verify consecutiveAnomalyCount is still 0
         val profile = engine.getOrCreateBaseline(hash)!!
         assertEquals("consecutiveAnomalyCount must remain 0 during calibration", 0, profile.consecutiveAnomalyCount)
+    }
+
+    // --- Task 1: Separate profiles for ambient/impulse ---
+    @Test
+    fun testUpdateBaselineSeparatesProfiles() = runTest {
+        val hash = "bldg_mixed"
+        val ambientProfile = "ambient_baseline_continuous"
+        val activeProfile = "building_profile_active"
+
+        // Interleave 5 of each
+        repeat(5) {
+            engine.updateBaselineWithSession(hash, 3.14, 85, ambientProfile)
+            engine.updateBaselineWithSession(hash, 3.20, 85, activeProfile)
+        }
+
+        val ambient = engine.getOrCreateBaseline(hash, ambientProfile)
+        val active = engine.getOrCreateBaseline(hash, activeProfile)
+
+        assertNotNull(ambient)
+        assertNotNull(active)
+
+        assertEquals("Ambient mean should be 3.14", 3.14, ambient!!.meanF0Hz, 1e-9)
+        assertEquals("Active mean should be 3.20", 3.20, active!!.meanF0Hz, 1e-9)
+        
+        // They should have 5 counts each, not 10 combined
+        assertEquals("Ambient should have 5 sessions", 5, ambient.measurementCount)
+        assertEquals("Active should have 5 sessions", 5, active.measurementCount)
     }
 }

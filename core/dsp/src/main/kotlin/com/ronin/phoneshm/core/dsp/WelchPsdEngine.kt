@@ -501,7 +501,9 @@ class WelchPsdEngine : DspEngine {
                 val noiseDb = 10.0f * log10(localMedian)
                 val snrDb = peakDb - noiseDb
                 
-                if (snrDb > 4.0f) { // 4 dB peak-to-noise ratio threshold
+                // TASK B: Calibrated against phone-stationary ambient fixtures only. Not yet validated against a confirmed genuine-building-excitation fixture (e.g. traffic-adjacent or occupied-building recording). False-negative risk on weak real ambient signals until validated.
+                val minSnrThresholdDb = 1.0f
+                if (snrDb > minSnrThresholdDb) {
                     // Persistence check across halves
                     var persists = true
                     if (psdH1 != null && psdH2 != null) {
@@ -529,6 +531,134 @@ class WelchPsdEngine : DspEngine {
             }
         }
         return peaks.sortedByDescending { it.prominence }.take(20)
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Impulse Mode Quality Verification (TASK A)
+    // ─────────────────────────────────────────────────────────────
+
+    data class ImpulseVerificationResult(
+        val peakToRmsRatio: Double,
+        val isPeakToRmsPassed: Boolean,
+        val lowBandEnergyRatio: Double,
+        val isSpectralSanityPassed: Boolean,
+        val isImpulseValid: Boolean
+    )
+
+    /**
+     * Verifies impulse-mode sessions (building_profile_active).
+     *
+     * TASK A requirements:
+     * 1. Time-domain Peak-to-RMS ratio >= 5.0x
+     *    // Interim, calibrated on n=3 heel-drop + n=2 ambient fixtures. Recalibrate when N>=20 heel-drop fixtures available.
+     * 2. Secondary spectral sanity check: within the 2s impact window around max peak,
+     *    require energy concentration in the 0.5-15Hz structural band vs high frequency shock.
+     *    NOTE: Flat/white noise naturally yields ~29.3% in 0.5-15Hz out of 0.5-50Hz. This check is currently an
+     *    uncalibrated placeholder (threshold 0.15) with no proven discriminating power yet until a direct phone-tap/chassis-shock
+     *    fixture is available for calibration.
+     */
+    override fun verifyImpulseQuality(
+        samples: List<AccelerationSample>,
+        sampleRateHz: Float
+    ): ImpulseVerificationResult {
+        if (samples.size < 100) {
+            return ImpulseVerificationResult(0.0, false, 0.0, false, false)
+        }
+
+        val gravResult = removeGravityAndDetrend(samples)
+        val settlingResult = detectSettlingWindow(gravResult, sampleRateHz)
+        val settlingN = settlingResult.settlingDurationSamples
+
+        val gfSamples = gravResult.gravityFreeSamples
+        val totalN = gfSamples.size
+        val usableN = totalN - settlingN
+
+        if (usableN < 64) {
+            return ImpulseVerificationResult(0.0, false, 0.0, false, false)
+        }
+
+        val rawX = FloatArray(usableN) { gfSamples[it + settlingN].x }
+        val rawY = FloatArray(usableN) { gfSamples[it + settlingN].y }
+        val rawZ = FloatArray(usableN) { gfSamples[it + settlingN].z }
+
+        val filtX = highPassFilter(rawX, sampleRateHz, 0.5f)
+        val filtY = highPassFilter(rawY, sampleRateHz, 0.5f)
+        val filtZ = highPassFilter(rawZ, sampleRateHz, 0.5f)
+
+        var maxMagSq = 0.0
+        var maxIndex = 0
+        var sumMagSq = 0.0
+
+        for (i in filtX.indices) {
+            val magSq = filtX[i].toDouble() * filtX[i] + filtY[i].toDouble() * filtY[i] + filtZ[i].toDouble() * filtZ[i]
+            if (magSq > maxMagSq) {
+                maxMagSq = magSq
+                maxIndex = i
+            }
+            sumMagSq += magSq
+        }
+
+        val timeRms = sqrt(sumMagSq / filtX.size)
+        val maxMag = sqrt(maxMagSq)
+        val peakToRmsRatio = if (timeRms > 0.0) maxMag / timeRms else 0.0
+
+        // Interim, calibrated on n=3 heel-drop + n=2 ambient fixtures. Recalibrate when N>=20 heel-drop fixtures available.
+        val PEAK_TO_RMS_THRESHOLD = 5.0
+        val isPeakToRmsPassed = peakToRmsRatio >= PEAK_TO_RMS_THRESHOLD
+
+        // Secondary spectral sanity check: 2s window around max peak index
+        val halfWin = (1.0 * sampleRateHz).toInt()
+        val winStart = maxOf(0, maxIndex - halfWin)
+        val winEnd = minOf(usableN, maxIndex + halfWin)
+        val winLen = winEnd - winStart
+
+        val lowBandEnergyRatio: Double
+        val isSpectralSanityPassed: Boolean
+
+        if (winLen >= 64) {
+            val fftSize = minOf(256, Integer.highestOneBit(winLen))
+            val winX = filtX.sliceArray(winStart until winEnd)
+            val winY = filtY.sliceArray(winStart until winEnd)
+            val winZ = filtZ.sliceArray(winStart until winEnd)
+
+            val psdX = welchPsdSingleAxis(winX, fftSize, 0.5f, sampleRateHz)
+            val psdY = welchPsdSingleAxis(winY, fftSize, 0.5f, sampleRateHz)
+            val psdZ = welchPsdSingleAxis(winZ, fftSize, 0.5f, sampleRateHz)
+            val psdMag = FloatArray(psdX.size) { k -> psdX[k] + psdY[k] + psdZ[k] }
+
+            val df = (sampleRateHz / fftSize).toDouble()
+            var lowBandPower = 0.0
+            var totalPower = 0.0
+
+            for (k in psdMag.indices) {
+                val f = k * sampleRateHz / fftSize
+                val p = psdMag[k].toDouble() * df
+                if (f in 0.5f..15.0f) {
+                    lowBandPower += p
+                }
+                if (f >= 0.5f) {
+                    totalPower += p
+                }
+            }
+
+            lowBandEnergyRatio = if (totalPower > 0.0) lowBandPower / totalPower else 0.0
+            // UNCALIBRATED PLACEHOLDER: Flat/white noise naturally yields ~29.3% in 0.5-15Hz out of 0.5-50Hz.
+            // Until a phone-chassis-knock/tapping fixture is added for calibration, threshold is set to 0.15 placeholder.
+            isSpectralSanityPassed = lowBandEnergyRatio >= 0.15
+        } else {
+            lowBandEnergyRatio = 1.0
+            isSpectralSanityPassed = true
+        }
+
+        val isImpulseValid = isPeakToRmsPassed && isSpectralSanityPassed
+
+        return ImpulseVerificationResult(
+            peakToRmsRatio = peakToRmsRatio,
+            isPeakToRmsPassed = isPeakToRmsPassed,
+            lowBandEnergyRatio = lowBandEnergyRatio,
+            isSpectralSanityPassed = isSpectralSanityPassed,
+            isImpulseValid = isImpulseValid
+        )
     }
 
     private fun checkLocalPeak(psdHalf: FloatArray, kTarget: Int, searchRadius: Int): Boolean {

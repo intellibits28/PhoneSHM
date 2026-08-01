@@ -63,7 +63,7 @@ fun AnalysisScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showResetDialog = false
-                    viewModel.resetBaseline(uiState.buildingHash)
+                    viewModel.resetBaseline(uiState.buildingHash, uiState.measurementProfileId)
                 }) {
                     Text("Confirm", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
                 }

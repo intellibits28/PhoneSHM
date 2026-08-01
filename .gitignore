@@ -35,3 +35,4 @@ scratch/
 *.log
 logs_and_others/
 
+parse_snr.py

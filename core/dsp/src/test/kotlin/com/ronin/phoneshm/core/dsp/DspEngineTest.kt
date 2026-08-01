@@ -27,6 +27,13 @@ class DspEngineTest {
             return MultiAxisSpectrumResult(emptyAxis, emptyAxis, emptyAxis, emptyAxis,
                 WelchPsdOutput(params, 1, 100f / params.fftSize, null))
         }
+
+        override fun verifyImpulseQuality(
+            samples: List<AccelerationSample>,
+            sampleRateHz: Float
+        ): WelchPsdEngine.ImpulseVerificationResult {
+            return WelchPsdEngine.ImpulseVerificationResult(10.0, true, 0.8, true, true)
+        }
     }
 
     @Test

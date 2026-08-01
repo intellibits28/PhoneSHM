@@ -36,6 +36,13 @@ class DefaultBaselineManagerEngine(
             if (storageFile.exists()) {
                 migrateFromFileToRoom()
             }
+            // TASK C: One-time cleanup job to delete orphaned pre-migration baseline rows (un-suffixed buildingHash keys)
+            try {
+                baselineDao.deleteOrphanedLegacyProfiles()
+                baselineDao.deleteOrphanedLegacyHistory()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             migrationRun = true
         }
     }
@@ -98,13 +105,14 @@ class DefaultBaselineManagerEngine(
         }
     }
 
-    override suspend fun getOrCreateBaseline(buildingHash: String): BaselineProfile? {
+    override suspend fun getOrCreateBaseline(buildingHash: String, measurementProfileId: String): BaselineProfile? {
         ensureMigrated()
-        val entity = baselineDao.getProfile(buildingHash) ?: return null
-        val historyEntities = baselineDao.getHistory(buildingHash)
+        val compositeKey = "${buildingHash}_${measurementProfileId}"
+        val entity = baselineDao.getProfile(compositeKey) ?: return null
+        val historyEntities = baselineDao.getHistory(compositeKey)
         
         return BaselineProfile(
-            buildingHash = entity.buildingHash,
+            buildingHash = buildingHash,
             meanF0Hz = entity.meanF0Hz,
             stdF0Hz = entity.stdF0Hz,
             measurementCount = entity.measurementCount,
@@ -114,19 +122,21 @@ class DefaultBaselineManagerEngine(
         )
     }
 
-    override suspend fun resetBaseline(buildingHash: String): Boolean {
+    override suspend fun resetBaseline(buildingHash: String, measurementProfileId: String): Boolean {
         ensureMigrated()
-        val profile = baselineDao.getProfile(buildingHash)
+        val compositeKey = "${buildingHash}_${measurementProfileId}"
+        val profile = baselineDao.getProfile(compositeKey)
         if (profile != null) {
-            baselineDao.deleteProfile(buildingHash)
+            baselineDao.deleteProfile(compositeKey)
             return true
         }
         return false
     }
 
-    override suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry> {
+    override suspend fun getRecentHistory(buildingHash: String, measurementProfileId: String): List<BaselineHistoryEntry> {
         ensureMigrated()
-        return baselineDao.getHistory(buildingHash).map { 
+        val compositeKey = "${buildingHash}_${measurementProfileId}"
+        return baselineDao.getHistory(compositeKey).map { 
             BaselineHistoryEntry(it.timestampMs, it.f0Hz, it.qualityScorePct) 
         }
     }
@@ -138,10 +148,11 @@ class DefaultBaselineManagerEngine(
     override suspend fun compareWithBaseline(
         buildingHash: String,
         currentF0Hz: Double,
-        confidence: Double
+        confidence: Double,
+        measurementProfileId: String
     ): BaselineComparisonResult {
         ensureMigrated()
-        val baseline = getOrCreateBaseline(buildingHash)
+        val baseline = getOrCreateBaseline(buildingHash, measurementProfileId)
 
         if (baseline == null) {
             return BaselineComparisonResult(
@@ -221,18 +232,20 @@ class DefaultBaselineManagerEngine(
     override suspend fun updateBaselineWithSession(
         buildingHash: String,
         currentF0Hz: Double,
-        qualityScorePct: Int
+        qualityScorePct: Int,
+        measurementProfileId: String
     ) {
         if (qualityScorePct < 50) return
         ensureMigrated()
+        val compositeKey = "${buildingHash}_${measurementProfileId}"
 
-        val existing = baselineDao.getProfile(buildingHash)
+        val existing = baselineDao.getProfile(compositeKey)
         val now = System.currentTimeMillis()
 
         if (existing == null) {
             baselineDao.updateBaselineWithHistory(
                 BaselineProfileEntity(
-                    buildingHash = buildingHash,
+                    buildingHash = compositeKey,
                     meanF0Hz = currentF0Hz,
                     stdF0Hz = 0.0,
                     m2 = 0.0,
@@ -241,7 +254,7 @@ class DefaultBaselineManagerEngine(
                     lastUpdatedAt = now
                 ),
                 BaselineHistoryEntity(
-                    buildingHash = buildingHash,
+                    buildingHash = compositeKey,
                     timestampMs = now,
                     f0Hz = currentF0Hz,
                     qualityScorePct = qualityScorePct
@@ -273,7 +286,7 @@ class DefaultBaselineManagerEngine(
 
             baselineDao.updateBaselineWithHistory(
                 BaselineProfileEntity(
-                    buildingHash = buildingHash,
+                    buildingHash = compositeKey,
                     meanF0Hz = newMean,
                     stdF0Hz = newStd,
                     m2 = newM2,
@@ -282,7 +295,7 @@ class DefaultBaselineManagerEngine(
                     lastUpdatedAt = now
                 ),
                 BaselineHistoryEntity(
-                    buildingHash = buildingHash,
+                    buildingHash = compositeKey,
                     timestampMs = now,
                     f0Hz = currentF0Hz,
                     qualityScorePct = qualityScorePct

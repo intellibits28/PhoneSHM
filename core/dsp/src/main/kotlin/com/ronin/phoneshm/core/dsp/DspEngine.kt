@@ -212,4 +212,12 @@ interface DspEngine {
         sampleRateHz: Float = 100f,
         params: WelchPsdParameters = WelchPsdParameters()
     ): MultiAxisSpectrumResult
+
+    /**
+     * Verifies impulse-mode quality (TASK A): Peak-to-RMS ratio >= 5.0x and 0.5-15Hz spectral sanity check.
+     */
+    fun verifyImpulseQuality(
+        samples: List<AccelerationSample>,
+        sampleRateHz: Float = 100f
+    ): WelchPsdEngine.ImpulseVerificationResult
 }

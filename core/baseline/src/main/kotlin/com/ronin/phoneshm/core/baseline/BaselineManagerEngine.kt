@@ -54,7 +54,7 @@ interface BaselineManagerEngine {
     /**
      * Retrieves or initializes baseline profile for the given building hash.
      */
-    suspend fun getOrCreateBaseline(buildingHash: String): BaselineProfile?
+    suspend fun getOrCreateBaseline(buildingHash: String, measurementProfileId: String = "building_profile_active"): BaselineProfile?
 
     /**
      * Compares newly measured f0 against stored baseline profile.
@@ -62,23 +62,24 @@ interface BaselineManagerEngine {
     suspend fun compareWithBaseline(
         buildingHash: String,
         currentF0Hz: Double,
-        confidence: Double
+        confidence: Double,
+        measurementProfileId: String = "building_profile_active"
     ): BaselineComparisonResult
 
     /**
      * Updates baseline statistics with a newly verified high-quality session.
      * Also updates consecutiveAnomalyCount based on whether the session is anomalous.
      */
-    suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int)
+    suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int, measurementProfileId: String = "building_profile_active")
 
     /**
      * Resets/clears the baseline profile for the given building hash.
      * Use this when baseline is corrupted.
      */
-    suspend fun resetBaseline(buildingHash: String): Boolean
+    suspend fun resetBaseline(buildingHash: String, measurementProfileId: String = "building_profile_active"): Boolean
 
     /**
      * Retrieves the bounded ring-buffer history (last 20 readings).
      */
-    suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry>
+    suspend fun getRecentHistory(buildingHash: String, measurementProfileId: String = "building_profile_active"): List<BaselineHistoryEntry>
 }

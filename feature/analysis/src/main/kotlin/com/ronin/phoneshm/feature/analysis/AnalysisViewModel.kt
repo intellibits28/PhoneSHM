@@ -52,7 +52,8 @@ data class AnalysisUiState(
     val analyzedFilePath: String? = null,
     val errorMessage: String? = null,
     val consecutiveFailureCount: Int = 0,
-    val isWeakSignalFailure: Boolean = false
+    val isWeakSignalFailure: Boolean = false,
+    val measurementProfileId: String = "building_profile_active"
 )
 
 
@@ -148,6 +149,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 var snrWarning: String? = null
                 val isSynthetic = (sessionMeta == null)
                 val isAmbientMode = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                val profileId = sessionMeta?.measurementProfileId ?: "building_profile_active"
                 val effectiveNoiseThreshold = if (isAmbientMode) noiseFloor * 0.3 else noiseFloor
                 if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
                     snrWarning = if (isAmbientMode) {
@@ -208,9 +210,15 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 )
 
+                // 4. Verify impulse-mode quality (TASK A: Peak-to-RMS >= 5.0x and spectral sanity)
+                val impulseQuality = if (!isAmbientMode) {
+                    dspEngine.verifyImpulseQuality(samples, sampleRateHz)
+                } else null
+
                 // 5. Compare with baseline and update
                 
-                val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
+                val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT ||
+                    (impulseQuality != null && !impulseQuality.isImpulseValid)) {
                     0.0
                 } else {
                     modalRes.confidence
@@ -218,6 +226,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
                 val baselineResult = baselineEngine.compareWithBaseline(
                     buildingHash = buildingHash,
+                    measurementProfileId = profileId,
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
                     confidence = effectiveConfidence
                 )
@@ -246,6 +255,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 // Auto-update baseline with this session (using real qualityScorePct, not hardcoded 80)
                 baselineEngine.updateBaselineWithSession(
                     buildingHash = buildingHash,
+                    measurementProfileId = profileId,
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
                     qualityScorePct = finalQualityScorePct
                 )
@@ -262,7 +272,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     qualityReport = qualityReportRes,
                     errorMessage = snrWarning,
                     isWeakSignalFailure = snrWarning != null,
-                    consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0
+                    consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0,
+                    measurementProfileId = profileId
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
@@ -303,13 +314,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    fun resetBaseline(buildingHash: String) {
+    fun resetBaseline(buildingHash: String, profileId: String) {
         viewModelScope.launch {
-            val previous = baselineEngine.getOrCreateBaseline(buildingHash)
+            val previous = baselineEngine.getOrCreateBaseline(buildingHash, profileId)
             if (previous != null) {
                 android.util.Log.w("BaselineAudit", "Manual debug reset of baseline for building $buildingHash. Previous: mean=${previous.meanF0Hz}, std=${previous.stdF0Hz}, n=${previous.measurementCount}. Time=${System.currentTimeMillis()}")
             }
-            baselineEngine.resetBaseline(buildingHash)
+            baselineEngine.resetBaseline(buildingHash, profileId)
             if (_uiState.value.buildingHash == buildingHash) {
                 _uiState.value = _uiState.value.copy(
                     baselineComparison = null,
