@@ -1,7 +1,8 @@
 package com.ronin.phoneshm.feature.analysis
 
 import android.app.Application
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import com.ronin.phoneshm.core.database.PhoneShmDatabase
 import androidx.lifecycle.viewModelScope
 import com.ronin.phoneshm.core.baseline.BaselineComparisonResult
 import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
@@ -13,6 +14,7 @@ import com.ronin.phoneshm.core.dsp.WelchPsdParameters
 import com.ronin.phoneshm.core.modal.DefaultModalAnalyzer
 import com.ronin.phoneshm.core.modal.ModalAnalysisResult
 import com.ronin.phoneshm.core.modal.ModalAnalyzer
+import com.ronin.phoneshm.core.modal.ExcitationSufficiency
 import com.ronin.phoneshm.core.physics.DefaultPhysicsRulesEngine
 import com.ronin.phoneshm.core.physics.FrequencyClassification
 import com.ronin.phoneshm.core.physics.PhysicsRulesEngine
@@ -20,6 +22,11 @@ import com.ronin.phoneshm.core.physics.PlausibilityClassificationResult
 import com.ronin.phoneshm.core.sensor.AccelerationSample
 import com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine
 import com.ronin.phoneshm.core.storage.RawSampleStorageEngine
+import com.ronin.phoneshm.core.device.DeviceCapabilityReport
+import com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata
+import com.ronin.phoneshm.core.quality.MeasurementQualityReport
+import com.ronin.phoneshm.core.quality.QualityScoreEngine
+import com.ronin.phoneshm.core.quality.DefaultQualityScoreEngine
 import java.io.File
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +41,7 @@ data class AnalysisUiState(
     val fundamentalFrequencyHz: Double = 0.0,
     val dominantAxis: String = "MAGNITUDE",
     val qualityScorePct: Int = 98,
+    val qualityReport: MeasurementQualityReport? = null,
     val baselineShiftPct: Double = 0.0,
     val baselineComparison: BaselineComparisonResult? = null,
     val classificationLabel: String = "GLOBAL_MODE",
@@ -42,7 +50,9 @@ data class AnalysisUiState(
     val floors: Int = 3,
     val buildingHash: String = "",
     val analyzedFilePath: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val consecutiveFailureCount: Int = 0,
+    val isWeakSignalFailure: Boolean = false
 )
 
 
@@ -50,20 +60,23 @@ data class AnalysisUiState(
  * AnalysisViewModel drives modal frequency display, multi-axis Welch PSD rendering,
  * domain physics plausibility classification, and adaptive persistence tracking.
  */
-class AnalysisViewModel(
-    application: Application? = null
-) : ViewModel() {
-    private val baseDir: File = application?.filesDir ?: File(System.getProperty("java.io.tmpdir"), "phoneshm_data")
+class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
+    private val baseDir: File = application.filesDir ?: File(System.getProperty("java.io.tmpdir"), "phoneshm_data")
 
     private val dspEngine: DspEngine = WelchPsdEngine()
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
+    private val qualityScoreEngine: QualityScoreEngine = DefaultQualityScoreEngine()
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
-    private val baselineEngine: BaselineManagerEngine = DefaultBaselineManagerEngine(
-        File(baseDir, "baseline_data")
-    )
+    private val baselineDao by lazy { PhoneShmDatabase.getDatabase(application).baselineDao() }
+    private val baselineEngine: BaselineManagerEngine by lazy {
+        DefaultBaselineManagerEngine(
+            baselineDao,
+            File(baseDir, "baseline_data")
+        )
+    }
     
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -85,9 +98,36 @@ class AnalysisViewModel(
             )
 
             try {
+                var sessionMeta: MeasurementSessionMetadata? = null
+                var deviceReport: DeviceCapabilityReport? = null
+
                 val samples = withContext(Dispatchers.IO) {
                     if (filePath != null && File(filePath).exists()) {
-                        val data = storageEngine.readSamplesFromFile(File(filePath))
+                        val file = File(filePath)
+                        
+                        // Attempt to load sidecar JSON metadata (Task 1 & 2)
+                        val sessionId = file.nameWithoutExtension
+                        val metaFile = File(file.parentFile, "$sessionId.meta.json")
+                        if (metaFile.exists()) {
+                            try {
+                                val decoded = com.ronin.phoneshm.core.sensor.SessionMetadataJsonCodec.decode(metaFile.readText())
+                                if (decoded != null) {
+                                    sessionMeta = decoded.first
+                                    deviceReport = decoded.second
+                                } else {
+                                    android.util.Log.e("Analysis", "Failed to parse sidecar meta file $metaFile: decode returned null")
+                                    sessionMeta = null
+                                    deviceReport = null
+                                }
+                            } catch (e: Exception) {
+                                // Task 1c: Do not crash on malformed/partial JSON; treat as metadata missing.
+                                android.util.Log.e("Analysis", "Failed to read sidecar meta file $metaFile: ${e.message}")
+                                sessionMeta = null
+                                deviceReport = null
+                            }
+                        }
+
+                        val data = storageEngine.readSamplesFromFile(file)
                         if (data.sampleCount > 100) {
                             List(data.sampleCount) { i ->
                                 AccelerationSample(data.timestampsNs[i], data.x[i], data.y[i], data.z[i])
@@ -100,20 +140,48 @@ class AnalysisViewModel(
                     }
                 }
 
+                // Recommendation #3: On-device SNR/quality gate
+                val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
+                val rms = kotlin.math.sqrt(gravityRemoved.gravityFreeSamples.map { (it.x * it.x + it.y * it.y + it.z * it.z).toDouble() }.average())
+                val rmsMg = rms * 1000.0 / 9.80665
+                val noiseFloor = deviceReport?.estimatedNoiseFloorMg?.toDouble() ?: 0.45
+                var snrWarning: String? = null
+                val isSynthetic = (sessionMeta == null)
+                val isAmbientMode = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                val effectiveNoiseThreshold = if (isAmbientMode) noiseFloor * 0.3 else noiseFloor
+                if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
+                    snrWarning = if (isAmbientMode) {
+                        "Ambient signal extremely weak — even with extended averaging, structural frequencies may not be recoverable. Try recording when there is more environmental activity (traffic, wind, footfall)."
+                    } else {
+                        "Signal too weak (RMS < %.2f mg) — building may not have been excited, retry?".format(noiseFloor)
+                    }
+                }
+
                 val sampleRateHz = 100.0f
 
-                // Adaptive FFT size: use largest power-of-2 ≤ sample count, capped at 1024
-                val mainFftSize = minOf(1024, Integer.highestOneBit(samples.size))
-                val mainParams = WelchPsdParameters(fftSize = mainFftSize)
+                // Profile-dependent Welch PSD parameters
+                val mainFftSize: Int
+                val windowSize: Int
+                val stepSize: Int
+                val slidingFftSize: Int
 
-                // 1. Compute multi-axis Welch PSD on full session
+                if (isAmbientMode) {
+                    // Ambient mode: larger FFT for better frequency resolution, longer sliding windows
+                    mainFftSize = minOf(4096, Integer.highestOneBit(samples.size))
+                    windowSize = 6000   // 60s segments
+                    stepSize = 3000     // 50% overlap
+                    slidingFftSize = 2048
+                } else {
+                    // Impulse mode: standard parameters for 66s capture
+                    mainFftSize = minOf(2048, Integer.highestOneBit(samples.size))
+                    windowSize = 512    // 5.12s windows
+                    stepSize = 256      // 2.56s step
+                    slidingFftSize = 256
+                }
+
+                val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
                 val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz, mainParams)
 
-                // 2. Compute sliding window spectra for persistence tracking
-                //    Window = 512 samples (5.12s), step = 256 (2.56s), fftSize = 256 for each window
-                val windowSize = 512
-                val stepSize = 256
-                val slidingFftSize = 256
                 val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
                 val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
                 if (samples.size >= windowSize) {
@@ -141,16 +209,45 @@ class AnalysisViewModel(
                 )
 
                 // 5. Compare with baseline and update
+                
+                val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
+                    0.0
+                } else {
+                    modalRes.confidence
+                }
+
                 val baselineResult = baselineEngine.compareWithBaseline(
                     buildingHash = buildingHash,
-                    currentF0Hz = modalRes.fundamentalFrequencyHz
+                    currentF0Hz = modalRes.fundamentalFrequencyHz,
+                    confidence = effectiveConfidence
                 )
 
-                // Auto-update baseline with this session (quality score placeholder = 80)
+                // Task 2: Compute QualityScore
+                val finalQualityScorePct: Int
+                val qualityReportRes: MeasurementQualityReport?
+
+                if (sessionMeta != null && deviceReport != null) {
+                    qualityReportRes = qualityScoreEngine.calculateQualityScore(
+                        session = sessionMeta!!,
+                        device = deviceReport!!,
+                        audio = null, // Audio context not yet captured in recording flow
+                        modal = modalRes
+                    )
+                    finalQualityScorePct = qualityReportRes.totalScorePct
+                } else {
+                    // Task 3: Fallback path for sessions without metadata
+                    // Explicit choice: Exclude from baseline updates entirely.
+                    // We set quality to 49 (which strictly fails the 50% baseline gate in DefaultBaselineManagerEngine)
+                    // so that synthetic data or old recordings never pollute the real baseline Welford statistics.
+                    qualityReportRes = null
+                    finalQualityScorePct = 49
+                }
+
+                // Auto-update baseline with this session (using real qualityScorePct, not hardcoded 80)
                 baselineEngine.updateBaselineWithSession(
                     buildingHash = buildingHash,
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
-                    qualityScorePct = 80
+                    qualityScorePct = finalQualityScorePct
                 )
 
                 _uiState.value = _uiState.value.copy(
@@ -160,9 +257,14 @@ class AnalysisViewModel(
                     classificationLabel = modalRes.classification.classification.name,
                     modalResult = modalRes,
                     baselineShiftPct = baselineResult.percentageShift,
-                    baselineComparison = baselineResult
+                    baselineComparison = baselineResult,
+                    qualityScorePct = finalQualityScorePct,
+                    qualityReport = qualityReportRes,
+                    errorMessage = snrWarning,
+                    isWeakSignalFailure = snrWarning != null,
+                    consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0
                 )
-            } catch (e: Exception) {
+            } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,
                     errorMessage = "Analysis error: ${e.message}"
@@ -203,6 +305,10 @@ class AnalysisViewModel(
 
     fun resetBaseline(buildingHash: String) {
         viewModelScope.launch {
+            val previous = baselineEngine.getOrCreateBaseline(buildingHash)
+            if (previous != null) {
+                android.util.Log.w("BaselineAudit", "Manual debug reset of baseline for building $buildingHash. Previous: mean=${previous.meanF0Hz}, std=${previous.stdF0Hz}, n=${previous.measurementCount}. Time=${System.currentTimeMillis()}")
+            }
             baselineEngine.resetBaseline(buildingHash)
             if (_uiState.value.buildingHash == buildingHash) {
                 _uiState.value = _uiState.value.copy(

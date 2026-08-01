@@ -37,7 +37,9 @@ data class BaselineComparisonResult(
     val percentageShift: Double,
     val isAnomaly: Boolean,           // Internal: single-session anomaly detection
     val isConfirmedAnomaly: Boolean,  // User-facing: requires N≥2 consecutive anomalous sessions
-    val diagnosticSummary: String
+    val diagnosticSummary: String,
+    val comparisonSkippedLowQuality: Boolean = false,
+    val isCalibrating: Boolean = false
 )
 
 /**
@@ -45,6 +47,10 @@ data class BaselineComparisonResult(
  * calculating percentage drift and identifying anomalous degradation over time.
  */
 interface BaselineManagerEngine {
+    companion object {
+        const val MIN_QUALITY_CONFIDENCE_THRESHOLD = 0.50
+    }
+
     /**
      * Retrieves or initializes baseline profile for the given building hash.
      */
@@ -53,7 +59,11 @@ interface BaselineManagerEngine {
     /**
      * Compares newly measured f0 against stored baseline profile.
      */
-    suspend fun compareWithBaseline(buildingHash: String, currentF0Hz: Double): BaselineComparisonResult
+    suspend fun compareWithBaseline(
+        buildingHash: String,
+        currentF0Hz: Double,
+        confidence: Double
+    ): BaselineComparisonResult
 
     /**
      * Updates baseline statistics with a newly verified high-quality session.

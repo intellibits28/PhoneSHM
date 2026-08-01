@@ -1,11 +1,16 @@
 package com.ronin.phoneshm.core.baseline
 
+import com.ronin.phoneshm.core.database.dao.BaselineDao
+import com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity
+import com.ronin.phoneshm.core.database.entity.BaselineProfileEntity
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
+import java.nio.file.Files
 import kotlin.math.sqrt
 
 class DefaultBaselineManagerEngineTest {
@@ -13,13 +18,42 @@ class DefaultBaselineManagerEngineTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private lateinit var baselineDir: java.io.File
+    private lateinit var baselineDir: File
     private lateinit var engine: DefaultBaselineManagerEngine
+    private lateinit var fakeDao: FakeBaselineDao
+
+    class FakeBaselineDao : BaselineDao {
+        val profiles = mutableMapOf<String, BaselineProfileEntity>()
+        val histories = mutableMapOf<String, MutableList<BaselineHistoryEntity>>()
+
+        override suspend fun upsertProfile(profile: BaselineProfileEntity) {
+            profiles[profile.buildingHash] = profile
+        }
+        override suspend fun insertHistory(history: BaselineHistoryEntity) {
+            histories.getOrPut(history.buildingHash) { mutableListOf() }.add(history)
+        }
+        override suspend fun getProfile(buildingHash: String) = profiles[buildingHash]
+        override suspend fun getHistory(buildingHash: String): List<BaselineHistoryEntity> {
+            return histories[buildingHash]?.sortedBy { it.timestampMs } ?: emptyList()
+        }
+        override suspend fun trimHistoryTo20(buildingHash: String) {
+            val list = histories[buildingHash] ?: return
+            if (list.size > 20) {
+                list.sortBy { it.timestampMs }
+                histories[buildingHash] = list.takeLast(20).toMutableList()
+            }
+        }
+        override suspend fun deleteProfile(buildingHash: String) {
+            profiles.remove(buildingHash)
+            histories.remove(buildingHash)
+        }
+    }
 
     @Before
     fun setup() {
-        baselineDir = tempFolder.newFolder("baseline_test")
-        engine = DefaultBaselineManagerEngine(baselineDir)
+        baselineDir = Files.createTempDirectory("baseline_test").toFile()
+        fakeDao = FakeBaselineDao()
+        engine = DefaultBaselineManagerEngine(fakeDao, baselineDir)
     }
 
     // --- Test 1: No baseline exists yet ---
@@ -61,7 +95,7 @@ class DefaultBaselineManagerEngineTest {
 
     @Test
     fun testCompareWithNoBaseline() = runTest {
-        val result = engine.compareWithBaseline("unknown_building", 4.2)
+        val result = engine.compareWithBaseline("unknown_building", 4.2, 1.0)
 
         assertEquals(4.2, result.currentF0Hz, 1e-9)
         assertNull(result.baselineProfile)
@@ -82,7 +116,7 @@ class DefaultBaselineManagerEngineTest {
         engine.updateBaselineWithSession("bldg_rc", 3.34, 90)
 
         val profile = engine.getOrCreateBaseline("bldg_rc")!!
-        val result = engine.compareWithBaseline("bldg_rc", profile.meanF0Hz + 0.01)
+        val result = engine.compareWithBaseline("bldg_rc", profile.meanF0Hz + 0.01, 1.0)
 
         assertFalse("Small shift should not be anomalous", result.isAnomaly)
         assertFalse("Small shift should not be confirmed anomaly", result.isConfirmedAnomaly)
@@ -94,15 +128,16 @@ class DefaultBaselineManagerEngineTest {
     @Test
     fun testCompareWithBaselineAnomalousLargeShift() = runTest {
         // Use identical values so std=0, no accidental 2σ anomaly during baseline building
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 85)
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 90)
-        engine.updateBaselineWithSession("bldg_steel", 8.0, 82)
+        // E2: must be n >= 10 to establish reliable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_steel", 8.0, 85)
+        }
 
         val profile = engine.getOrCreateBaseline("bldg_steel")!!
         assertEquals(0, profile.consecutiveAnomalyCount)
 
         // 10% shift
-        val result = engine.compareWithBaseline("bldg_steel", 7.2)
+        val result = engine.compareWithBaseline("bldg_steel", 7.2, 1.0)
 
         assertTrue("Large shift (>5%) should be anomalous", result.isAnomaly)
         // First anomaly — not yet confirmed (consecutiveAnomalyCount is 0, projected = 1)
@@ -115,9 +150,10 @@ class DefaultBaselineManagerEngineTest {
     @Test
     fun testConsecutiveAnomalyConfirmation() = runTest {
         // Build stable baseline with identical values (std=0, no accidental 2σ anomaly)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 85)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 90)
-        engine.updateBaselineWithSession("bldg_c5", 5.0, 82)
+        // E2: must be n >= 10 to establish reliable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_c5", 5.0, 85)
+        }
 
         val profileBefore = engine.getOrCreateBaseline("bldg_c5")!!
         assertEquals("Baseline should have 0 anomalies", 0, profileBefore.consecutiveAnomalyCount)
@@ -133,7 +169,7 @@ class DefaultBaselineManagerEngineTest {
         assertEquals("Second anomaly should set count to 2", 2, profile2.consecutiveAnomalyCount)
 
         // Compare should now show confirmed anomaly
-        val result = engine.compareWithBaseline("bldg_c5", 4.3)
+        val result = engine.compareWithBaseline("bldg_c5", 4.3, 1.0)
         assertTrue("Should be anomalous", result.isAnomaly)
         assertTrue("Should be CONFIRMED anomaly after 2 consecutive", result.isConfirmedAnomaly)
         assertTrue(result.diagnosticSummary.contains("CONFIRMED"))
@@ -143,9 +179,10 @@ class DefaultBaselineManagerEngineTest {
 
     @Test
     fun testConsecutiveAnomalyHardReset() = runTest {
-        // Build baseline
-        engine.updateBaselineWithSession("bldg_reset", 5.0, 85)
-        engine.updateBaselineWithSession("bldg_reset", 5.01, 90)
+        // Build stable baseline
+        repeat(10) {
+            engine.updateBaselineWithSession("bldg_reset", 5.0, 85)
+        }
 
         // Anomalous session
         engine.updateBaselineWithSession("bldg_reset", 4.7, 85) // >5% shift
@@ -153,7 +190,7 @@ class DefaultBaselineManagerEngineTest {
         assertTrue("Should have anomaly count > 0", profile1.consecutiveAnomalyCount > 0)
 
         // Normal session (close to current mean) — should hard-reset
-        val currentMean = engine.getOrCreateBaseline("bldg_reset")!!.meanF0Hz
+        val currentMean = profile1.meanF0Hz
         engine.updateBaselineWithSession("bldg_reset", currentMean, 85)
         val profile2 = engine.getOrCreateBaseline("bldg_reset")!!
         assertEquals("Normal session should hard-reset anomaly count", 0, profile2.consecutiveAnomalyCount)
@@ -193,22 +230,15 @@ class DefaultBaselineManagerEngineTest {
     // --- Test 11: Persistence across instances ---
 
     @Test
-    fun testPersistenceAcrossInstances() = runTest {
-        engine.updateBaselineWithSession("persist_bldg", 3.5, 85)
-        engine.updateBaselineWithSession("persist_bldg", 3.6, 90)
-
-        val profile1 = engine.getOrCreateBaseline("persist_bldg")!!
-        assertEquals(2, profile1.measurementCount)
-
-        // Create a NEW engine instance with the same directory
-        val engine2 = DefaultBaselineManagerEngine(baselineDir)
-        val profile2 = engine2.getOrCreateBaseline("persist_bldg")
-
-        assertNotNull("Baseline should persist across engine instances", profile2)
-        assertEquals(profile1.meanF0Hz, profile2!!.meanF0Hz, 1e-9)
-        assertEquals(profile1.stdF0Hz, profile2.stdF0Hz, 1e-9)
-        assertEquals(profile1.measurementCount, profile2.measurementCount)
-        assertEquals(profile1.consecutiveAnomalyCount, profile2.consecutiveAnomalyCount)
+    fun testPersistenceAndReload() = runTest {
+        // Since we are using fakeDao, we can't test actual file reloading the same way without 
+        // passing a new instance of the same fakeDao.
+        engine.updateBaselineWithSession("bldg_persist", 20.0, 100)
+        
+        val engine2 = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        val profile = engine2.getOrCreateBaseline("bldg_persist")
+        assertNotNull(profile)
+        assertEquals(20.0, profile!!.meanF0Hz, 1e-9)
     }
 
     // --- Test 12: Multiple buildings are independent ---
@@ -234,14 +264,14 @@ class DefaultBaselineManagerEngineTest {
     fun testComparisonReflectsUpdatedBaseline() = runTest {
         engine.updateBaselineWithSession("bldg_evolve", 5.0, 85)
 
-        val result1 = engine.compareWithBaseline("bldg_evolve", 5.0)
+        val result1 = engine.compareWithBaseline("bldg_evolve", 5.0, 1.0)
         assertEquals(0.0, result1.percentageShift, 1e-9)
         assertFalse(result1.isAnomaly)
         assertFalse(result1.isConfirmedAnomaly)
 
         engine.updateBaselineWithSession("bldg_evolve", 5.2, 90)
 
-        val result2 = engine.compareWithBaseline("bldg_evolve", 5.0)
+        val result2 = engine.compareWithBaseline("bldg_evolve", 5.0, 1.0)
         assertTrue(result2.percentageShift < 0)
     }
 
@@ -259,7 +289,7 @@ class DefaultBaselineManagerEngineTest {
         assertNull(engine.getOrCreateBaseline("bldg_corrupted"))
         
         // Also check persistence
-        val engine2 = DefaultBaselineManagerEngine(baselineDir)
+        val engine2 = DefaultBaselineManagerEngine(fakeDao, baselineDir)
         assertNull(engine2.getOrCreateBaseline("bldg_corrupted"))
     }
     
@@ -275,5 +305,190 @@ class DefaultBaselineManagerEngineTest {
         assertEquals(16.0, history.first().f0Hz, 1e-9)
         // The newest is 10.0 + 25 = 35.0
         assertEquals(35.0, history.last().f0Hz, 1e-9)
+    }
+
+    // --- Test 16: Quality Gate ---
+
+    @Test
+    fun testLowQualitySessionsExcludedFromHistory() = runTest {
+        engine.updateBaselineWithSession("bldg_x", 10.0, qualityScorePct = 30)
+        assertEquals(0, engine.getRecentHistory("bldg_x").size)
+    }
+
+    // --- ITEM C: Confirm Incident Baseline Reset ---
+    @Test
+    fun testResetIncidentBaseline() = runTest {
+        val incidentHash = "incident_masonry_1_floor"
+        val file = java.io.File(baselineDir, "baseline_profiles.txt")
+        file.writeText("# PhoneSHM Baseline Profiles v1.4.1\n")
+        file.appendText("$incidentHash|26.801|13.07|9|123456789|1366.5|0|\n")
+
+        val engineLocal = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        val before = engineLocal.getOrCreateBaseline(incidentHash)
+        
+        println("=== ITEM C OUTPUT ===")
+        println("BuildingHash: ${before?.buildingHash}")
+        println("Profile BEFORE reset: meanF0Hz=${before?.meanF0Hz}, stdF0Hz=${before?.stdF0Hz}, n=${before?.measurementCount}")
+        
+        val wasReset = engineLocal.resetBaseline(incidentHash)
+        println("Reset action success: $wasReset")
+        
+        val after = engineLocal.getOrCreateBaseline(incidentHash)
+        println("Profile AFTER reset: $after")
+        println("=====================")
+        
+        assertNull(after)
+    }
+
+    // --- ITEM E: Room Migration Test ---
+    @Test
+    fun testMigrationFromOldFormat() = runTest {
+        val legacyHash = "legacy_bldg_hash"
+        val file = java.io.File(baselineDir, "baseline_profiles.txt")
+        file.writeText("# PhoneSHM Baseline Profiles v1.4.1\n")
+        // Format: hash|mean|std|n|timestamp|m2|consec_anomaly|history
+        // history: timestamp,f0,quality;...
+        file.appendText("$legacyHash|25.5|2.1|5|1000000|15.0|1|999990,25.4,80;1000000,25.6,90\n")
+
+        // First creation will trigger ensureMigrated() implicitly on any API call
+        val migratorEngine = DefaultBaselineManagerEngine(fakeDao, baselineDir)
+        
+        // This triggers migration
+        val profile = migratorEngine.getOrCreateBaseline(legacyHash)
+        
+        assertNotNull(profile)
+        assertEquals(25.5, profile!!.meanF0Hz, 1e-9)
+        assertEquals(2.1, profile.stdF0Hz, 1e-9)
+        assertEquals(5, profile.measurementCount)
+        
+        // Assert history migrated
+        val history = migratorEngine.getRecentHistory(legacyHash)
+        assertEquals(2, history.size)
+        assertEquals(999990L, history[0].timestampMs)
+        assertEquals(25.4, history[0].f0Hz, 1e-9)
+        assertEquals(1000000L, history[1].timestampMs)
+        assertEquals(25.6, history[1].f0Hz, 1e-9)
+
+        // Ensure old file was renamed
+        assertFalse(file.exists())
+        assertTrue(java.io.File(baselineDir, "baseline_profiles.txt.bak").exists())
+    }
+
+    // --- ITEM E1: Gating Comparison by Quality ---
+    @Test
+    fun testLowConfidenceGatingScenario() = runTest {
+        // Scenario: baseline mean = 25.195, std = 10.0184, n = 5
+        // Current measurement: currentF0Hz = 43.457, confidence = 0.20
+        val hash = "low_conf_bldg"
+        // Setup baseline manually
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.20)
+
+        assertTrue(result.comparisonSkippedLowQuality)
+        assertFalse("isAnomaly must be false on low confidence", result.isAnomaly)
+        assertFalse("isConfirmedAnomaly must be false on low confidence", result.isConfirmedAnomaly)
+        assertEquals("⚠️ Measurement quality too low for reliable comparison — retry recommended", result.diagnosticSummary)
+    }
+
+    // --- ITEM E2: Minimum Baseline Samples Gating ---
+    @Test
+    fun testBaselineCalibratingScenario() = runTest {
+        val hash = "calibrating_bldg"
+        // Setup baseline manually with n = 5
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        // High confidence reading (0.90) with real shift (43.457 Hz)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.90)
+
+        assertTrue("Should be in calibrating state", result.isCalibrating)
+        assertFalse("Confirmed anomaly must be suppressed during calibration", result.isConfirmedAnomaly)
+        assertTrue("isAnomaly can still be true for tracking", result.isAnomaly)
+        assertTrue(result.diagnosticSummary.startsWith("CALIBRATING BASELINE (5/10)."))
+    }
+
+    // --- E1 & E2 Interaction: Low confidence AND Low n ---
+    @Test
+    fun testLowConfidenceAndLowNPrecedence() = runTest {
+        val hash = "low_conf_low_n_bldg"
+        // Setup baseline manually with n = 5
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 5,
+                consecutiveAnomalyCount = 0,
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 401.47
+            )
+        )
+
+        // Low confidence reading (0.20) and low n (5)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.20)
+
+        // E1 has precedence: we flag skipped comparison over calibration message in main diagnostics
+        assertTrue(result.comparisonSkippedLowQuality)
+        assertTrue(result.isCalibrating) // calibration state is still tracked
+        assertFalse(result.isAnomaly)
+        assertFalse(result.isConfirmedAnomaly)
+        assertEquals("⚠️ Measurement quality too low for reliable comparison — retry recommended", result.diagnosticSummary)
+    }
+
+    // --- Regression Alert Case: n >= 10, confidence >= 50%, real shift ---
+    @Test
+    fun testConfirmedAnomalySurfacesWhenReliable() = runTest {
+        val hash = "reliable_anomaly_bldg"
+        // Setup baseline manually with n = 10 (meets MIN_BASELINE_SAMPLES)
+        fakeDao.upsertProfile(
+            BaselineProfileEntity(
+                buildingHash = hash,
+                meanF0Hz = 25.195,
+                stdF0Hz = 10.0184,
+                measurementCount = 10,
+                consecutiveAnomalyCount = 1, // Already has 1 consecutive anomaly tracked
+                lastUpdatedAt = System.currentTimeMillis(),
+                m2 = 802.94
+            )
+        )
+
+        // Second anomalous session (currentF0Hz = 43.457, confidence = 0.90)
+        val result = engine.compareWithBaseline(hash, 43.457, confidence = 0.90)
+        assertTrue(result.isAnomaly)
+        assertTrue("Should confirm anomaly with n >= 10 and N >= 2 consecutive anomalies", result.isConfirmedAnomaly)
+    }
+
+    @Test
+    fun testConsecutiveAnomalyCountNotIncrementedDuringCalibration() = runTest {
+        val hash = "calibration_anomaly_test"
+        
+        // 1. Send 5 anomalous sessions while n < 10 (calibration period)
+        repeat(5) {
+            engine.updateBaselineWithSession(hash, 43.457, qualityScorePct = 80) // Mean f0 evolves, but these are anomalous compared to first reading
+        }
+        
+        // Retrieve the profile and verify consecutiveAnomalyCount is still 0
+        val profile = engine.getOrCreateBaseline(hash)!!
+        assertEquals("consecutiveAnomalyCount must remain 0 during calibration", 0, profile.consecutiveAnomalyCount)
     }
 }

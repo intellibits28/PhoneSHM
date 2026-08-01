@@ -21,9 +21,13 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
+    }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 
@@ -35,10 +39,16 @@ dependencies {
     implementation(project(":core:quality"))
     implementation(project(":core:sensor"))
     implementation(project(":core:storage"))
+    implementation(project(":core:database"))
+    implementation(project(":core:device"))
+    implementation(project(":core:audio"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20231013")
+    testImplementation("io.mockk:mockk:1.13.11")
+    testImplementation(libs.kotlinx.coroutines.test)
 }

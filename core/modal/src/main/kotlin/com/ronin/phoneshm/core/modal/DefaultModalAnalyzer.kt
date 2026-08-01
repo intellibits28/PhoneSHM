@@ -51,7 +51,9 @@ class DefaultModalAnalyzer : ModalAnalyzer {
                     persistence = 0.0,
                     adaptiveToleranceHz = 0.1,
                     classification = evaluatePhysics(0.0, 0.0),
-                    dominantPeaksTable = emptyList()
+                    dominantPeaksTable = emptyList(),
+                    prominenceRatio = Double.NaN,
+                    excitationSufficiency = ExcitationSufficiency.UNKNOWN
                 )
             }
         } else {
@@ -97,6 +99,26 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         val classConf = plausibilityClassification.confidence
         val combinedConfidence = min(1.0, (peakConf * 0.45) + (persistence * 0.35) + (classConf * 0.20))
 
+        val dominantPsd = when (dominantAxis) {
+            "X" -> spectrum.psdX.powerSpectralDensity
+            "Y" -> spectrum.psdY.powerSpectralDensity
+            "Z" -> spectrum.psdZ.powerSpectralDensity
+            else -> spectrum.psdMagnitude.powerSpectralDensity
+        }
+
+        val medianPsd = medianOf(dominantPsd)
+        val prominenceRatio = if (!medianPsd.isNaN() && medianPsd > 0.0) {
+            dominantPeakPower / medianPsd
+        } else {
+            Double.NaN
+        }
+
+        val excitationSufficiency = when {
+            prominenceRatio.isNaN() -> ExcitationSufficiency.UNKNOWN
+            prominenceRatio < 5.0 -> ExcitationSufficiency.INSUFFICIENT
+            else -> ExcitationSufficiency.SUFFICIENT
+        }
+
         return ModalAnalysisResult(
             fundamentalFrequencyHz = fundamentalFrequencyHz,
             dominantAxis = dominantAxis,
@@ -104,7 +126,9 @@ class DefaultModalAnalyzer : ModalAnalyzer {
             persistence = persistence,
             adaptiveToleranceHz = adaptiveToleranceHz,
             classification = plausibilityClassification,
-            dominantPeaksTable = peaksTable
+            dominantPeaksTable = peaksTable,
+            prominenceRatio = prominenceRatio,
+            excitationSufficiency = excitationSufficiency
         )
     }
 
@@ -164,6 +188,17 @@ class DefaultModalAnalyzer : ModalAnalyzer {
             }
             if (deduplicated.size >= 8) break // Keep top 8 distinct peaks
         }
-        return deduplicated
+        return deduplicated.take(3)
+    }
+
+    private fun medianOf(array: FloatArray): Double {
+        if (array.isEmpty()) return Double.NaN
+        val sorted = array.sortedArray()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[mid - 1].toDouble() + sorted[mid].toDouble()) / 2.0
+        } else {
+            sorted[mid].toDouble()
+        }
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -25,26 +26,55 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import com.ronin.phoneshm.core.modal.ExcitationSufficiency
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
 
 @Composable
 fun AnalysisScreen(
-    viewModel: AnalysisViewModel,
+    viewModel: AnalysisViewModel = viewModel(),
     onBackToMeasurement: () -> Unit = {},
     onNavigateToReport: (f0: Double, anomaly: Boolean, quality: String, building: String) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    if (com.ronin.phoneshm.feature.analysis.BuildConfig.DEBUG && showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Delete baseline for this building?") },
+            text = { Text("This will permanently discard the meanF0Hz, stdF0Hz, and history for this building. It cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetDialog = false
+                    viewModel.resetBaseline(uiState.buildingHash)
+                }) {
+                    Text("Confirm", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     LaunchedEffect(Unit) {
         if (uiState.modalResult == null && !uiState.isAnalyzing) {
@@ -116,18 +146,123 @@ fun AnalysisScreen(
                 }
             } else if (uiState.errorMessage != null) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF451A03)),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Analysis Failed",
-                            color = Color(0xFFFCA5A5),
-                            fontWeight = FontWeight.Bold
+                            text = if (uiState.isWeakSignalFailure) "📊 Signal Not Strong Enough" else "Analysis Error",
+                            color = Color(0xFFFDE68A),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = uiState.errorMessage!!, color = Color.White, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (uiState.isWeakSignalFailure)
+                                "ဒီ recording မှာ building ရဲ့ လှုပ်ခတ်မှု လုံလောက်စွာ မတွေ့ရပါ။\nWe couldn't detect enough building movement in this recording."
+                            else
+                                uiState.errorMessage!!,
+                            color = Color(0xFFFEF3C7),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+
+                        if (uiState.isWeakSignalFailure) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "💡 Tips to get better results:",
+                                color = Color(0xFFFDE68A),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            val tips = listOf(
+                                "Try recording when there's more activity nearby — traffic, wind, or people walking can help.",
+                                "Make sure the phone is lying flat on a hard surface (not carpet or a soft table).",
+                                "If a gentle heel-drop is possible without damaging your floor, that can help — but it's not required."
+                            )
+                            tips.forEachIndexed { index, tip ->
+                                Row(modifier = Modifier.padding(bottom = 6.dp)) {
+                                    Text(
+                                        text = "${index + 1}.",
+                                        color = Color(0xFFFCD34D),
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.width(20.dp)
+                                    )
+                                    Text(
+                                        text = tip,
+                                        color = Color(0xFFFEF3C7),
+                                        fontSize = 12.sp,
+                                        lineHeight = 17.sp
+                                    )
+                                }
+                            }
+
+                            // After 3+ consecutive failures, suggest Ambient Baseline Mode
+                            if (uiState.consecutiveFailureCount >= 3) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF164E63)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "🌊 Try Ambient Baseline Mode",
+                                            color = Color(0xFF67E8F9),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "This building may not respond well to short recordings. Ambient Baseline Mode records for 10 minutes using only natural vibrations (traffic, wind) — no impact needed. Go back to HUD and tap the \"Ambient Baseline\" button.",
+                                            color = Color(0xFFA5F3FC),
+                                            fontSize = 12.sp,
+                                            lineHeight = 17.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.analyzeSessionFileOrDemo(
+                                        filePath = uiState.analyzedFilePath,
+                                        buildingType = uiState.buildingType,
+                                        floors = uiState.floors,
+                                        buildingHash = uiState.buildingHash
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "🔄 Re-analyze This Recording",
+                                    color = Color(0xFF38BDF8),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Button(
+                                onClick = onBackToMeasurement,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "🎙️ Record Again",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
             } else {
@@ -152,7 +287,7 @@ fun AnalysisScreen(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.weight(1f)
                                 )
-                                if (modal.confidence < 0.50) {
+                                 if (modal.excitationSufficiency != ExcitationSufficiency.INSUFFICIENT && modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                     Card(
                                         colors = CardDefaults.cardColors(containerColor = Color(0xFF9A3412)),
                                         shape = RoundedCornerShape(6.dp),
@@ -192,17 +327,18 @@ softWrap = false,
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
+                                val isInsufficient = modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT
                                 Text(
                                     text = String.format("%.2f", modal.fundamentalFrequencyHz),
-                                    style = MaterialTheme.typography.displayMedium,
-                                    color = Color(0xFF38BDF8),
+                                    style = if (isInsufficient) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
+                                    color = if (isInsufficient) Color(0xFF64748B) else Color(0xFF38BDF8),
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Hz",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = if (isInsufficient) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                                     color = Color(0xFF94A3B8),
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
@@ -213,7 +349,30 @@ softWrap = false,
                                 color = Color(0xFFCBD5E1),
                                 fontSize = 13.sp
                             )
-                            if (modal.confidence < 0.50) {
+                            if (modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3F2121)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = "⚠️ INSUFFICIENT AMBIENT EXCITATION",
+                                            color = Color(0xFFFCA5A5),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "The detected signal is close to the phone's sensor noise floor — this reading is likely not a genuine structural frequency. Try: measuring during higher activity (traffic, footsteps, wind); verifying the phone is firmly coupled to a rigid surface; recording for a longer duration.",
+                                            color = Color(0xFFFECACA),
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            } else if (modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Low confidence — verify with another measurement",
@@ -228,7 +387,7 @@ softWrap = false,
                     // Physics Classification Card
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = if (modal.confidence < 0.50) {
+                            containerColor = if (modal.confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
                                 Color(0xFF334155) // Neutral unconfident styling
                             } else {
                                 when (modal.classification.classification.name) {
@@ -284,7 +443,9 @@ softWrap = false,
                     if (baseline != null) {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = if (baseline.isConfirmedAnomaly) Color(0xFF7F1D1D)
+                                containerColor = if (baseline.comparisonSkippedLowQuality) Color(0xFF334155) // Neutral slate
+                                    else if (baseline.isCalibrating) Color(0xFF1E293B) // Neutral calibrating slate/dark
+                                    else if (baseline.isConfirmedAnomaly) Color(0xFF7F1D1D)
                                     else if (baseline.isAnomaly) Color(0xFF78350F)
                                     else Color(0xFF065F46)
                             ),
@@ -304,7 +465,37 @@ softWrap = false,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    if (baseline.isConfirmedAnomaly) {
+                                    if (baseline.comparisonSkippedLowQuality) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "⚠️ LOW QUALITY",
+                                                color = Color(0xFFFCD34D),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    } else if (baseline.isCalibrating) {
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "CALIBRATING",
+                                                color = Color(0xFFCBD5E1),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    } else if (baseline.isConfirmedAnomaly) {
                                         Card(
                                             colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
                                             shape = RoundedCornerShape(6.dp)
@@ -315,7 +506,7 @@ softWrap = false,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
                                                 maxLines = 1,
-softWrap = false,
+                                                softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
@@ -330,22 +521,24 @@ softWrap = false,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp,
                                                 maxLines = 1,
-softWrap = false,
+                                                softWrap = false,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
                                     }
                                     
                                     // Debug/Admin Action: Hidden Baseline Reset
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "RESET",
-                                        color = Color.White.copy(alpha = 0.1f), // Barely visible debug button
-                                        fontSize = 9.sp,
-                                        modifier = Modifier.clickable {
-                                            viewModel.resetBaseline(uiState.buildingHash)
-                                        }
-                                    )
+                                    if (com.ronin.phoneshm.feature.analysis.BuildConfig.DEBUG) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "RESET",
+                                            color = Color.White.copy(alpha = 0.1f), // Barely visible debug button
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.clickable {
+                                                showResetDialog = true
+                                            }
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -496,6 +689,7 @@ softWrap = false,
                         val f0 = uiState.fundamentalFrequencyHz
                         val anomaly = uiState.baselineComparison?.isAnomaly ?: false
                         val quality = when {
+                            uiState.qualityReport == null -> "UNAVAILABLE (Missing Metadata)"
                             uiState.qualityScorePct >= 85 -> "RESEARCH_GRADE"
                             uiState.qualityScorePct >= 70 -> "GOOD"
                             uiState.qualityScorePct >= 50 -> "FAIR"

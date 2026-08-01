@@ -25,7 +25,9 @@ class ModalAnalyzerTest {
                 persistence = 0.95,
                 adaptiveToleranceHz = 0.194, // max(0.0817, 0.097 * 2)
                 classification = evaluatePhysics(8.17, 0.8),
-                dominantPeaksTable = listOf(Pair(8.17, 12.5), Pair(24.3, 3.2))
+                dominantPeaksTable = listOf(Pair(8.17, 12.5), Pair(24.3, 3.2)),
+                prominenceRatio = 6.0,
+                excitationSufficiency = ExcitationSufficiency.SUFFICIENT
             )
         }
     }

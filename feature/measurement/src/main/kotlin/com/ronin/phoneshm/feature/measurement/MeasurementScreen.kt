@@ -359,6 +359,22 @@ fun MeasurementScreen(
                 }
             }
         }
+
+        // Ambient Baseline Mode: 10-minute continuous recording for weak-signal buildings
+        if (!uiState.isRecording) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { viewModel.startRecording("ambient_baseline_continuous", 600) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E7490))
+            ) {
+                Text(
+                    text = "\uD83C\uDF0A Ambient Baseline (10 min, No Impact Needed)",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 

@@ -255,19 +255,16 @@ class DspEngineMultiAxisTest {
         val topPeakY = result.psdY.peaks.maxByOrNull { it.prominence }!!
         assertEquals(14.5f, topPeakY.frequencyHz, 0.2f)
 
-        // Magnitude PSD = sqrt(x² + y² + z²) is a nonlinear operation.
-        // When sinusoids are on separate axes, squaring creates 2nd harmonics:
-        //   x² = A²sin²(2π·f·t) = A²/2 · (1 - cos(4π·f·t))
-        // So magnitude PSD peaks appear near 2*f, not at f itself.
-        // Expected: ~2*8.17 ≈ 16.34 Hz and ~2*14.5 ≈ 29.0 Hz
+        // Magnitude PSD is now the SUM of X, Y, Z PSDs.
+        // So the magnitude should contain peaks at the original frequencies (8.17 Hz and 14.5 Hz).
         val magPeaks = result.psdMagnitude.peaks
         val magFreqs = magPeaks.map { it.frequencyHz }
 
-        val has2x8Hz = magFreqs.any { abs(it - 16.34f) < 0.5f }
-        val has2x14Hz = magFreqs.any { abs(it - 29.0f) < 0.5f }
+        val has8Hz = magFreqs.any { abs(it - 8.17f) < 0.5f }
+        val has14Hz = magFreqs.any { abs(it - 14.5f) < 0.5f }
         assertTrue(
-            "Magnitude should contain 2nd harmonics from nonlinear mixing. Found freqs: $magFreqs",
-            has2x8Hz || has2x14Hz
+            "Magnitude should contain the original frequencies from linear sum. Found freqs: $magFreqs",
+            has8Hz && has14Hz
         )
     }
 

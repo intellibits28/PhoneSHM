@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.ronin.phoneshm.core.database.dao.BaselineDao
 import com.ronin.phoneshm.core.database.dao.ProfileDao
+import com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity
+import com.ronin.phoneshm.core.database.entity.BaselineProfileEntity
 import com.ronin.phoneshm.core.database.entity.BuildingProfileEntity
 import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
 
@@ -15,13 +18,16 @@ import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
 @Database(
     entities = [
         BuildingProfileEntity::class,
-        MeasurementProfileEntity::class
+        MeasurementProfileEntity::class,
+        BaselineProfileEntity::class,
+        BaselineHistoryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class PhoneShmDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
+    abstract fun baselineDao(): BaselineDao
 
     companion object {
         @Volatile

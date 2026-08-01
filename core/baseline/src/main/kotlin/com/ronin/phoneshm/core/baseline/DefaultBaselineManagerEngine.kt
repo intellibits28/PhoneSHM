@@ -1,9 +1,11 @@
 package com.ronin.phoneshm.core.baseline
 
+import com.ronin.phoneshm.core.database.dao.BaselineDao
+import com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity
+import com.ronin.phoneshm.core.database.entity.BaselineProfileEntity
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -11,67 +13,137 @@ import kotlin.math.sqrt
  * DefaultBaselineManagerEngine implements longitudinal structural health tracking
  * using Welford's online algorithm for incremental mean and variance computation.
  *
- * v1.4.1 changes:
- * - (B5) Per-buildingHash Mutex for Welford atomicity. Welford's algorithm is
- *   single-writer only — concurrent updates to the same hash corrupt mean/std.
- * - (B5) Persist-atomicity: Welford update + file persist occur within the same
- *   lock scope using temp file → atomic rename pattern.
- * - (C5) consecutiveAnomalyCount tracks sequential anomalous sessions. User-facing
- *   alert (isConfirmedAnomaly) requires N≥2 consecutive anomalies. Hard-reset on
- *   any normal session.
- *
- * Quality gating: only sessions with qualityScorePct >= 50 update the baseline.
+ * Migrated to Room DB per core principles.
  */
 class DefaultBaselineManagerEngine(
-    private val baselineDir: File
+    private val baselineDao: BaselineDao,
+    private val baselineDir: File // Kept only for migration
 ) : BaselineManagerEngine {
 
-    /**
-     * Internal storage record extending BaselineProfile with Welford's M2 accumulator.
-     * M2 = sum of squared differences from the running mean, used to compute variance.
-     */
-    private data class BaselineRecord(
-        val profile: BaselineProfile,
-        val m2: Double
-    )
-
-    private val cache = ConcurrentHashMap<String, BaselineRecord>()
-    private val fileMutex = Mutex()
-    private val hashMutexes = ConcurrentHashMap<String, Mutex>() // B5: per-buildingHash lock
-    private var loaded = false
+    private var migrationRun = false
+    private val migrationMutex = Mutex()
 
     private val storageFile: File
         get() = File(baselineDir, "baseline_profiles.txt")
+        
+    private val backupFile: File
+        get() = File(baselineDir, "baseline_profiles.txt.bak")
 
-    override suspend fun getOrCreateBaseline(buildingHash: String): BaselineProfile? {
-        ensureLoaded()
-        return cache[buildingHash]?.profile
-    }
-
-    override suspend fun resetBaseline(buildingHash: String): Boolean {
-        ensureLoaded()
-        val hashMutex = hashMutexes.computeIfAbsent(buildingHash) { Mutex() }
-        hashMutex.withLock {
-            if (!cache.containsKey(buildingHash)) return false
-            cache.remove(buildingHash)
-            persistProfilesAtomic()
-            return true
+    private suspend fun ensureMigrated() {
+        if (migrationRun) return
+        migrationMutex.withLock {
+            if (migrationRun) return
+            if (storageFile.exists()) {
+                migrateFromFileToRoom()
+            }
+            migrationRun = true
         }
     }
 
+    private suspend fun migrateFromFileToRoom() {
+        try {
+            val file = storageFile
+            file.readLines().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) return@forEach
+
+                val parts = trimmed.split("|")
+                if (parts.size >= 6) {
+                    val hash = parts[0]
+                    val mean = parts[1].toDoubleOrNull() ?: return@forEach
+                    val std = parts[2].toDoubleOrNull() ?: return@forEach
+                    val count = parts[3].toIntOrNull() ?: return@forEach
+                    val updatedAt = parts[4].toLongOrNull() ?: return@forEach
+                    val m2 = parts[5].toDoubleOrNull() ?: return@forEach
+                    val anomalyCount = if (parts.size >= 7) parts[6].toIntOrNull() ?: 0 else 0
+                    
+                    val existing = baselineDao.getProfile(hash)
+                    if (existing == null) {
+                        baselineDao.upsertProfile(
+                            BaselineProfileEntity(
+                                buildingHash = hash,
+                                meanF0Hz = mean,
+                                stdF0Hz = std,
+                                m2 = m2,
+                                measurementCount = count,
+                                consecutiveAnomalyCount = anomalyCount,
+                                lastUpdatedAt = updatedAt
+                            )
+                        )
+                    }
+
+                    val historyStr = if (parts.size >= 8) parts[7] else ""
+                    if (historyStr.isNotEmpty()) {
+                        historyStr.split(";").forEach { h ->
+                            val hParts = h.split(",")
+                            if (hParts.size == 3) {
+                                baselineDao.insertHistory(
+                                    BaselineHistoryEntity(
+                                        buildingHash = hash,
+                                        timestampMs = hParts[0].toLong(),
+                                        f0Hz = hParts[1].toDouble(),
+                                        qualityScorePct = hParts[2].toInt()
+                                    )
+                                )
+                            }
+                        }
+                        baselineDao.trimHistoryTo20(hash)
+                    }
+                }
+            }
+            // Rename to backup
+            storageFile.renameTo(backupFile)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun getOrCreateBaseline(buildingHash: String): BaselineProfile? {
+        ensureMigrated()
+        val entity = baselineDao.getProfile(buildingHash) ?: return null
+        val historyEntities = baselineDao.getHistory(buildingHash)
+        
+        return BaselineProfile(
+            buildingHash = entity.buildingHash,
+            meanF0Hz = entity.meanF0Hz,
+            stdF0Hz = entity.stdF0Hz,
+            measurementCount = entity.measurementCount,
+            consecutiveAnomalyCount = entity.consecutiveAnomalyCount,
+            lastUpdatedAt = entity.lastUpdatedAt,
+            recentHistory = historyEntities.map { BaselineHistoryEntry(it.timestampMs, it.f0Hz, it.qualityScorePct) }
+        )
+    }
+
+    override suspend fun resetBaseline(buildingHash: String): Boolean {
+        ensureMigrated()
+        val profile = baselineDao.getProfile(buildingHash)
+        if (profile != null) {
+            baselineDao.deleteProfile(buildingHash)
+            return true
+        }
+        return false
+    }
+
     override suspend fun getRecentHistory(buildingHash: String): List<BaselineHistoryEntry> {
-        ensureLoaded()
-        return cache[buildingHash]?.profile?.recentHistory ?: emptyList()
+        ensureMigrated()
+        return baselineDao.getHistory(buildingHash).map { 
+            BaselineHistoryEntry(it.timestampMs, it.f0Hz, it.qualityScorePct) 
+        }
+    }
+
+    companion object {
+        private const val MIN_BASELINE_SAMPLES = 10
     }
 
     override suspend fun compareWithBaseline(
         buildingHash: String,
-        currentF0Hz: Double
+        currentF0Hz: Double,
+        confidence: Double
     ): BaselineComparisonResult {
-        ensureLoaded()
-        val record = cache[buildingHash]
+        ensureMigrated()
+        val baseline = getOrCreateBaseline(buildingHash)
 
-        if (record == null) {
+        if (baseline == null) {
             return BaselineComparisonResult(
                 currentF0Hz = currentF0Hz,
                 baselineProfile = null,
@@ -82,22 +154,35 @@ class DefaultBaselineManagerEngine(
             )
         }
 
-        val baseline = record.profile
         val percentageShift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
 
-        // Anomaly detection: >5% absolute shift OR >2σ deviation (when σ > 0)
+        if (confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
+            return BaselineComparisonResult(
+                currentF0Hz = currentF0Hz,
+                baselineProfile = baseline,
+                percentageShift = percentageShift,
+                isAnomaly = false,
+                isConfirmedAnomaly = false,
+                diagnosticSummary = "⚠️ Measurement quality too low for reliable comparison — retry recommended",
+                comparisonSkippedLowQuality = true,
+                isCalibrating = baseline.measurementCount < MIN_BASELINE_SAMPLES
+            )
+        }
+
         val isTwoSigmaAnomaly = baseline.stdF0Hz > 0.0 &&
                 abs(currentF0Hz - baseline.meanF0Hz) > 2.0 * baseline.stdF0Hz
         val isLargeShift = abs(percentageShift) > 5.0
         val isAnomaly = isLargeShift || isTwoSigmaAnomaly
 
-        // C5: confirmed anomaly requires N≥2 consecutive anomalous sessions
-        // The count will be incremented in updateBaselineWithSession() after this comparison.
-        // For now, check if current anomaly + existing streak would reach threshold.
+        val isCalibrating = baseline.measurementCount < MIN_BASELINE_SAMPLES
         val projectedCount = if (isAnomaly) baseline.consecutiveAnomalyCount + 1 else 0
-        val isConfirmedAnomaly = projectedCount >= 2
+        // E2: Do not confirm anomalies when baseline is calibrating (n < 10)
+        val isConfirmedAnomaly = !isCalibrating && projectedCount >= 2
 
         val diagnosticSummary = buildString {
+            if (isCalibrating) {
+                append("CALIBRATING BASELINE (${baseline.measurementCount}/$MIN_BASELINE_SAMPLES). ")
+            }
             append(String.format("Current f₀ = %.3f Hz vs baseline μ = %.3f Hz (σ = %.4f Hz, n = %d). ",
                 currentF0Hz, baseline.meanF0Hz, baseline.stdF0Hz, baseline.measurementCount))
             append(String.format("Shift: %+.2f%%. ", percentageShift))
@@ -111,6 +196,8 @@ class DefaultBaselineManagerEngine(
                 }
                 if (isConfirmedAnomaly) {
                     append("⚠ CONFIRMED: ${projectedCount} consecutive anomalous sessions. Investigate potential structural degradation.")
+                } else if (isCalibrating) {
+                    append("Calibrating — anomaly detected but baseline establishment in progress.")
                 } else {
                     append("Monitoring — confirm with additional measurement (${projectedCount}/2 consecutive anomalies).")
                 }
@@ -125,7 +212,9 @@ class DefaultBaselineManagerEngine(
             percentageShift = percentageShift,
             isAnomaly = isAnomaly,
             isConfirmedAnomaly = isConfirmedAnomaly,
-            diagnosticSummary = diagnosticSummary
+            diagnosticSummary = diagnosticSummary,
+            comparisonSkippedLowQuality = false,
+            isCalibrating = isCalibrating
         )
     }
 
@@ -134,186 +223,71 @@ class DefaultBaselineManagerEngine(
         currentF0Hz: Double,
         qualityScorePct: Int
     ) {
-        // Quality gate: reject low-quality measurements
         if (qualityScorePct < 50) return
+        ensureMigrated()
 
-        ensureLoaded()
+        val existing = baselineDao.getProfile(buildingHash)
+        val now = System.currentTimeMillis()
 
-        // B5: Per-buildingHash mutex for Welford atomicity
-        val hashMutex = hashMutexes.computeIfAbsent(buildingHash) { Mutex() }
-
-        // B5: Atomic transaction — Welford update + persist within the SAME lock scope
-        hashMutex.withLock {
-            val existing = cache[buildingHash]
-            val now = System.currentTimeMillis()
-
-            // Determine if this session is anomalous (for consecutive count tracking)
-            val isAnomaly = if (existing != null) {
-                val baseline = existing.profile
-                val pctShift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
-                val isTwoSigma = baseline.stdF0Hz > 0.0 &&
-                        abs(currentF0Hz - baseline.meanF0Hz) > 2.0 * baseline.stdF0Hz
-                abs(pctShift) > 5.0 || isTwoSigma
-            } else false
-
-            val newRecord = if (existing == null) {
-                // First measurement: initialize baseline
-                BaselineRecord(
-                    profile = BaselineProfile(
-                        buildingHash = buildingHash,
-                        meanF0Hz = currentF0Hz,
-                        stdF0Hz = 0.0,
-                        measurementCount = 1,
-                        consecutiveAnomalyCount = 0, // First measurement is never anomalous
-                        lastUpdatedAt = now,
-                        recentHistory = listOf(BaselineHistoryEntry(now, currentF0Hz, qualityScorePct))
-                    ),
-                    m2 = 0.0
+        if (existing == null) {
+            baselineDao.updateBaselineWithHistory(
+                BaselineProfileEntity(
+                    buildingHash = buildingHash,
+                    meanF0Hz = currentF0Hz,
+                    stdF0Hz = 0.0,
+                    m2 = 0.0,
+                    measurementCount = 1,
+                    consecutiveAnomalyCount = 0,
+                    lastUpdatedAt = now
+                ),
+                BaselineHistoryEntity(
+                    buildingHash = buildingHash,
+                    timestampMs = now,
+                    f0Hz = currentF0Hz,
+                    qualityScorePct = qualityScorePct
                 )
+            )
+        } else {
+            val oldMean = existing.meanF0Hz
+            val oldM2 = existing.m2
+            val nNew = existing.measurementCount + 1
+
+            val delta = currentF0Hz - oldMean
+            val newMean = oldMean + delta / nNew
+            val delta2 = currentF0Hz - newMean
+            val newM2 = oldM2 + delta * delta2
+
+            val newStd = if (nNew > 1) sqrt(newM2 / nNew) else 0.0
+
+            val pctShift = ((currentF0Hz - oldMean) / oldMean) * 100.0
+            val isTwoSigma = existing.stdF0Hz > 0.0 &&
+                    abs(currentF0Hz - oldMean) > 2.0 * existing.stdF0Hz
+            val isAnomaly = abs(pctShift) > 5.0 || isTwoSigma
+
+            // Do not track/increment consecutive anomalies while the baseline is still calibrating (n < 10)
+            val newAnomalyCount = if (isAnomaly && nNew >= MIN_BASELINE_SAMPLES) {
+                existing.consecutiveAnomalyCount + 1
             } else {
-                // Welford's online algorithm for incremental mean and variance
-                val oldMean = existing.profile.meanF0Hz
-                val oldM2 = existing.m2
-                val nNew = existing.profile.measurementCount + 1
+                0
+            }
 
-                val delta = currentF0Hz - oldMean
-                val newMean = oldMean + delta / nNew
-                val delta2 = currentF0Hz - newMean
-                val newM2 = oldM2 + delta * delta2
-
-                // Population standard deviation: sqrt(M2 / n)
-                val newStd = if (nNew > 1) sqrt(newM2 / nNew) else 0.0
-
-                // C5: Update consecutive anomaly count
-                // Hard reset on normal session; increment on anomaly
-                val newAnomalyCount = if (isAnomaly) {
-                    existing.profile.consecutiveAnomalyCount + 1
-                } else {
-                    0 // Hard reset
-                }
-
-                val newHistory = (existing.profile.recentHistory).plus(
-                    BaselineHistoryEntry(now, currentF0Hz, qualityScorePct)
-                ).takeLast(20)
-
-                BaselineRecord(
-                    profile = BaselineProfile(
-                        buildingHash = buildingHash,
-                        meanF0Hz = newMean,
-                        stdF0Hz = newStd,
-                        measurementCount = nNew,
-                        consecutiveAnomalyCount = newAnomalyCount,
-                        lastUpdatedAt = now,
-                        recentHistory = newHistory
-                    ),
-                    m2 = newM2
+            baselineDao.updateBaselineWithHistory(
+                BaselineProfileEntity(
+                    buildingHash = buildingHash,
+                    meanF0Hz = newMean,
+                    stdF0Hz = newStd,
+                    m2 = newM2,
+                    measurementCount = nNew,
+                    consecutiveAnomalyCount = newAnomalyCount,
+                    lastUpdatedAt = now
+                ),
+                BaselineHistoryEntity(
+                    buildingHash = buildingHash,
+                    timestampMs = now,
+                    f0Hz = currentF0Hz,
+                    qualityScorePct = qualityScorePct
                 )
-            }
-
-            cache[buildingHash] = newRecord
-
-            // B5: Persist WITHIN the hash lock — crash-consistent
-            // Uses temp file → atomic rename (POSIX guarantees atomicity)
-            persistProfilesAtomic()
-        }
-    }
-
-    // --- Persistence ---
-
-    private suspend fun ensureLoaded() {
-        if (loaded) return
-        fileMutex.withLock {
-            if (loaded) return
-            loadProfiles()
-            loaded = true
-        }
-    }
-
-    private fun loadProfiles() {
-        val file = storageFile
-        if (!file.exists()) return
-
-        try {
-            file.readLines().forEach { line ->
-                val trimmed = line.trim()
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) return@forEach
-
-                // Format: buildingHash|meanF0Hz|stdF0Hz|measurementCount|lastUpdatedAt|m2|consecutiveAnomalyCount
-                val parts = trimmed.split("|")
-                if (parts.size >= 6) {
-                    val hash = parts[0]
-                    val mean = parts[1].toDoubleOrNull() ?: return@forEach
-                    val std = parts[2].toDoubleOrNull() ?: return@forEach
-                    val count = parts[3].toIntOrNull() ?: return@forEach
-                    val updatedAt = parts[4].toLongOrNull() ?: return@forEach
-                    val m2 = parts[5].toDoubleOrNull() ?: return@forEach
-                    // C5: backwards-compatible — default to 0 if field not present
-                    val anomalyCount = if (parts.size >= 7) parts[6].toIntOrNull() ?: 0 else 0
-                    val historyStr = if (parts.size >= 8) parts[7] else ""
-                    val history = if (historyStr.isNotEmpty()) {
-                        historyStr.split(";").mapNotNull {
-                            val hParts = it.split(",")
-                            if (hParts.size == 3) {
-                                BaselineHistoryEntry(hParts[0].toLong(), hParts[1].toDouble(), hParts[2].toInt())
-                            } else null
-                        }
-                    } else emptyList()
-
-                    cache[hash] = BaselineRecord(
-                        profile = BaselineProfile(
-                            buildingHash = hash,
-                            meanF0Hz = mean,
-                            stdF0Hz = std,
-                            measurementCount = count,
-                            consecutiveAnomalyCount = anomalyCount,
-                            lastUpdatedAt = updatedAt,
-                            recentHistory = history
-                        ),
-                        m2 = m2
-                    )
-                }
-            }
-        } catch (_: Exception) {
-            // Corrupted file — start fresh
-        }
-    }
-
-    private fun serializeProfiles(): String {
-        val sb = StringBuilder()
-        sb.appendLine("# PhoneSHM Baseline Profiles v1.4.1 (do not edit manually)")
-        cache.forEach { (_, record) ->
-            val p = record.profile
-            val historyStr = p.recentHistory.joinToString(";") { "${it.timestampMs},${it.f0Hz},${it.qualityScorePct}" }
-            // Format: buildingHash|meanF0Hz|stdF0Hz|measurementCount|lastUpdatedAt|m2|consecutiveAnomalyCount|history
-            sb.appendLine("${p.buildingHash}|${p.meanF0Hz}|${p.stdF0Hz}|${p.measurementCount}|${p.lastUpdatedAt}|${record.m2}|${p.consecutiveAnomalyCount}|$historyStr")
-        }
-        return sb.toString()
-    }
-
-    /**
-     * B5: Atomic file persistence using temp file + rename.
-     * Must be called from within a hash mutex lock to ensure crash-consistency.
-     * fileMutex serializes concurrent writes from different buildingHash updates.
-     * Lock ordering: hashMutex → fileMutex (never reversed — deadlock-free).
-     */
-    private suspend fun persistProfilesAtomic() {
-        fileMutex.withLock {
-            baselineDir.mkdirs()
-            val tmpFile = File(baselineDir, "baseline_profiles.tmp")
-            val targetFile = storageFile
-            try {
-                tmpFile.writeText(serializeProfiles())
-                // Atomic rename (POSIX guarantees atomicity for same-filesystem rename)
-                if (!tmpFile.renameTo(targetFile)) {
-                    // Fallback: on some platforms renameTo fails if target exists
-                    targetFile.delete()
-                    tmpFile.renameTo(targetFile)
-                }
-            } catch (e: Exception) {
-                // Clean up temp file on failure
-                tmpFile.delete()
-                throw e
-            }
+            )
         }
     }
 }

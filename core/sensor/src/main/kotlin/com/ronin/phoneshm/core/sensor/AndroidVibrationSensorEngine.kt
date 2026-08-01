@@ -8,6 +8,9 @@ import android.hardware.SensorManager
 import com.ronin.phoneshm.core.device.DeviceCapabilityEngine
 import com.ronin.phoneshm.core.storage.RawSampleStorageEngine
 import com.ronin.phoneshm.core.storage.StorageFormat
+import android.content.Intent
+import android.os.Build
+import android.os.PowerManager
 import java.io.File
 import kotlin.math.sqrt
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +69,23 @@ class AndroidVibrationSensorEngine(
         val capabilityReport = deviceCapabilityEngine.inspectDeviceCapabilities()
         val file = storageEngine.createSessionFile(sessionId, StorageFormat.BINARY_LITTLE_ENDIAN)
 
-        val samples = mutableListOf<AccelerationSample>()
+        // Start Foreground Service
+        val serviceIntent = Intent(context, RecordingService::class.java).apply {
+            putExtra("DURATION_SEC", durationSec)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
+
+        // Acquire WakeLock
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PhoneSHM::RecordingWakeLock")
+        wakeLock.acquire(durationSec * 1000L + 5000L) // Add 5s safety margin
+
+        try {
+            val samples = mutableListOf<AccelerationSample>()
         val hardwareTimestamps = mutableListOf<Long>()
         val systemArrivalTimesNs = mutableListOf<Long>()
 
@@ -124,12 +143,19 @@ class AndroidVibrationSensorEngine(
         // Automatically mirror to Public Downloads directory so Termux / File Manager can read without root
         copyToPublicDownloads(context, file)
 
+        val hwTsArray = hardwareTimestamps.toLongArray()
+        for (i in 1 until hwTsArray.size) {
+            if (hwTsArray[i] <= hwTsArray[i - 1]) {
+                throw IllegalStateException("Data corruption detected: timestamps are not strictly monotonic.")
+            }
+        }
+
         val (actualAverageSampleRateHz, sampleJitterStdMs, clockDriftPpm) = SensorMetricsCalculator.calculateMetrics(
-            hardwareTimestamps.toLongArray(),
+            hwTsArray,
             systemArrivalTimesNs.toLongArray()
         )
 
-        MeasurementSessionMetadata(
+        val metadata = MeasurementSessionMetadata(
             sessionId = sessionId,
             measurementProfileId = profileId,
             deviceCapabilityReportId = capabilityReport.qualityTier.name,
@@ -140,6 +166,36 @@ class AndroidVibrationSensorEngine(
             clockDriftPpm = clockDriftPpm,
             rawStorageFileUri = file.absolutePath
         )
+
+        // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject
+        val metaFile = File(file.parentFile, "$sessionId.meta.json")
+        try {
+            val jsonString = SessionMetadataJsonCodec.encode(metadata, capabilityReport)
+            metaFile.writeText(jsonString)
+        } catch (e: Exception) {
+            android.util.Log.e("SensorEngine", "Failed to write JSON metadata", e)
+        }
+        
+        // Also copy the meta file to public downloads if applicable
+        try {
+            val downloadsDir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                "PhoneSHM"
+            )
+            if (downloadsDir.exists() || downloadsDir.mkdirs()) {
+                metaFile.copyTo(File(downloadsDir, metaFile.name), overwrite = true)
+            }
+        } catch (e: Exception) {
+            // Ignore error
+        }
+
+        metadata
+        } finally {
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+            context.stopService(serviceIntent)
+        }
     }
 
     private fun copyToPublicDownloads(context: Context, sourceFile: File) {
