@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -360,11 +361,59 @@ fun MeasurementScreen(
             }
         }
 
+        // Battery Restriction Warning Dialog for Xiaomi/OEM long ambient recordings
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var showBatteryWarningDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+        if (showBatteryWarningDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showBatteryWarningDialog = false },
+                title = {
+                    Text(
+                        text = "⚡ Battery Restriction Notice",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                },
+                text = {
+                    Text(
+                        text = "On Xiaomi/MIUI, Huawei, Oppo, and Vivo devices, background battery saver restrictions cause 200ms sampling duty-cycle gaps after 4 minutes.\n\nTo ensure clean 10-minute recordings:\n1. Set Battery Saver to 'No Restrictions'\n2. Enable 'Autostart' (MIUI specific)\n\nFailing to disable battery restrictions will cause sampling gaps after 4 minutes.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            context.startActivity(com.ronin.phoneshm.core.device.BatteryOptimizationHelper.createAppSettingsIntent(context))
+                        }
+                    ) {
+                        Text("Open Settings")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            showBatteryWarningDialog = false
+                            viewModel.startRecording("ambient_baseline_continuous", 600)
+                        }
+                    ) {
+                        Text("Proceed Recording")
+                    }
+                }
+            )
+        }
+
         // Ambient Baseline Mode: 10-minute continuous recording for weak-signal buildings
         if (!uiState.isRecording) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = { viewModel.startRecording("ambient_baseline_continuous", 600) },
+                onClick = {
+                    if (com.ronin.phoneshm.core.device.BatteryOptimizationHelper.shouldShowBatteryWarning(context)) {
+                        showBatteryWarningDialog = true
+                    } else {
+                        viewModel.startRecording("ambient_baseline_continuous", 600)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E7490))
             ) {
