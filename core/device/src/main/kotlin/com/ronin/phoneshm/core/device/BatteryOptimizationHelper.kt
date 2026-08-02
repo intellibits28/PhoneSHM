@@ -11,6 +11,7 @@ object BatteryOptimizationHelper {
 
     /**
      * List of OEM manufacturers known for aggressive background battery throttling / sensor sampling duty-cycles.
+     * BACKLOG ITEM: Keep updated as new OEMs/models introduce custom power keepers. Can be complemented by dynamic runtime gap detection.
      */
     private val AGGRESSIVE_OEMS = listOf(
         "xiaomi", "redmi", "poco",

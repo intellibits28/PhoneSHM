@@ -377,7 +377,7 @@ fun MeasurementScreen(
                 },
                 text = {
                     Text(
-                        text = "On Xiaomi/MIUI, Huawei, Oppo, and Vivo devices, background battery saver restrictions cause 200ms sampling duty-cycle gaps after 4 minutes.\n\nTo ensure clean 10-minute recordings:\n1. Set Battery Saver to 'No Restrictions'\n2. Enable 'Autostart' (MIUI specific)\n\nFailing to disable battery restrictions will cause sampling gaps after 4 minutes.",
+                        text = "On Xiaomi/MIUI, Huawei, Oppo, and Vivo devices, background battery restrictions can cause sampling gaps during long recordings, especially if the screen turns off or the app is backgrounded.\n\nTo ensure clean 10-minute recordings:\n1. Set Battery Saver to 'No Restrictions'\n2. Enable 'Autostart' (MIUI specific)\n3. Keep screen on and remain in app during recording.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },

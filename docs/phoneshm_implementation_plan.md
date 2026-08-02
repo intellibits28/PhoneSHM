@@ -370,6 +370,6 @@ interface QualityScoreEngine {
    - Feed simulated PCM data into `startCircularBuffer()`. Trigger event at $t=3.0\text{s}$. Verify extracted features accurately represent the exact `[-2s to +3s]` temporal window and that raw buffer is zeroed out after extraction.
 
 ### Real-World Field Validation Harness
-1. **Battery Restriction Pre-Check:** Before starting any 600s Ambient Baseline Mode recording, verify battery restrictions are disabled for the app (set Battery Saver to "No Restrictions" and enable "Autostart"), especially on Xiaomi/MIUI, Huawei, Oppo, and Vivo devices (prevents OS 200ms sensor duty-cycle throttling after 4 minutes).
+1. **Battery Restriction Pre-Check:** Before starting any 600s Ambient Baseline Mode recording, verify battery restrictions are disabled for the app (set Battery Saver to "No Restrictions", enable "Autostart", and keep screen on during recording), especially on Xiaomi/MIUI, Huawei, Oppo, and Vivo devices (prevents OS sensor sampling duty-cycle throttling during long sessions).
 2. **Field Comparison Test:** Deploy `PhoneSHM` alongside a professional reference accelerometer on a known reinforced concrete structure.
 3. Verify that `PhoneSHM` ($X/Y/Z$ Welch PSD) identifies fundamental frequency $f_0$ within $\pm 0.1\text{Hz}$ of the reference sensor, and that `BaselineManager` logs historical drift accurately across repeated sessions.
