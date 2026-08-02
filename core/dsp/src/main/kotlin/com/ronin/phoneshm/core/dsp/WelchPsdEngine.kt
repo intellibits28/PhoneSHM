@@ -534,6 +534,60 @@ class WelchPsdEngine : DspEngine {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Sampling Continuity Quality Verification (TASK 3)
+    // ─────────────────────────────────────────────────────────────
+
+    data class SamplingContinuityResult(
+        val totalDurationSec: Double,
+        val gapCount50ms: Int,
+        val totalMissingTimeSec: Double,
+        val missingTimeRatio: Double,
+        val isContinuityPassed: Boolean
+    )
+
+    /**
+     * Verifies sampling continuity (TASK 3).
+     * Flags a session if total missing time from gaps > 50ms exceeds 5% of total duration.
+     */
+    override fun verifySamplingContinuity(
+        samples: List<AccelerationSample>,
+        gapThresholdMs: Double,
+        maxAllowedMissingRatio: Double
+    ): SamplingContinuityResult {
+        if (samples.size < 2) {
+            return SamplingContinuityResult(0.0, 0, 0.0, 0.0, true)
+        }
+
+        val totalDurationSec = (samples.last().timestampNs - samples.first().timestampNs) / 1e9
+        if (totalDurationSec <= 0.0) {
+            return SamplingContinuityResult(0.0, 0, 0.0, 0.0, true)
+        }
+
+        var gapCount = 0
+        var totalMissingMs = 0.0
+
+        for (i in 1 until samples.size) {
+            val dtMs = (samples[i].timestampNs - samples[i - 1].timestampNs) / 1e6
+            if (dtMs > gapThresholdMs) {
+                gapCount++
+                totalMissingMs += dtMs
+            }
+        }
+
+        val totalMissingTimeSec = totalMissingMs / 1000.0
+        val missingTimeRatio = totalMissingTimeSec / totalDurationSec
+        val isContinuityPassed = missingTimeRatio <= maxAllowedMissingRatio
+
+        return SamplingContinuityResult(
+            totalDurationSec = totalDurationSec,
+            gapCount50ms = gapCount,
+            totalMissingTimeSec = totalMissingTimeSec,
+            missingTimeRatio = missingTimeRatio,
+            isContinuityPassed = isContinuityPassed
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Impulse Mode Quality Verification (TASK A)
     // ─────────────────────────────────────────────────────────────
 

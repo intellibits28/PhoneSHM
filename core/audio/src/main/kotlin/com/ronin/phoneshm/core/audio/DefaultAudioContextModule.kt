@@ -11,6 +11,10 @@ import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
+/**
+ * AudioContextModule maintains a rolling 5-second RAM circular audio buffer.
+ * NOTE: Currently not wired in live recording flow, deferred pending field-data justification.
+ */
 class DefaultAudioContextModule(
     private val context: Context?
 ) : AudioContextModule {

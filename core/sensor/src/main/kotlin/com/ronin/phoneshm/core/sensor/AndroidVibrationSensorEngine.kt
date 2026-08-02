@@ -54,7 +54,10 @@ class AndroidVibrationSensorEngine(
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, accelerometer, samplingPeriodUs)
+        // Request zero batching / immediate delivery from HAL (maxReportLatencyUs = 0)
+        // Disables OS sensor FIFO batching during extended background/foreground sessions
+        val maxReportLatencyUs = 0
+        sensorManager.registerListener(listener, accelerometer, samplingPeriodUs, maxReportLatencyUs)
 
         awaitClose {
             sensorManager.unregisterListener(listener)

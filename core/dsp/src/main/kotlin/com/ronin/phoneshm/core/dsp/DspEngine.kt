@@ -220,4 +220,13 @@ interface DspEngine {
         samples: List<AccelerationSample>,
         sampleRateHz: Float = 100f
     ): WelchPsdEngine.ImpulseVerificationResult
+
+    /**
+     * Verifies sampling continuity (TASK 3): Flags sessions where gaps > 50ms total > 5% of duration.
+     */
+    fun verifySamplingContinuity(
+        samples: List<AccelerationSample>,
+        gapThresholdMs: Double = 50.0,
+        maxAllowedMissingRatio: Double = 0.05
+    ): WelchPsdEngine.SamplingContinuityResult
 }

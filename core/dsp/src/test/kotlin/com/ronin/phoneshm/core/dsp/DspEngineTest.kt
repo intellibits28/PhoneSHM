@@ -34,6 +34,14 @@ class DspEngineTest {
         ): WelchPsdEngine.ImpulseVerificationResult {
             return WelchPsdEngine.ImpulseVerificationResult(10.0, true, 0.8, true, true)
         }
+
+        override fun verifySamplingContinuity(
+            samples: List<AccelerationSample>,
+            gapThresholdMs: Double,
+            maxAllowedMissingRatio: Double
+        ): WelchPsdEngine.SamplingContinuityResult {
+            return WelchPsdEngine.SamplingContinuityResult(600.0, 0, 0.0, 0.0, true)
+        }
     }
 
     @Test

@@ -210,15 +210,18 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 )
 
-                // 4. Verify impulse-mode quality (TASK A: Peak-to-RMS >= 5.0x and spectral sanity)
+                // 4. Verify impulse-mode quality (TASK A) and sampling continuity (TASK 3)
                 val impulseQuality = if (!isAmbientMode) {
                     dspEngine.verifyImpulseQuality(samples, sampleRateHz)
                 } else null
 
+                val samplingContinuity = dspEngine.verifySamplingContinuity(samples)
+
                 // 5. Compare with baseline and update
                 
                 val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT ||
-                    (impulseQuality != null && !impulseQuality.isImpulseValid)) {
+                    (impulseQuality != null && !impulseQuality.isImpulseValid) ||
+                    !samplingContinuity.isContinuityPassed) {
                     0.0
                 } else {
                     modalRes.confidence
@@ -239,7 +242,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     qualityReportRes = qualityScoreEngine.calculateQualityScore(
                         session = sessionMeta!!,
                         device = deviceReport!!,
-                        audio = null, // Audio context not yet captured in recording flow
+                        audio = null, // Audio context: not wired, deferred pending field-data justification
                         modal = modalRes
                     )
                     finalQualityScorePct = qualityReportRes.totalScorePct
