@@ -41,6 +41,7 @@ fun MeasurementScreen(
     onNavigateToAnalysis: (String?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
 
     androidx.compose.runtime.LaunchedEffect(uiState.recordingFinished) {
         if (uiState.recordingFinished) {
@@ -332,13 +333,21 @@ fun MeasurementScreen(
                 }
             } else {
                 Button(
-                    onClick = { viewModel.startRecording("building_profile_active", 10) },
+                    onClick = {
+                        viewModel.startRecording("building_profile_active", 10) { sid, uri ->
+                            com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("10s Demo")
                 }
                 Button(
-                    onClick = { viewModel.startRecording("building_profile_active", 30) },
+                    onClick = {
+                        viewModel.startRecording("building_profile_active", 30) { sid, uri ->
+                            com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("30s Quick")
@@ -349,7 +358,9 @@ fun MeasurementScreen(
                         // For the demo, we use a placeholder lookup.
                         val config = com.ronin.phoneshm.core.physics.PhysicsRulesConfig.loadBundledConfig()
                         val duration = config.getRecommendedDurationSec("RESIDENTIAL_CONCRETE", 3)
-                        viewModel.startRecording("building_profile_active", duration) 
+                        viewModel.startRecording("building_profile_active", duration) { sid, uri ->
+                            com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
@@ -394,7 +405,9 @@ fun MeasurementScreen(
                     androidx.compose.material3.TextButton(
                         onClick = {
                             showBatteryWarningDialog = false
-                            viewModel.startRecording("ambient_baseline_continuous", 600)
+                            viewModel.startRecording("ambient_baseline_continuous", 600) { sid, uri ->
+                                com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
+                            }
                         }
                     ) {
                         Text("Proceed Recording")
@@ -411,7 +424,9 @@ fun MeasurementScreen(
                     if (com.ronin.phoneshm.core.device.BatteryOptimizationHelper.shouldShowBatteryWarning(context)) {
                         showBatteryWarningDialog = true
                     } else {
-                        viewModel.startRecording("ambient_baseline_continuous", 600)
+                        viewModel.startRecording("ambient_baseline_continuous", 600) { sid, uri ->
+                            com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

@@ -37,7 +37,11 @@ class MeasurementViewModel(
     private var recordingJob: Job? = null
     private var streamingJob: Job? = null
 
-    fun startRecording(profileId: String, durationSec: Int) {
+    fun startRecording(
+        profileId: String,
+        durationSec: Int,
+        onSessionRecorded: ((sessionId: String, rawStorageFileUri: String) -> Unit)? = null
+    ) {
         if (_uiState.value.isRecording) return
 
         _uiState.value = MeasurementUiState(isRecording = true)
@@ -90,6 +94,7 @@ class MeasurementViewModel(
                     clockDriftPpm = metadata.clockDriftPpm,
                     rawStorageFileUri = metadata.rawStorageFileUri
                 )
+                onSessionRecorded?.invoke(metadata.sessionId, metadata.rawStorageFileUri)
             } catch (e: Exception) {
                 streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
