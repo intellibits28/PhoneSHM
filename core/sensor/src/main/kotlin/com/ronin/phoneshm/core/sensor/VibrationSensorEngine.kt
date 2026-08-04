@@ -25,7 +25,10 @@ data class MeasurementSessionMetadata(
     val actualAverageSampleRateHz: Float,
     val sampleJitterStdMs: Float,
     val clockDriftPpm: Float,
-    val rawStorageFileUri: String
+    val rawStorageFileUri: String,
+    val appVersionName: String = BuildConfig.VERSION_NAME,
+    val appVersionCode: Int = BuildConfig.VERSION_CODE,
+    val gitCommitHash: String = BuildConfig.GIT_COMMIT_HASH
 )
 
 /**

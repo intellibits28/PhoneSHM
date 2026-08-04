@@ -3,6 +3,21 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
 }
 
+fun getGitCommitHash(): String {
+    return try {
+        val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+            .directory(project.rootDir)
+            .redirectOutput(ProcessBuilder.Redirect.PIPE)
+            .redirectError(ProcessBuilder.Redirect.PIPE)
+            .start()
+        process.waitFor()
+        val hash = process.inputStream.bufferedReader().readText().trim()
+        if (hash.isNotEmpty() && hash.length >= 7) hash else "unknown"
+    } catch (e: Exception) {
+        "unknown"
+    }
+}
+
 android {
     namespace = "com.ronin.phoneshm"
     compileSdk = 34
@@ -13,6 +28,9 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.2.0-research-grade"
+
+        val gitHash = getGitCommitHash()
+        buildConfigField("String", "GIT_COMMIT_HASH", "\"$gitHash\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -38,6 +56,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

@@ -18,6 +18,9 @@ object SessionMetadataJsonCodec {
             put("sampleJitterStdMs", metadata.sampleJitterStdMs)
             put("clockDriftPpm", metadata.clockDriftPpm)
             put("rawStorageFileUri", metadata.rawStorageFileUri)
+            put("appVersionName", metadata.appVersionName)
+            put("appVersionCode", metadata.appVersionCode)
+            put("gitCommitHash", metadata.gitCommitHash)
         }
         
         val biasArr = JSONArray()
@@ -51,7 +54,10 @@ object SessionMetadataJsonCodec {
                 actualAverageSampleRateHz = metaJson.getDouble("actualAverageSampleRateHz").toFloat(),
                 sampleJitterStdMs = metaJson.getDouble("sampleJitterStdMs").toFloat(),
                 clockDriftPpm = metaJson.getDouble("clockDriftPpm").toFloat(),
-                rawStorageFileUri = metaJson.getString("rawStorageFileUri")
+                rawStorageFileUri = metaJson.getString("rawStorageFileUri"),
+                appVersionName = metaJson.optString("appVersionName", BuildConfig.VERSION_NAME),
+                appVersionCode = metaJson.optInt("appVersionCode", BuildConfig.VERSION_CODE),
+                gitCommitHash = metaJson.optString("gitCommitHash", BuildConfig.GIT_COMMIT_HASH)
             )
 
             val devJson = json.getJSONObject("deviceReport")

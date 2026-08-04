@@ -65,4 +65,41 @@ class SessionMetadataJsonCodecTest {
         val enumResult = SessionMetadataJsonCodec.decode(invalidEnumJson)
         assertNull("Codec should return null if enum mapping fails", enumResult)
     }
+
+    @Test
+    fun testEncodeAndDecodeWithBuildTraceability() {
+        val meta = MeasurementSessionMetadata(
+            sessionId = "session_123",
+            measurementProfileId = "ambient_baseline_continuous",
+            deviceCapabilityReportId = "RESEARCH_GRADE",
+            targetDurationSeconds = 600,
+            targetSampleRateHz = 100,
+            actualAverageSampleRateHz = 100.02f,
+            sampleJitterStdMs = 0.05f,
+            clockDriftPpm = 10.0f,
+            rawStorageFileUri = "/tmp/session_123.bin",
+            appVersionName = "1.2.0-research-grade",
+            appVersionCode = 1,
+            gitCommitHash = "3fad21f"
+        )
+        val devReport = DeviceCapabilityReport(
+            deviceModel = "Test Model",
+            sensorVendor = "Bosch",
+            maxSupportedSampleRateHz = 200,
+            estimatedNoiseFloorMg = 0.5f,
+            accelerometerBias = floatArrayOf(0f, 0f, 0f),
+            qualityTier = SensorQualityTier.RESEARCH_GRADE
+        )
+
+        val encodedJson = SessionMetadataJsonCodec.encode(meta, devReport)
+        org.junit.Assert.assertTrue("Encoded JSON should contain appVersionName", encodedJson.contains("\"appVersionName\": \"1.2.0-research-grade\""))
+        org.junit.Assert.assertTrue("Encoded JSON should contain appVersionCode", encodedJson.contains("\"appVersionCode\": 1"))
+        org.junit.Assert.assertTrue("Encoded JSON should contain gitCommitHash", encodedJson.contains("\"gitCommitHash\": \"3fad21f\""))
+
+        val decodedPair = SessionMetadataJsonCodec.decode(encodedJson)
+        assertNotNull(decodedPair)
+        org.junit.Assert.assertEquals("1.2.0-research-grade", decodedPair!!.first.appVersionName)
+        org.junit.Assert.assertEquals(1, decodedPair.first.appVersionCode)
+        org.junit.Assert.assertEquals("3fad21f", decodedPair.first.gitCommitHash)
+    }
 }

@@ -167,7 +167,10 @@ class AndroidVibrationSensorEngine(
             actualAverageSampleRateHz = actualAverageSampleRateHz,
             sampleJitterStdMs = sampleJitterStdMs,
             clockDriftPpm = clockDriftPpm,
-            rawStorageFileUri = file.absolutePath
+            rawStorageFileUri = file.absolutePath,
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            gitCommitHash = BuildConfig.GIT_COMMIT_HASH
         )
 
         // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject
