@@ -1,16 +1,16 @@
 package com.ronin.phoneshm.core.storage
 
 import android.content.Context
-import android.net.Uri
+import android.util.Base64
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 import java.io.File
+import java.io.FileInputStream
 
 class UploadSessionWorker(
     appContext: Context,
@@ -30,6 +30,7 @@ class UploadSessionWorker(
         }
 
         val metaFile = File(binFile.parentFile, "$sessionId.meta.json")
+        val progressFile = File(binFile.parentFile, "$sessionId.progress")
 
         // 1. Ensure authenticated user
         val auth = FirebaseAuth.getInstance()
@@ -46,15 +47,52 @@ class UploadSessionWorker(
         val uid = currentUser?.uid ?: return Result.retry()
 
         try {
-            // 2. Upload .bin file to Cloud Storage
-            val storageRef = FirebaseStorage.getInstance().reference
-                .child("sessions")
-                .child(uid)
-                .child("$sessionId.bin")
+            val db = FirebaseFirestore.getInstance()
+            
+            // 2. Upload .bin file to Cloud Firestore in chunks
+            val chunkSize = 500 * 1024 // ~500KB per chunk
+            val fileLength = binFile.length()
+            val totalChunks = if (fileLength == 0L) 0 else ((fileLength + chunkSize - 1) / chunkSize).toInt()
+            
+            val startChunk = if (progressFile.exists()) {
+                progressFile.readText().toIntOrNull() ?: 0
+            } else {
+                0
+            }
 
-            val fileUri = Uri.fromFile(binFile)
-            storageRef.putFile(fileUri).await()
-            Log.d(TAG, "Successfully uploaded .bin to Storage: sessions/$uid/$sessionId.bin")
+            if (totalChunks > 0) {
+                FileInputStream(binFile).use { fis ->
+                    val buffer = ByteArray(chunkSize)
+                    var chunkIndex = 0
+                    while (true) {
+                        val bytesRead = fis.read(buffer)
+                        if (bytesRead <= 0) break
+
+                        if (chunkIndex >= startChunk) {
+                            val actualBytes = if (bytesRead == chunkSize) buffer else buffer.copyOf(bytesRead)
+                            val base64Data = Base64.encodeToString(actualBytes, Base64.NO_WRAP)
+                            
+                            val chunkPayload = hashMapOf<String, Any>(
+                                "data" to base64Data,
+                                "chunkIndex" to chunkIndex,
+                                "totalChunks" to totalChunks
+                            )
+                            
+                            db.collection("sessions")
+                                .document(sessionId)
+                                .collection("chunks")
+                                .document(chunkIndex.toString())
+                                .set(chunkPayload)
+                                .await()
+                            
+                            progressFile.writeText((chunkIndex + 1).toString())
+                            Log.d(TAG, "Successfully uploaded chunk $chunkIndex/$totalChunks for session $sessionId")
+                        }
+                        
+                        chunkIndex++
+                    }
+                }
+            }
 
             // 3. Read metadata JSON sidecar
             val metadataMap = hashMapOf<String, Any?>()
@@ -102,15 +140,21 @@ class UploadSessionWorker(
             firestorePayload["qualityGatePassed"] = qualityGatePassed
             firestorePayload["qualityGateFailureReason"] = qualityGateFailureReason
             firestorePayload["deviceReport"] = deviceReportMap
+            firestorePayload["totalChunks"] = totalChunks // Added for reader
 
             // 5. Write Firestore document
-            val db = FirebaseFirestore.getInstance()
             db.collection("sessions")
                 .document(sessionId)
                 .set(firestorePayload)
                 .await()
 
-            Log.d(TAG, "Successfully wrote session document to Firestore: sessions/$sessionId")
+            Log.d(TAG, "Successfully wrote session metadata to Firestore: sessions/$sessionId")
+            
+            // Clean up progress file since upload is complete
+            if (progressFile.exists()) {
+                progressFile.delete()
+            }
+            
             return Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Upload failed for session $sessionId, scheduling retry", e)

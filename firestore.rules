@@ -4,6 +4,11 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false;
+      
+      match /chunks/{chunkId} {
+        allow create: if request.auth != null;
+        allow read, update, delete: if false;
+      }
     }
   }
 }
