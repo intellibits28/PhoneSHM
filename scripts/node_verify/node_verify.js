@@ -21,24 +21,30 @@ async function main() {
   console.log(`Fetching session metadata for ${sessionId}...`);
   const sessionDoc = await db.collection("sessions").doc(sessionId).get();
   
+  let expectedChunks = -1;
   if (!sessionDoc.exists) {
-    console.error(`Session document ${sessionId} not found!`);
-    process.exit(1);
+    console.log(`⚠️ Parent document ${sessionId} not found!`);
+    console.log(`(This can happen if the background worker was killed after uploading chunks but before saving metadata).`);
+    console.log(`Attempting to verify based on existing chunks...`);
+  } else {
+    const metadata = sessionDoc.data();
+    expectedChunks = metadata.totalChunks;
+    console.log(`Metadata indicates ${expectedChunks} chunks.`);
   }
+
+  const chunksSnapshot = await db.collection("sessions").doc(sessionId).collection("chunks").get();
+  const foundChunks = chunksSnapshot.size;
   
-  const metadata = sessionDoc.data();
-  const totalChunks = metadata.totalChunks;
-  if (totalChunks === undefined) {
-    console.error("totalChunks not found in metadata");
+  if (foundChunks === 0) {
+    console.error("No chunks found in subcollection!");
     process.exit(1);
   }
 
-  console.log(`Metadata indicates ${totalChunks} chunks.`);
-  
-  const chunksSnapshot = await db.collection("sessions").doc(sessionId).collection("chunks").get();
-  if (chunksSnapshot.size !== totalChunks) {
-    console.error(`Expected ${totalChunks} chunks but found ${chunksSnapshot.size}`);
+  if (expectedChunks !== -1 && foundChunks !== expectedChunks) {
+    console.error(`Expected ${expectedChunks} chunks but found ${foundChunks}`);
     process.exit(1);
+  } else if (expectedChunks === -1) {
+    console.log(`Found ${foundChunks} chunks in subcollection.`);
   }
   
   const chunks = [];

@@ -6,12 +6,20 @@ async function main() {
     projectId: 'phoneshm-research'
   });
   const db = getFirestore();
-  const sessions = await db.collection("sessions").get();
-  const ids = [];
-  sessions.forEach(doc => {
-    ids.push(doc.id);
+
+  console.log(`Fetching all sessions...`);
+  const sessionsSnapshot = await db.collection("sessions").orderBy("uploadTimestamp", "desc").limit(10).get();
+  
+  if (sessionsSnapshot.empty) {
+    console.log("No sessions found.");
+    return;
+  }
+
+  sessionsSnapshot.forEach(doc => {
+    console.log(`Session: ${doc.id}`);
+    console.log(JSON.stringify(doc.data(), null, 2));
+    console.log("--------------------------------------------------");
   });
-  console.log("Sessions:", JSON.stringify(ids));
 }
 
 main().catch(console.error);

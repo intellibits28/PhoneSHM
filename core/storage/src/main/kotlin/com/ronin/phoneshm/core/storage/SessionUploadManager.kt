@@ -1,13 +1,8 @@
 package com.ronin.phoneshm.core.storage
 
 import android.content.Context
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
-import androidx.work.Data
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
+import android.content.Intent
+import android.os.Build
 
 object SessionUploadManager {
 
@@ -18,27 +13,17 @@ object SessionUploadManager {
         qualityGatePassed: Boolean = true,
         qualityGateFailureReason: String? = null
     ) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
+        val serviceIntent = Intent(context, UploadService::class.java).apply {
+            putExtra(UploadService.KEY_SESSION_ID, sessionId)
+            putExtra(UploadService.KEY_BIN_FILE_PATH, binFilePath)
+            putExtra(UploadService.KEY_QUALITY_GATE_PASSED, qualityGatePassed)
+            putExtra(UploadService.KEY_QUALITY_GATE_FAILURE_REASON, qualityGateFailureReason)
+        }
 
-        val inputData = Data.Builder()
-            .putString(UploadSessionWorker.KEY_SESSION_ID, sessionId)
-            .putString(UploadSessionWorker.KEY_BIN_FILE_PATH, binFilePath)
-            .putBoolean(UploadSessionWorker.KEY_QUALITY_GATE_PASSED, qualityGatePassed)
-            .putString(UploadSessionWorker.KEY_QUALITY_GATE_FAILURE_REASON, qualityGateFailureReason)
-            .build()
-
-        val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadSessionWorker>()
-            .setConstraints(constraints)
-            .setInputData(inputData)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                10,
-                TimeUnit.SECONDS
-            )
-            .build()
-
-        WorkManager.getInstance(context).enqueue(uploadWorkRequest)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
     }
 }

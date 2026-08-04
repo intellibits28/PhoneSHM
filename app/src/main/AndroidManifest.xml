@@ -35,6 +35,11 @@
             android:name="com.ronin.phoneshm.core.sensor.RecordingService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+            
+        <service
+            android:name="com.ronin.phoneshm.core.storage.UploadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>
