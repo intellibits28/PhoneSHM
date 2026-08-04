@@ -52,8 +52,7 @@ class MainActivity : ComponentActivity() {
         }
         val permissionsToRequest = mutableListOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.RECORD_AUDIO
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
         )
         if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
             permissionsToRequest.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)

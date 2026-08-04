@@ -11,6 +11,9 @@ import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
+// DEFERRED: audio wiring paused pending tuner-feature backend design.
+// Do not wire into live recording flow until reward-system/backend work resumes.
+
 /**
  * AudioContextModule maintains a rolling 5-second RAM circular audio buffer.
  * NOTE: Currently not wired in live recording flow, deferred pending field-data justification.
