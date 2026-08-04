@@ -54,46 +54,8 @@ class UploadSessionWorker(
             val fileLength = binFile.length()
             val totalChunks = if (fileLength == 0L) 0 else ((fileLength + chunkSize - 1) / chunkSize).toInt()
             
-            val startChunk = if (progressFile.exists()) {
-                progressFile.readText().toIntOrNull() ?: 0
-            } else {
-                0
-            }
 
-            if (totalChunks > 0) {
-                FileInputStream(binFile).use { fis ->
-                    val buffer = ByteArray(chunkSize)
-                    var chunkIndex = 0
-                    while (true) {
-                        val bytesRead = fis.read(buffer)
-                        if (bytesRead <= 0) break
-
-                        if (chunkIndex >= startChunk) {
-                            val actualBytes = if (bytesRead == chunkSize) buffer else buffer.copyOf(bytesRead)
-                            val base64Data = Base64.encodeToString(actualBytes, Base64.NO_WRAP)
-                            
-                            val chunkPayload = hashMapOf<String, Any>(
-                                "data" to base64Data,
-                                "chunkIndex" to chunkIndex,
-                                "totalChunks" to totalChunks
-                            )
-                            
-                            db.collection("sessions")
-                                .document(sessionId)
-                                .collection("chunks")
-                                .document(chunkIndex.toString())
-                                .set(chunkPayload)
-                                .await()
-                            
-                            progressFile.writeText((chunkIndex + 1).toString())
-                            Log.d(TAG, "Successfully uploaded chunk $chunkIndex/$totalChunks for session $sessionId")
-                        }
-                        
-                        chunkIndex++
-                    }
-                }
-            }
-
+            // --- METADATA UPLOAD (Done first to guarantee existence) ---
             // 3. Read metadata JSON sidecar
             val metadataMap = hashMapOf<String, Any?>()
             val deviceReportMap = hashMapOf<String, Any?>()
@@ -150,6 +112,48 @@ class UploadSessionWorker(
 
             Log.d(TAG, "Successfully wrote session metadata to Firestore: sessions/$sessionId")
             
+
+            // --- CHUNK UPLOAD ---
+            val startChunk = if (progressFile.exists()) {
+                progressFile.readText().toIntOrNull() ?: 0
+            } else {
+                0
+            }
+
+            if (totalChunks > 0) {
+                FileInputStream(binFile).use { fis ->
+                    val buffer = ByteArray(chunkSize)
+                    var chunkIndex = 0
+                    while (true) {
+                        val bytesRead = fis.read(buffer)
+                        if (bytesRead <= 0) break
+
+                        if (chunkIndex >= startChunk) {
+                            val actualBytes = if (bytesRead == chunkSize) buffer else buffer.copyOf(bytesRead)
+                            val base64Data = Base64.encodeToString(actualBytes, Base64.NO_WRAP)
+                            
+                            val chunkPayload = hashMapOf<String, Any>(
+                                "data" to base64Data,
+                                "chunkIndex" to chunkIndex,
+                                "totalChunks" to totalChunks
+                            )
+                            
+                            db.collection("sessions")
+                                .document(sessionId)
+                                .collection("chunks")
+                                .document(chunkIndex.toString())
+                                .set(chunkPayload)
+                                .await()
+                            
+                            progressFile.writeText((chunkIndex + 1).toString())
+                            Log.d(TAG, "Successfully uploaded chunk $chunkIndex/$totalChunks for session $sessionId")
+                        }
+                        
+                        chunkIndex++
+                    }
+                }
+            }
+
             // Clean up progress file since upload is complete
             if (progressFile.exists()) {
                 progressFile.delete()
