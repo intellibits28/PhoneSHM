@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ronin.phoneshm.BuildConfig
 import com.ronin.phoneshm.core.location.PrivacyLevel
 
 @Composable
@@ -450,7 +451,7 @@ private fun StepThreeLocationPrivacy(
                                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                                     android.view.ViewGroup.LayoutParams.MATCH_PARENT
                                 )
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT && BuildConfig.DEBUG) {
                                     android.webkit.WebView.setWebContentsDebuggingEnabled(true)
                                 }
                                 webViewClient = object : android.webkit.WebViewClient() {
