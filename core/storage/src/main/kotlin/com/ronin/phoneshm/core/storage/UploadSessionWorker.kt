@@ -68,7 +68,16 @@ class UploadSessionWorker(
                         val keys = metaObj.keys()
                         while (keys.hasNext()) {
                             val k = keys.next()
-                            metadataMap[k] = metaObj.get(k)
+                            val value = metaObj.get(k)
+                            if (value is org.json.JSONArray) {
+                                val list = mutableListOf<Any>()
+                                for (i in 0 until value.length()) {
+                                    list.add(value.get(i))
+                                }
+                                metadataMap[k] = list
+                            } else {
+                                metadataMap[k] = value
+                            }
                         }
                     }
                     if (root.has("deviceReport")) {
@@ -76,7 +85,16 @@ class UploadSessionWorker(
                         val keys = devObj.keys()
                         while (keys.hasNext()) {
                             val k = keys.next()
-                            deviceReportMap[k] = devObj.get(k)
+                            val value = devObj.get(k)
+                            if (value is org.json.JSONArray) {
+                                val list = mutableListOf<Any>()
+                                for (i in 0 until value.length()) {
+                                    list.add(value.get(i))
+                                }
+                                deviceReportMap[k] = list
+                            } else {
+                                deviceReportMap[k] = value
+                            }
                         }
                     }
                 } catch (e: Exception) {
