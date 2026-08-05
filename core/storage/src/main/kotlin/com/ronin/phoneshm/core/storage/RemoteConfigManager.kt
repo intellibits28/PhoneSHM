@@ -27,10 +27,10 @@ object RemoteConfigManager {
 
     private lateinit var remoteConfig: FirebaseRemoteConfig
 
-    fun initialize() {
+    fun initialize(isDebug: Boolean = false) {
         remoteConfig = Firebase.remoteConfig
         val configSettings = remoteConfigSettings {
-            minimumFetchIntervalInSeconds = 3600 // 1 hour TTL
+            minimumFetchIntervalInSeconds = if (isDebug) 0 else 3600 // 0s in debug, 1 hour in release
         }
         remoteConfig.setConfigSettingsAsync(configSettings)
 
