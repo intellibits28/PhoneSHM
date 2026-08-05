@@ -54,30 +54,38 @@ object RemoteConfigManager {
         }
     }
 
+    private fun getSafeDouble(key: String, default: Double): Double {
+        return if (::remoteConfig.isInitialized) {
+            remoteConfig.getDouble(key)
+        } else {
+            default
+        }
+    }
+
     val peakToRmsThreshold: Double
         get() = clamp(
-            remoteConfig.getDouble(KEY_PEAK_TO_RMS),
+            getSafeDouble(KEY_PEAK_TO_RMS, DEFAULT_PEAK_TO_RMS),
             2.0, 20.0,
             DEFAULT_PEAK_TO_RMS
         )
 
     val ambientSnrThresholdDb: Float
         get() = clamp(
-            remoteConfig.getDouble(KEY_AMBIENT_SNR),
+            getSafeDouble(KEY_AMBIENT_SNR, DEFAULT_AMBIENT_SNR),
             0.1, 10.0,
             DEFAULT_AMBIENT_SNR
         ).toFloat()
 
     val spectralSanityThreshold: Double
         get() = clamp(
-            remoteConfig.getDouble(KEY_SPECTRAL_SANITY),
+            getSafeDouble(KEY_SPECTRAL_SANITY, DEFAULT_SPECTRAL_SANITY),
             0.01, 0.5,
             DEFAULT_SPECTRAL_SANITY
         )
 
     val gapMissingTimeRatioThreshold: Double
         get() = clamp(
-            remoteConfig.getDouble(KEY_GAP_MISSING_RATIO),
+            getSafeDouble(KEY_GAP_MISSING_RATIO, DEFAULT_GAP_MISSING_RATIO),
             0.01, 0.3,
             DEFAULT_GAP_MISSING_RATIO
         )
