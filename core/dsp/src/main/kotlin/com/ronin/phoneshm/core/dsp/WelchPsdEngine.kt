@@ -221,7 +221,8 @@ class WelchPsdEngine : DspEngine {
     override fun calculateMultiAxisWelchPsd(
         samples: List<AccelerationSample>,
         sampleRateHz: Float,
-        params: WelchPsdParameters
+        params: WelchPsdParameters,
+        ambientSnrThresholdDb: Float
     ): MultiAxisSpectrumResult {
         val n = samples.size
         val fftSize = params.fftSize
@@ -502,8 +503,8 @@ class WelchPsdEngine : DspEngine {
                 val snrDb = peakDb - noiseDb
                 
                 // TASK B: Calibrated against phone-stationary ambient fixtures only. Not yet validated against a confirmed genuine-building-excitation fixture (e.g. traffic-adjacent or occupied-building recording). False-negative risk on weak real ambient signals until validated.
-                val minSnrThresholdDb = 1.0f
-                if (snrDb > minSnrThresholdDb) {
+                // Check SNR (peak must rise sufficiently above ambient noise floor)
+                if (snrDb > ambientSnrThresholdDb) {
                     // Persistence check across halves
                     var persists = true
                     if (psdH1 != null && psdH2 != null) {
@@ -547,7 +548,7 @@ class WelchPsdEngine : DspEngine {
 
     /**
      * Verifies sampling continuity (TASK 3).
-     * Flags a session if total missing time from gaps > 50ms exceeds 5% of total duration.
+     * Flags a session if total missing time from gaps > threshold exceeds maxAllowedMissingRatio.
      */
     override fun verifySamplingContinuity(
         samples: List<AccelerationSample>,
@@ -603,17 +604,15 @@ class WelchPsdEngine : DspEngine {
      * Verifies impulse-mode sessions (building_profile_active).
      *
      * TASK A requirements:
-     * 1. Time-domain Peak-to-RMS ratio >= 5.0x
-     *    // Interim, calibrated on n=3 heel-drop + n=2 ambient fixtures. Recalibrate when N>=20 heel-drop fixtures available.
+     * 1. Time-domain Peak-to-RMS ratio >= peakToRmsThreshold
      * 2. Secondary spectral sanity check: within the 2s impact window around max peak,
      *    require energy concentration in the 0.5-15Hz structural band vs high frequency shock.
-     *    NOTE: Flat/white noise naturally yields ~29.3% in 0.5-15Hz out of 0.5-50Hz. This check is currently an
-     *    uncalibrated placeholder (threshold 0.15) with no proven discriminating power yet until a direct phone-tap/chassis-shock
-     *    fixture is available for calibration.
      */
     override fun verifyImpulseQuality(
         samples: List<AccelerationSample>,
-        sampleRateHz: Float
+        sampleRateHz: Float,
+        peakToRmsThreshold: Double,
+        spectralSanityThreshold: Double
     ): ImpulseVerificationResult {
         if (samples.size < 100) {
             return ImpulseVerificationResult(0.0, false, 0.0, false, false)
@@ -652,13 +651,12 @@ class WelchPsdEngine : DspEngine {
             sumMagSq += magSq
         }
 
-        val timeRms = sqrt(sumMagSq / filtX.size)
-        val maxMag = sqrt(maxMagSq)
-        val peakToRmsRatio = if (timeRms > 0.0) maxMag / timeRms else 0.0
-
-        // Interim, calibrated on n=3 heel-drop + n=2 ambient fixtures. Recalibrate when N>=20 heel-drop fixtures available.
-        val PEAK_TO_RMS_THRESHOLD = 5.0
-        val isPeakToRmsPassed = peakToRmsRatio >= PEAK_TO_RMS_THRESHOLD
+        val overallRms = sqrt(sumMagSq / filtX.size)
+        val absPeak = sqrt(maxMagSq)
+        
+        // 3. Peak-to-RMS Check (is it a sharp shock or continuous rumble?)
+        val peakToRmsRatio = if (overallRms > 0.0) absPeak / overallRms else 0.0
+        val isPeakToRmsPassed = peakToRmsRatio >= peakToRmsThreshold
 
         // Secondary spectral sanity check: 2s window around max peak index
         val halfWin = (1.0 * sampleRateHz).toInt()
@@ -697,8 +695,9 @@ class WelchPsdEngine : DspEngine {
 
             lowBandEnergyRatio = if (totalPower > 0.0) lowBandPower / totalPower else 0.0
             // UNCALIBRATED PLACEHOLDER: Flat/white noise naturally yields ~29.3% in 0.5-15Hz out of 0.5-50Hz.
-            // Until a phone-chassis-knock/tapping fixture is added for calibration, threshold is set to 0.15 placeholder.
-            isSpectralSanityPassed = lowBandEnergyRatio >= 0.15
+            // uncalibrated placeholder with no proven discriminating power yet until a direct phone-tap/chassis-shock
+            // fixture is added for calibration.
+            isSpectralSanityPassed = lowBandEnergyRatio >= spectralSanityThreshold
         } else {
             lowBandEnergyRatio = 1.0
             isSpectralSanityPassed = true

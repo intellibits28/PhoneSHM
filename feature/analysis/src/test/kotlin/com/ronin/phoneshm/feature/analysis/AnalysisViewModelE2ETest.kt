@@ -85,6 +85,7 @@ class AnalysisViewModelE2ETest {
         storageEngine.finalizeSessionFile(binFile)
 
         // 2. Write the JSON sidecar file using the shared codec (Fixes Item #2)
+        val finalBinFile = File(binFile.parentFile, "$sessionId.bin")
         val metaFile = File(binFile.parentFile, "$sessionId.meta.json")
         val meta = com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata(
             sessionId = sessionId,
@@ -95,7 +96,7 @@ class AnalysisViewModelE2ETest {
             actualAverageSampleRateHz = 100.0f,
             sampleJitterStdMs = 1.5f,
             clockDriftPpm = 0.0f,
-            rawStorageFileUri = binFile.absolutePath
+            rawStorageFileUri = finalBinFile.absolutePath
         )
         val dev = com.ronin.phoneshm.core.device.DeviceCapabilityReport(
             deviceModel = "E2E Test Device",
@@ -116,7 +117,7 @@ class AnalysisViewModelE2ETest {
         val vm = AnalysisViewModel(mockApp)
 
         // 4. Run Analysis
-        vm.analyzeSessionFileOrDemo(binFile.absolutePath, "RESIDENTIAL_CONCRETE", 3, "hash1")
+        vm.analyzeSessionFileOrDemo(finalBinFile.absolutePath, "RESIDENTIAL_CONCRETE", 3, "hash1")
         waitForViewModel(vm)
 
         // 5. Assertions

@@ -45,7 +45,8 @@ class RawSampleStorageEngineTest {
         assertEquals(2, sampleCount)
 
         // Read and verify little-endian values
-        val readBytes = file.readBytes()
+        val finalFile = File(testDir, "$sessionId.bin")
+        val readBytes = finalFile.readBytes()
         val buffer = ByteBuffer.wrap(readBytes).order(ByteOrder.LITTLE_ENDIAN)
 
         assertEquals(1000000000L, buffer.getLong())
@@ -101,7 +102,8 @@ class RawSampleStorageEngineTest {
         storageEngine.appendSamplesBatch(file, timestamps, x, y, z)
         storageEngine.finalizeSessionFile(file)
 
-        val readData = storageEngine.readSamplesFromFile(file)
+        val finalFile = File(testDir, "$sessionId.bin")
+        val readData = storageEngine.readSamplesFromFile(finalFile)
         assertEquals(3, readData.sampleCount)
         assertEquals(100L, readData.timestampsNs[0])
         assertEquals(2.0f, readData.x[1], 0.001f)
@@ -124,5 +126,29 @@ class RawSampleStorageEngineTest {
         assertEquals(2, readData.sampleCount)
         assertEquals(200L, readData.timestampsNs[1])
         assertEquals(1.5f, readData.x[0], 0.001f)
+    }
+
+    @Test
+    fun testCrashMidRecording() = runTest {
+        val sessionId = "session_crash_test"
+        val file = storageEngine.createSessionFile(sessionId, StorageFormat.BINARY_LITTLE_ENDIAN)
+        
+        val timestamps = longArrayOf(100L)
+        val x = floatArrayOf(1.0f)
+        val y = floatArrayOf(-1.0f)
+        val z = floatArrayOf(9.8f)
+        
+        // 1. Append samples, simulating recording in progress
+        storageEngine.appendSamplesBatch(file, timestamps, x, y, z)
+        
+        // 2. Simulate a crash! We do NOT call finalizeSessionFile.
+        
+        // 3. Verify final .bin file does NOT exist
+        val finalFile = File(testDir, "$sessionId.bin")
+        assertTrue("Final .bin file should not exist after crash", !finalFile.exists())
+        
+        // 4. Verify .tmp file remains and is NOT uploaded (it doesn't end with .bin)
+        assertTrue(".tmp file should remain after crash", file.exists())
+        assertTrue("Tmp file should end with .tmp", file.name.endsWith(".tmp"))
     }
 }

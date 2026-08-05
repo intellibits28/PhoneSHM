@@ -22,7 +22,7 @@ class DefaultRawSampleStorageEngine(
             StorageFormat.BINARY_LITTLE_ENDIAN -> "bin"
             StorageFormat.CSV_GZIP -> "csv"
         }
-        val file = File(baseDir, "$sessionId.$extension")
+        val file = File(baseDir, "$sessionId.$extension.tmp")
         if (file.exists()) {
             file.delete()
         }
@@ -39,7 +39,7 @@ class DefaultRawSampleStorageEngine(
     ) = withContext(Dispatchers.IO) {
         if (timestampsNs.isEmpty()) return@withContext
 
-        if (file.name.endsWith(".bin")) {
+        if (file.name.endsWith(".bin") || file.name.endsWith(".bin.tmp")) {
             val buffer = ByteBuffer.allocate(timestampsNs.size * 20).order(ByteOrder.LITTLE_ENDIAN)
             for (i in timestampsNs.indices) {
                 buffer.putLong(timestampsNs[i])
@@ -50,7 +50,7 @@ class DefaultRawSampleStorageEngine(
             FileOutputStream(file, true).use { fos ->
                 fos.write(buffer.array())
             }
-        } else if (file.name.endsWith(".csv")) {
+        } else if (file.name.endsWith(".csv") || file.name.endsWith(".csv.tmp")) {
             FileWriter(file, true).use { writer ->
                 for (i in timestampsNs.indices) {
                     writer.write("${timestampsNs[i]},${x[i]},${y[i]},${z[i]}\n")
@@ -64,8 +64,9 @@ class DefaultRawSampleStorageEngine(
             return@withContext Pair(0L, 0)
         }
 
-        if (file.name.endsWith(".csv")) {
-            val gzipFile = File(file.parentFile, "${file.name}.gz")
+        if (file.name.endsWith(".csv") || file.name.endsWith(".csv.tmp")) {
+            val finalName = file.name.removeSuffix(".tmp")
+            val gzipFile = File(file.parentFile, "${finalName}.gz")
             if (gzipFile.exists()) {
                 gzipFile.delete()
             }
@@ -90,7 +91,9 @@ class DefaultRawSampleStorageEngine(
         } else {
             // Binary file
             val sampleCount = (file.length() / 20).toInt()
-            Pair(file.length(), sampleCount)
+            val finalFile = File(file.parentFile, file.name.removeSuffix(".tmp"))
+            file.renameTo(finalFile)
+            Pair(finalFile.length(), sampleCount)
         }
     }
 

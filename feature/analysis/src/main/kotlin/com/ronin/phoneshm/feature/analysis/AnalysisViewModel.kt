@@ -182,7 +182,12 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 }
 
                 val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
-                val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(samples, sampleRateHz, mainParams)
+                val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(
+                    samples, 
+                    sampleRateHz, 
+                    mainParams, 
+                    com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
+                )
 
                 val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
                 val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
@@ -190,7 +195,12 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     var i = 0
                     while (i + windowSize <= samples.size) {
                         val winSamples = samples.subList(i, i + windowSize)
-                        slidingSpectra.add(dspEngine.calculateMultiAxisWelchPsd(winSamples, sampleRateHz, slidingParams))
+                        slidingSpectra.add(dspEngine.calculateMultiAxisWelchPsd(
+                            winSamples, 
+                            sampleRateHz, 
+                            slidingParams,
+                            com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
+                        ))
                         i += stepSize
                     }
                 }
@@ -211,11 +221,21 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 )
 
                 // 4. Verify impulse-mode quality (TASK A) and sampling continuity (TASK 3)
+                val peakToRmsThreshold = com.ronin.phoneshm.core.storage.RemoteConfigManager.peakToRmsThreshold
+                android.util.Log.d("RemoteConfig", "Fetched PEAK_TO_RMS_THRESHOLD = $peakToRmsThreshold")
                 val impulseQuality = if (!isAmbientMode) {
-                    dspEngine.verifyImpulseQuality(samples, sampleRateHz)
+                    dspEngine.verifyImpulseQuality(
+                        samples, 
+                        sampleRateHz,
+                        peakToRmsThreshold,
+                        com.ronin.phoneshm.core.storage.RemoteConfigManager.spectralSanityThreshold
+                    )
                 } else null
 
-                val samplingContinuity = dspEngine.verifySamplingContinuity(samples)
+                val samplingContinuity = dspEngine.verifySamplingContinuity(
+                    samples = samples,
+                    maxAllowedMissingRatio = com.ronin.phoneshm.core.storage.RemoteConfigManager.gapMissingTimeRatioThreshold
+                )
 
                 // 5. Compare with baseline and update
                 

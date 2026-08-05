@@ -210,19 +210,22 @@ interface DspEngine {
     fun calculateMultiAxisWelchPsd(
         samples: List<AccelerationSample>,
         sampleRateHz: Float = 100f,
-        params: WelchPsdParameters = WelchPsdParameters()
+        params: WelchPsdParameters = WelchPsdParameters(),
+        ambientSnrThresholdDb: Float = 1.0f
     ): MultiAxisSpectrumResult
 
     /**
-     * Verifies impulse-mode quality (TASK A): Peak-to-RMS ratio >= 5.0x and 0.5-15Hz spectral sanity check.
+     * Verifies impulse-mode quality (TASK A): Peak-to-RMS ratio >= peakToRmsThreshold and 0.5-15Hz spectral sanity check >= spectralSanityThreshold.
      */
     fun verifyImpulseQuality(
         samples: List<AccelerationSample>,
-        sampleRateHz: Float = 100f
+        sampleRateHz: Float = 100f,
+        peakToRmsThreshold: Double = 5.0,
+        spectralSanityThreshold: Double = 0.15
     ): WelchPsdEngine.ImpulseVerificationResult
 
     /**
-     * Verifies sampling continuity (TASK 3): Flags sessions where gaps > 50ms total > 5% of duration.
+     * Verifies sampling continuity (TASK 3): Flags sessions where gaps > 50ms total > maxAllowedMissingRatio of duration.
      */
     fun verifySamplingContinuity(
         samples: List<AccelerationSample>,

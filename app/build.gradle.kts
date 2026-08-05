@@ -101,9 +101,12 @@ dependencies {
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.storage.ktx)
+    implementation(libs.firebase.config.ktx)
     implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.test:core-ktx:1.5.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
