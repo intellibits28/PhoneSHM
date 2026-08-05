@@ -21,7 +21,8 @@ class DspEngineTest {
         override fun calculateMultiAxisWelchPsd(
             samples: List<AccelerationSample>,
             sampleRateHz: Float,
-            params: WelchPsdParameters
+            params: WelchPsdParameters,
+            ambientSnrThresholdDb: Float
         ): MultiAxisSpectrumResult {
             val emptyAxis = AxisPsdResult(floatArrayOf(8.2f), floatArrayOf(1.0f), listOf(Peak(8.2f, 1.0f, 0.8f)))
             return MultiAxisSpectrumResult(emptyAxis, emptyAxis, emptyAxis, emptyAxis,
@@ -30,7 +31,9 @@ class DspEngineTest {
 
         override fun verifyImpulseQuality(
             samples: List<AccelerationSample>,
-            sampleRateHz: Float
+            sampleRateHz: Float,
+            peakToRmsThreshold: Double,
+            spectralSanityThreshold: Double
         ): WelchPsdEngine.ImpulseVerificationResult {
             return WelchPsdEngine.ImpulseVerificationResult(10.0, true, 0.8, true, true)
         }
