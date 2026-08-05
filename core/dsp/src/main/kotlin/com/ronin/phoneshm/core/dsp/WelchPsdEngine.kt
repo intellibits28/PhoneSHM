@@ -286,10 +286,10 @@ class WelchPsdEngine : DspEngine {
         val psdMag_h1 = if (psdX_h1 != null && psdY_h1 != null && psdZ_h1 != null) FloatArray(freqBins) { k -> psdX_h1[k] + psdY_h1[k] + psdZ_h1[k] } else null
         val psdMag_h2 = if (psdX_h2 != null && psdY_h2 != null && psdZ_h2 != null) FloatArray(freqBins) { k -> psdX_h2[k] + psdY_h2[k] + psdZ_h2[k] } else null
 
-        val peaksX = findPeaks(frequencies, psdX, psdX_h1, psdX_h2)
-        val peaksY = findPeaks(frequencies, psdY, psdY_h1, psdY_h2)
-        val peaksZ = findPeaks(frequencies, psdZ, psdZ_h1, psdZ_h2)
-        val peaksMag = findPeaks(frequencies, psdMag, psdMag_h1, psdMag_h2)
+        val peaksX = findPeaks(frequencies, psdX, psdX_h1, psdX_h2, ambientSnrThresholdDb)
+        val peaksY = findPeaks(frequencies, psdY, psdY_h1, psdY_h2, ambientSnrThresholdDb)
+        val peaksZ = findPeaks(frequencies, psdZ, psdZ_h1, psdZ_h2, ambientSnrThresholdDb)
+        val peaksMag = findPeaks(frequencies, psdMag, psdMag_h1, psdMag_h2, ambientSnrThresholdDb)
 
         // Auto-derived segment count (A5)
         val stepSize = (fftSize * (1.0f - params.overlapPercentage)).toInt()
@@ -477,7 +477,7 @@ class WelchPsdEngine : DspEngine {
     // Internal: Peak Detection
     // ─────────────────────────────────────────────────────────────
 
-    internal fun findPeaks(frequencies: FloatArray, psd: FloatArray, psdH1: FloatArray? = null, psdH2: FloatArray? = null): List<Peak> {
+    internal fun findPeaks(frequencies: FloatArray, psd: FloatArray, psdH1: FloatArray? = null, psdH2: FloatArray? = null, ambientSnrThresholdDb: Float = 1.0f): List<Peak> {
         val n = psd.size
         if (n < 3) return emptyList()
 
