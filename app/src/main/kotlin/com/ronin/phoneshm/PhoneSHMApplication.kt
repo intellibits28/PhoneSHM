@@ -18,7 +18,11 @@ class PhoneSHMApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         bootstrapAnonymousAuth()
-        com.ronin.phoneshm.core.storage.RemoteConfigManager.initialize()
+        try {
+            com.ronin.phoneshm.core.storage.RemoteConfigManager.initialize()
+        } catch (e: Exception) {
+            android.util.Log.e("PhoneSHMAuth", "RemoteConfigManager initialization exception", e)
+        }
         cleanupOrphanedTmpFiles()
     }
 

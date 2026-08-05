@@ -13,9 +13,11 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = PhoneSHMApplication::class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class PhoneSHMApplicationTest {
 
     private lateinit var app: PhoneSHMApplication

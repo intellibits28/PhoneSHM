@@ -1,0 +1,32 @@
+{
+  "parameters": {
+    "PEAK_TO_RMS_THRESHOLD": {
+      "defaultValue": {
+        "value": "5.0"
+      },
+      "description": "Peak-to-RMS threshold for impulse verification",
+      "valueType": "NUMBER"
+    },
+    "AMBIENT_SNR_THRESHOLD_DB": {
+      "defaultValue": {
+        "value": "1.0"
+      },
+      "description": "Minimum SNR threshold in DB for ambient modal detection",
+      "valueType": "NUMBER"
+    },
+    "SPECTRAL_SANITY_THRESHOLD": {
+      "defaultValue": {
+        "value": "0.15"
+      },
+      "description": "Secondary spectral sanity check minimum power ratio",
+      "valueType": "NUMBER"
+    },
+    "GAP_MISSING_TIME_RATIO_THRESHOLD": {
+      "defaultValue": {
+        "value": "0.05"
+      },
+      "description": "Maximum allowed missing time ratio (gaps) during session",
+      "valueType": "NUMBER"
+    }
+  }
+}
