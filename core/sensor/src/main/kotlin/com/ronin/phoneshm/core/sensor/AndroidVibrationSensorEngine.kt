@@ -142,9 +142,10 @@ class AndroidVibrationSensorEngine(
         }
 
         storageEngine.finalizeSessionFile(file)
+        val finalFile = File(file.parentFile, file.name.removeSuffix(".tmp"))
 
         // Automatically mirror to Public Downloads directory so Termux / File Manager can read without root
-        copyToPublicDownloads(context, file)
+        copyToPublicDownloads(context, finalFile)
 
         val hwTsArray = hardwareTimestamps.toLongArray()
         for (i in 1 until hwTsArray.size) {
@@ -167,14 +168,14 @@ class AndroidVibrationSensorEngine(
             actualAverageSampleRateHz = actualAverageSampleRateHz,
             sampleJitterStdMs = sampleJitterStdMs,
             clockDriftPpm = clockDriftPpm,
-            rawStorageFileUri = file.absolutePath,
+            rawStorageFileUri = finalFile.absolutePath,
             appVersionName = BuildConfig.VERSION_NAME,
             appVersionCode = BuildConfig.VERSION_CODE,
             gitCommitHash = BuildConfig.GIT_COMMIT_HASH
         )
 
         // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject
-        val metaFile = File(file.parentFile, "$sessionId.meta.json")
+        val metaFile = File(finalFile.parentFile, "$sessionId.meta.json")
         try {
             val jsonString = SessionMetadataJsonCodec.encode(metadata, capabilityReport)
             metaFile.writeText(jsonString)
