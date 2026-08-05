@@ -12,7 +12,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 
+import org.robolectric.annotation.Config
+
 @RunWith(RobolectricTestRunner::class)
+@Config(application = PhoneSHMApplication::class)
 class PhoneSHMApplicationTest {
 
     private lateinit var app: PhoneSHMApplication
