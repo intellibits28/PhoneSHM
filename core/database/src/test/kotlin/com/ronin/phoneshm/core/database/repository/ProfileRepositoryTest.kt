@@ -19,11 +19,11 @@ class ProfileRepositoryTest {
         private val measurements = mutableMapOf<String, MeasurementProfileEntity>()
 
         override suspend fun insertBuildingProfile(profile: BuildingProfileEntity) {
-            buildings[profile.id] = profile
+            buildings[profile.buildingHash] = profile
         }
 
-        override suspend fun getBuildingProfileById(id: String): BuildingProfileEntity? {
-            return buildings[id]
+        override suspend fun getBuildingProfileByHash(buildingHash: String): BuildingProfileEntity? {
+            return buildings[buildingHash]
         }
 
         override fun getAllBuildingProfilesFlow(): Flow<List<BuildingProfileEntity>> {
@@ -45,19 +45,17 @@ class ProfileRepositoryTest {
         val repo = ProfileRepositoryImpl(dao)
 
         val profile = BuildingProfile(
-            id = "b_123",
-            name = "Science Hall",
-            type = "RESIDENTIAL_CONCRETE",
+            buildingHash = "hash_abc",
+            displayName = "Science Hall",
+            buildingType = "RESIDENTIAL_CONCRETE",
             floors = 8,
-            constructionYear = 2015,
-            material = "Concrete",
-            buildingHash = "hash_abc"
+            material = "Concrete"
         )
         repo.saveBuildingProfile(profile)
 
-        val retrieved = repo.getBuildingProfile("b_123")
+        val retrieved = repo.getBuildingProfile("hash_abc")
         assertNotNull(retrieved)
-        assertEquals("Science Hall", retrieved?.name)
+        assertEquals("Science Hall", retrieved?.displayName)
         assertEquals(8, retrieved?.floors)
     }
 

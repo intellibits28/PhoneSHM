@@ -9,15 +9,13 @@ class ProfileDaoTest {
     @Test
     fun testBuildingProfileEntityCreation() {
         val entity = BuildingProfileEntity(
-            id = "b_1",
-            name = "Test Building",
-            type = "RESIDENTIAL_CONCRETE",
+            buildingHash = "hash_123",
+            displayName = "Test Building",
+            buildingType = "RESIDENTIAL_CONCRETE",
             floors = 12,
-            constructionYear = 2018,
-            material = "Concrete",
-            buildingHash = "hash_123"
+            material = "Concrete"
         )
-        assertEquals("b_1", entity.id)
+        assertEquals("hash_123", entity.buildingHash)
         assertEquals(12, entity.floors)
     }
 }
