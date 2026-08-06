@@ -41,3 +41,4 @@ test_output*
 patch*.py
 *_desc.md
 .agy_scratch/
+app-distribution.json
