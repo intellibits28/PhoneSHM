@@ -17,27 +17,27 @@ class ProfileRepositoryImpl(
 
     override suspend fun saveBuildingProfile(profile: BuildingProfile) {
         val entity = BuildingProfileEntity(
-            id = profile.id,
-            name = profile.name,
-            type = profile.type,
+            buildingHash = profile.buildingHash,
+            displayName = profile.displayName,
+            buildingType = profile.buildingType,
             floors = profile.floors,
-            constructionYear = profile.constructionYear,
             material = profile.material,
-            buildingHash = profile.buildingHash
+            createdAt = profile.createdAt,
+            lastUsedAt = profile.lastUsedAt
         )
         profileDao.insertBuildingProfile(entity)
     }
 
-    override suspend fun getBuildingProfile(id: String): BuildingProfile? {
-        val entity = profileDao.getBuildingProfileById(id) ?: return null
+    override suspend fun getBuildingProfile(buildingHash: String): BuildingProfile? {
+        val entity = profileDao.getBuildingProfileByHash(buildingHash) ?: return null
         return BuildingProfile(
-            id = entity.id,
-            name = entity.name,
-            type = entity.type,
+            buildingHash = entity.buildingHash,
+            displayName = entity.displayName,
+            buildingType = entity.buildingType,
             floors = entity.floors,
-            constructionYear = entity.constructionYear,
             material = entity.material,
-            buildingHash = entity.buildingHash
+            createdAt = entity.createdAt,
+            lastUsedAt = entity.lastUsedAt
         )
     }
 
@@ -45,13 +45,13 @@ class ProfileRepositoryImpl(
         return profileDao.getAllBuildingProfilesFlow().map { list ->
             list.map { entity ->
                 BuildingProfile(
-                    id = entity.id,
-                    name = entity.name,
-                    type = entity.type,
+                    buildingHash = entity.buildingHash,
+                    displayName = entity.displayName,
+                    buildingType = entity.buildingType,
                     floors = entity.floors,
-                    constructionYear = entity.constructionYear,
                     material = entity.material,
-                    buildingHash = entity.buildingHash
+                    createdAt = entity.createdAt,
+                    lastUsedAt = entity.lastUsedAt
                 )
             }
         }

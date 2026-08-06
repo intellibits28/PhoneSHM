@@ -45,6 +45,8 @@ class DefaultBaselineManagerEngineTest {
         }
         override suspend fun deleteProfile(buildingHash: String) {
             profiles.remove(buildingHash)
+        }
+        override suspend fun deleteHistory(buildingHash: String) {
             histories.remove(buildingHash)
         }
         override suspend fun deleteOrphanedLegacyProfiles() {

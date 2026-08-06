@@ -97,7 +97,16 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         // Calculate combined confidence (0.0 to 1.0)
         val peakConf = min(1.0, dominantPeakProminence * 1.5)
         val classConf = plausibilityClassification.confidence
-        val combinedConfidence = min(1.0, (peakConf * 0.45) + (persistence * 0.35) + (classConf * 0.20))
+        val rawConfidence = min(1.0, (peakConf * 0.45) + (persistence * 0.35) + (classConf * 0.20))
+        // TASK 2: Multiplicative persistence gate. If persistence is below 25%, apply a severe penalty
+        // to prevent pure noise (which naturally has 0% persistence but can hit high peak/class confidence)
+        // from reaching the 60% baseline acceptance threshold.
+        val persistenceFactor = if (persistence < 0.25) {
+            0.3 + (0.7 * (persistence / 0.25))
+        } else {
+            1.0
+        }
+        val combinedConfidence = rawConfidence * persistenceFactor
 
         val dominantPsd = when (dominantAxis) {
             "X" -> spectrum.psdX.powerSpectralDensity

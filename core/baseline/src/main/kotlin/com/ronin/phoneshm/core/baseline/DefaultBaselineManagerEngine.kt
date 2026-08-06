@@ -40,6 +40,15 @@ class DefaultBaselineManagerEngine(
             try {
                 baselineDao.deleteOrphanedLegacyProfiles()
                 baselineDao.deleteOrphanedLegacyHistory()
+                
+                // TASK 1 (Fix): Clear contaminated test data for the demo_building composite key exactly once
+                val cleanupFlag = File(baselineDir, ".cleanup_demo_building_done")
+                if (!cleanupFlag.exists()) {
+                    val contaminatedKey = "demo_building_building_profile_active"
+                    baselineDao.deleteProfile(contaminatedKey)
+                    baselineDao.deleteHistory(contaminatedKey)
+                    cleanupFlag.createNewFile()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -128,6 +137,7 @@ class DefaultBaselineManagerEngine(
         val profile = baselineDao.getProfile(compositeKey)
         if (profile != null) {
             baselineDao.deleteProfile(compositeKey)
+            baselineDao.deleteHistory(compositeKey)
             return true
         }
         return false

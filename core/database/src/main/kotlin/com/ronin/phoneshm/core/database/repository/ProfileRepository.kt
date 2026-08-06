@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
  */
 interface ProfileRepository {
     suspend fun saveBuildingProfile(profile: BuildingProfile)
-    suspend fun getBuildingProfile(id: String): BuildingProfile?
+    suspend fun getBuildingProfile(buildingHash: String): BuildingProfile?
     fun getAllBuildingProfiles(): Flow<List<BuildingProfile>>
 
     suspend fun saveMeasurementProfile(profile: MeasurementProfile)

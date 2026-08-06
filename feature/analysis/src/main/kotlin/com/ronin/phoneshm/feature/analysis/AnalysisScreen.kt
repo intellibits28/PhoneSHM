@@ -48,6 +48,7 @@ import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
 @Composable
 fun AnalysisScreen(
     viewModel: AnalysisViewModel = viewModel(),
+    buildingHash: String = java.util.UUID.randomUUID().toString(),
     onBackToMeasurement: () -> Unit = {},
     onNavigateToReport: (f0: Double, anomaly: Boolean, quality: String, building: String) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
@@ -78,7 +79,7 @@ fun AnalysisScreen(
 
     LaunchedEffect(Unit) {
         if (uiState.modalResult == null && !uiState.isAnalyzing) {
-            viewModel.analyzeSessionFileOrDemo(uiState.analyzedFilePath)
+            viewModel.analyzeSessionFileOrDemo(filePath = uiState.analyzedFilePath, buildingHash = buildingHash)
         }
     }
 

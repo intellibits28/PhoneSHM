@@ -38,6 +38,9 @@ interface BaselineDao {
     @Query("DELETE FROM baseline_profiles WHERE buildingHash = :buildingHash")
     suspend fun deleteProfile(buildingHash: String)
 
+    @Query("DELETE FROM baseline_history WHERE buildingHash = :buildingHash")
+    suspend fun deleteHistory(buildingHash: String)
+
     @Query("DELETE FROM baseline_profiles WHERE INSTR(buildingHash, '_') = 0")
     suspend fun deleteOrphanedLegacyProfiles()
 

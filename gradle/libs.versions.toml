@@ -12,6 +12,7 @@ coroutines = "1.8.1"
 room = "2.6.1"
 firebaseBom = "33.1.0"
 googleServices = "4.4.2"
+firebaseAppdistribution = "5.0.0"
 workManager = "2.9.0"
 
 [libraries]
@@ -47,3 +48,4 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-appdistribution = { id = "com.google.firebase.appdistribution", version.ref = "firebaseAppdistribution" }

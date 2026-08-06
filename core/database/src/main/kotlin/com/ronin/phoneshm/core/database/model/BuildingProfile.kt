@@ -4,11 +4,11 @@ package com.ronin.phoneshm.core.database.model
  * BuildingProfile represents the domain model for structural typology and material properties.
  */
 data class BuildingProfile(
-    val id: String,
-    val name: String,
-    val type: String,               // RESIDENTIAL_CONCRETE, COMMERCIAL_STEEL, MASONRY, HERITAGE_WOOD, INDUSTRIAL, OTHER
+    val buildingHash: String,
+    val displayName: String,
+    val buildingType: String,
     val floors: Int? = null,
-    val constructionYear: Int? = null,
     val material: String? = null,
-    val buildingHash: String? = null // Crowdsourced anonymized spatial cluster ID
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastUsedAt: Long = System.currentTimeMillis()
 )

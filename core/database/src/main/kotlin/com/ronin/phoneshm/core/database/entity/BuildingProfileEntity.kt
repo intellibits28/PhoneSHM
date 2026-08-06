@@ -18,11 +18,11 @@ enum class BuildingType {
 @Entity(tableName = "building_profiles")
 data class BuildingProfileEntity(
     @PrimaryKey
-    val id: String,
-    val name: String,
-    val type: String,
+    val buildingHash: String,
+    val displayName: String,
+    val buildingType: String,
     val floors: Int?,
-    val constructionYear: Int?,
     val material: String?,
-    val buildingHash: String?
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastUsedAt: Long = System.currentTimeMillis()
 )

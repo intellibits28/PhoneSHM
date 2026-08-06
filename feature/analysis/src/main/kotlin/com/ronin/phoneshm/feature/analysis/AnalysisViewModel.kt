@@ -86,7 +86,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         filePath: String?,
         buildingType: String = "RESIDENTIAL_CONCRETE",
         floors: Int = 3,
-        buildingHash: String = "demo_building"
+        buildingHash: String = java.util.UUID.randomUUID().toString()
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(

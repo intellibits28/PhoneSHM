@@ -16,10 +16,10 @@ interface ProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBuildingProfile(profile: BuildingProfileEntity)
 
-    @Query("SELECT * FROM building_profiles WHERE id = :id")
-    suspend fun getBuildingProfileById(id: String): BuildingProfileEntity?
+    @Query("SELECT * FROM building_profiles WHERE buildingHash = :buildingHash")
+    suspend fun getBuildingProfileByHash(buildingHash: String): BuildingProfileEntity?
 
-    @Query("SELECT * FROM building_profiles")
+    @Query("SELECT * FROM building_profiles ORDER BY lastUsedAt DESC")
     fun getAllBuildingProfilesFlow(): Flow<List<BuildingProfileEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

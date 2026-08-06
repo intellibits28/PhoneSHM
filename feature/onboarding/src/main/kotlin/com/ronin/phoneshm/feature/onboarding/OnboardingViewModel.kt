@@ -205,19 +205,18 @@ class OnboardingViewModel(
                     }
                 }
 
+                val hashToUse = finalHash ?: "crowd_anonymized_$bId"
                 val buildingProfile = BuildingProfile(
-                    id = bId,
-                    name = s.buildingName,
-                    type = s.buildingType,
+                    buildingHash = hashToUse,
+                    displayName = s.buildingName,
+                    buildingType = s.buildingType,
                     floors = s.floors.toIntOrNull() ?: 1,
-                    constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
-                    material = s.material,
-                    buildingHash = finalHash ?: "crowd_anonymized_$bId"
+                    material = s.material
                 )
 
                 val measurementProfile = MeasurementProfile(
                     id = mId,
-                    buildingId = bId,
+                    buildingId = hashToUse,
                     floorLevel = s.floorLevel.toIntOrNull() ?: 1,
                     surfaceType = s.surfaceType,
                     locationType = s.locationType,
@@ -232,7 +231,7 @@ class OnboardingViewModel(
                 _state.value = _state.value.copy(
                     isSaving = false,
                     isCompleted = true,
-                    savedBuildingId = bId,
+                    savedBuildingId = hashToUse, // the hash is the primary identifier now
                     savedMeasurementId = mId,
                     step = 5
                 )
@@ -240,5 +239,13 @@ class OnboardingViewModel(
                 _state.value = _state.value.copy(isSaving = false, errorMessage = "Save error: ${e.message}")
             }
         }
+    }
+
+    suspend fun checkBuildingExists(hash: String): Boolean {
+        return profileRepository?.getBuildingProfile(hash) != null
+    }
+
+    fun getAllBuildingProfiles(): kotlinx.coroutines.flow.Flow<List<com.ronin.phoneshm.core.database.model.BuildingProfile>> {
+        return profileRepository?.getAllBuildingProfiles() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
 }
