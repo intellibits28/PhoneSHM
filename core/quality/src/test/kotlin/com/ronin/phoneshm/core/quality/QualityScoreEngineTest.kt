@@ -40,7 +40,15 @@ class QualityScoreEngineTest {
     fun testQualityScoreCalculation() {
         val engine = FakeQualityScoreEngine()
         val meta = MeasurementSessionMetadata(
-            "s_1", "p_1", "d_1", 30, 100, 100f, 1.5f, 50f, "/path"
+            sessionId = "s_1", 
+            measurementProfileId = "p_1", 
+            deviceCapabilityReportId = "d_1", 
+            targetDurationSeconds = 30, 
+            targetSampleRateHz = 100, 
+            actualAverageSampleRateHz = 100f, 
+            sampleJitterStdMs = 1.5f, 
+            clockDriftPpm = 50f, 
+            rawStorageFileUri = "/path"
         )
         val dev = DeviceCapabilityReport("Mi", "Bosch", 200, 0.5f, floatArrayOf(0f, 0f, 0f), SensorQualityTier.RESEARCH_GRADE)
         val aud = AudioContextResult("quiet", 0.95, 0.05f, 200f, 0.4f)

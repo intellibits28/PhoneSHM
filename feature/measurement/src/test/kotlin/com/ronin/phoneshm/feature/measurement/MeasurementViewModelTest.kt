@@ -36,6 +36,8 @@ class MeasurementViewModelTest {
         override suspend fun recordSession(
             sessionId: String,
             profileId: String,
+            buildingHash: String?,
+            buildingDisplayName: String?,
             durationSec: Int
         ): MeasurementSessionMetadata {
             recordSessionCalledCount++

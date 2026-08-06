@@ -34,6 +34,7 @@ dependencies {
     implementation(project(":core:audio"))
     implementation(project(":core:quality"))
     implementation(project(":core:physics"))
+    implementation(project(":core:database"))
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

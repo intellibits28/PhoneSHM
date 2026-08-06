@@ -2,6 +2,7 @@ package com.ronin.phoneshm.feature.measurement
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ronin.phoneshm.core.database.repository.ProfileRepository
 import com.ronin.phoneshm.core.sensor.VibrationSensorEngine
 import java.util.UUID
 import kotlinx.coroutines.Job
@@ -29,7 +30,8 @@ data class MeasurementUiState(
  * MeasurementViewModel controls live sensor recording HUD, circular buffer extraction, and state.
  */
 class MeasurementViewModel(
-    private val sensorEngine: VibrationSensorEngine
+    private val sensorEngine: VibrationSensorEngine,
+    private val profileRepository: ProfileRepository? = null
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MeasurementUiState())
     val uiState: StateFlow<MeasurementUiState> = _uiState.asStateFlow()
@@ -38,7 +40,7 @@ class MeasurementViewModel(
     private var streamingJob: Job? = null
 
     fun startRecording(
-        profileId: String,
+        buildingHash: String,
         durationSec: Int,
         onSessionRecorded: ((sessionId: String, rawStorageFileUri: String) -> Unit)? = null
     ) {
@@ -84,7 +86,17 @@ class MeasurementViewModel(
         // 2. Continuous record session
         recordingJob = viewModelScope.launch {
             try {
-                val metadata = sensorEngine.recordSession(sessionId, profileId, durationSec)
+                // Fetch building display name if we have the repository
+                val buildingProfile = profileRepository?.getBuildingProfile(buildingHash)
+                val displayName = buildingProfile?.displayName
+
+                val metadata = sensorEngine.recordSession(
+                    sessionId = sessionId, 
+                    profileId = "ambient_baseline_continuous", 
+                    buildingHash = buildingHash,
+                    buildingDisplayName = displayName,
+                    durationSec = durationSec
+                )
                 streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
                     isRecording = false,

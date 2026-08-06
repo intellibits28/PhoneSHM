@@ -104,7 +104,7 @@ class OnboardingViewModelTest {
 
         assertTrue(viewModel.state.value.isCompleted)
         assertEquals(5, viewModel.state.value.step)
-        assertEquals("Tower 101", repo.savedBuilding?.name)
+        assertEquals("Tower 101", repo.savedBuilding?.displayName)
         assertEquals("hash_16.8409_96.1735_Tower 101", repo.savedBuilding?.buildingHash)
         assertEquals("CERAMIC_TILE", repo.savedMeasurement?.surfaceType)
     }

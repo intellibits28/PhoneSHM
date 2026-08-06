@@ -19,6 +19,8 @@ data class AccelerationSample(
 data class MeasurementSessionMetadata(
     val sessionId: String,
     val measurementProfileId: String,
+    val buildingHash: String? = null,
+    val buildingDisplayName: String? = null,
     val deviceCapabilityReportId: String,
     val targetDurationSeconds: Int,
     val targetSampleRateHz: Int = 100,
@@ -44,5 +46,11 @@ interface VibrationSensorEngine {
      * Records a complete session of durationSec, writing high-density raw samples to local storage
      * and returning verified session metadata.
      */
-    suspend fun recordSession(sessionId: String, profileId: String, durationSec: Int = 30): MeasurementSessionMetadata
+    suspend fun recordSession(
+        sessionId: String, 
+        profileId: String, 
+        buildingHash: String? = null, 
+        buildingDisplayName: String? = null, 
+        durationSec: Int = 30
+    ): MeasurementSessionMetadata
 }

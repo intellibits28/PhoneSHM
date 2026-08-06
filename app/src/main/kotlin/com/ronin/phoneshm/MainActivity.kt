@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
         val measurementFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return com.ronin.phoneshm.feature.measurement.MeasurementViewModel(sensorEngine) as T
+                return com.ronin.phoneshm.feature.measurement.MeasurementViewModel(sensorEngine, profileRepo) as T
             }
         }
 

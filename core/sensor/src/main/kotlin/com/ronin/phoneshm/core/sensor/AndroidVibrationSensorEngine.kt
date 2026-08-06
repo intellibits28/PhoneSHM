@@ -67,6 +67,8 @@ class AndroidVibrationSensorEngine(
     override suspend fun recordSession(
         sessionId: String,
         profileId: String,
+        buildingHash: String?,
+        buildingDisplayName: String?,
         durationSec: Int
     ): MeasurementSessionMetadata = withContext(Dispatchers.Default) {
         val capabilityReport = deviceCapabilityEngine.inspectDeviceCapabilities()
@@ -162,6 +164,8 @@ class AndroidVibrationSensorEngine(
         val metadata = MeasurementSessionMetadata(
             sessionId = sessionId,
             measurementProfileId = profileId,
+            buildingHash = buildingHash,
+            buildingDisplayName = buildingDisplayName,
             deviceCapabilityReportId = capabilityReport.qualityTier.name,
             targetDurationSeconds = durationSec,
             targetSampleRateHz = 100,

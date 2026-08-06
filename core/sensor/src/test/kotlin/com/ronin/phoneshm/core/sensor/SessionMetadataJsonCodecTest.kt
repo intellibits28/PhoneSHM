@@ -71,6 +71,8 @@ class SessionMetadataJsonCodecTest {
         val meta = MeasurementSessionMetadata(
             sessionId = "session_123",
             measurementProfileId = "ambient_baseline_continuous",
+            buildingHash = "hash123",
+            buildingDisplayName = "Test Building",
             deviceCapabilityReportId = "RESEARCH_GRADE",
             targetDurationSeconds = 600,
             targetSampleRateHz = 100,
@@ -101,5 +103,7 @@ class SessionMetadataJsonCodecTest {
         org.junit.Assert.assertEquals("1.2.0-research-grade", decodedPair!!.first.appVersionName)
         org.junit.Assert.assertEquals(1, decodedPair.first.appVersionCode)
         org.junit.Assert.assertEquals("3fad21f", decodedPair.first.gitCommitHash)
+        org.junit.Assert.assertEquals("hash123", decodedPair.first.buildingHash)
+        org.junit.Assert.assertEquals("Test Building", decodedPair.first.buildingDisplayName)
     }
 }

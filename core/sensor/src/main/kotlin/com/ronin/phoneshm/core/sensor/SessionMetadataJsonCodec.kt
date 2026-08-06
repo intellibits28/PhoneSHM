@@ -11,6 +11,8 @@ object SessionMetadataJsonCodec {
         val metaJson = JSONObject().apply {
             put("sessionId", metadata.sessionId)
             put("measurementProfileId", metadata.measurementProfileId)
+            metadata.buildingHash?.let { put("buildingHash", it) }
+            metadata.buildingDisplayName?.let { put("buildingDisplayName", it) }
             put("deviceCapabilityReportId", metadata.deviceCapabilityReportId)
             put("targetDurationSeconds", metadata.targetDurationSeconds)
             put("targetSampleRateHz", metadata.targetSampleRateHz)
@@ -48,6 +50,8 @@ object SessionMetadataJsonCodec {
             val sessionMeta = MeasurementSessionMetadata(
                 sessionId = metaJson.getString("sessionId"),
                 measurementProfileId = metaJson.getString("measurementProfileId"),
+                buildingHash = if (metaJson.has("buildingHash")) metaJson.getString("buildingHash") else null,
+                buildingDisplayName = if (metaJson.has("buildingDisplayName")) metaJson.getString("buildingDisplayName") else null,
                 deviceCapabilityReportId = metaJson.getString("deviceCapabilityReportId"),
                 targetDurationSeconds = metaJson.getInt("targetDurationSeconds"),
                 targetSampleRateHz = metaJson.getInt("targetSampleRateHz"),
