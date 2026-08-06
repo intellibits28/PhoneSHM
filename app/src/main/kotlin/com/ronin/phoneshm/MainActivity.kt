@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -81,6 +85,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val prefs = getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val initialBuildingId = prefs.getString("active_building_id", "") ?: ""
+        val initialMeasurementId = prefs.getString("active_measurement_id", "") ?: ""
+        val initialScreen = if (initialBuildingId.isNotEmpty()) "MEASUREMENT" else "ONBOARDING"
+
         setContent {
             MaterialTheme {
                 Surface(
@@ -89,7 +98,16 @@ class MainActivity : ComponentActivity() {
                 ) {
                     PhoneShmAppHost(
                         onboardingFactory = onboardingFactory,
-                        measurementFactory = measurementFactory
+                        measurementFactory = measurementFactory,
+                        initialScreen = initialScreen,
+                        initialBuildingId = initialBuildingId,
+                        initialMeasurementId = initialMeasurementId,
+                        onSessionUpdated = { bId, mId ->
+                            prefs.edit()
+                                .putString("active_building_id", bId)
+                                .putString("active_measurement_id", mId)
+                                .apply()
+                        }
                     )
                 }
             }
@@ -97,26 +115,63 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+fun resolveStartupScreen(
+    persistedBuildingId: String?,
+    buildingExistsInRoom: Boolean,
+    initialScreen: String = "LOADING"
+): String {
+    return if (!persistedBuildingId.isNullOrEmpty() && buildingExistsInRoom) {
+        if (initialScreen == "LOADING") "MEASUREMENT" else initialScreen
+    } else {
+        "ONBOARDING"
+    }
+}
+
 @Composable
 fun PhoneShmAppHost(
     onboardingFactory: ViewModelProvider.Factory,
-    measurementFactory: ViewModelProvider.Factory
+    measurementFactory: ViewModelProvider.Factory,
+    initialScreen: String = "ONBOARDING",
+    initialBuildingId: String = "",
+    initialMeasurementId: String = "",
+    onSessionUpdated: (String, String) -> Unit = { _, _ -> }
 ) {
-    var currentScreen by remember { mutableStateOf("ONBOARDING") }
-    var activeBuildingId by remember { mutableStateOf("") }
-    var activeMeasurementId by remember { mutableStateOf("") }
+    var currentScreen by remember { mutableStateOf(if (initialBuildingId.isNotEmpty()) "LOADING" else "ONBOARDING") }
+    var activeBuildingId by remember { mutableStateOf(initialBuildingId) }
+    var activeMeasurementId by remember { mutableStateOf(initialMeasurementId) }
 
     val onboardingViewModel: OnboardingViewModel = viewModel(factory = onboardingFactory)
     val measurementViewModel: com.ronin.phoneshm.feature.measurement.MeasurementViewModel = viewModel(factory = measurementFactory)
     val analysisViewModel: AnalysisViewModel = viewModel()
     val reportViewModel: ReportViewModel = viewModel()
 
-    if (currentScreen == "ONBOARDING") {
+    var showSwitcherDialog by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(initialBuildingId) {
+        if (initialBuildingId.isNotEmpty()) {
+            val exists = onboardingViewModel.checkBuildingExists(initialBuildingId)
+            val resolvedScreen = resolveStartupScreen(initialBuildingId, exists, initialScreen)
+            currentScreen = resolvedScreen
+            
+            if (resolvedScreen == "ONBOARDING") {
+                onSessionUpdated("", "")
+                activeBuildingId = ""
+                activeMeasurementId = ""
+            }
+        }
+    }
+
+    if (currentScreen == "LOADING") {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.CircularProgressIndicator()
+        }
+    } else if (currentScreen == "ONBOARDING") {
         OnboardingScreen(
             viewModel = onboardingViewModel,
             onFinished = { bId, mId ->
                 activeBuildingId = bId
                 activeMeasurementId = mId
+                onSessionUpdated(bId, mId)
                 currentScreen = "MEASUREMENT"
             }
         )
@@ -128,6 +183,7 @@ fun PhoneShmAppHost(
     } else if (currentScreen == "ANALYSIS") {
         AnalysisScreen(
             viewModel = analysisViewModel,
+            buildingHash = activeBuildingId,
             onBackToMeasurement = { currentScreen = "MEASUREMENT" },
             onNavigateToReport = { f0, anomaly, quality, building ->
                 reportViewModel.setReportSummary(
@@ -147,12 +203,21 @@ fun PhoneShmAppHost(
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "PhoneSHM Active Session HUD",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "PhoneSHM Session HUD",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Button(onClick = { showSwitcherDialog = true }) {
+                                Text("Switch / New")
+                            }
+                        }
                         Text(
                             text = "Building ID: $activeBuildingId | Profile: $activeMeasurementId",
                             style = MaterialTheme.typography.bodySmall,
@@ -171,6 +236,7 @@ fun PhoneShmAppHost(
             ) {
                 MeasurementScreen(
                     viewModel = measurementViewModel,
+                    activeBuildingHash = activeBuildingId,
                     modifier = Modifier.weight(1f),
                     onNavigateToAnalysis = { fileUri ->
                         val onboardState = onboardingViewModel.state.value
@@ -186,11 +252,55 @@ fun PhoneShmAppHost(
                         currentScreen = "ANALYSIS"
                     }
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = { currentScreen = "ONBOARDING" }) {
-                    Text("<- Back to Profile Wizard")
-                }
             }
+        }
+        
+        if (showSwitcherDialog) {
+            val profiles by onboardingViewModel.getAllBuildingProfiles().collectAsState(initial = emptyList())
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showSwitcherDialog = false },
+                title = { Text("Select Building Profile") },
+                text = {
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(profiles.size) { index ->
+                            val profile = profiles[index]
+                            androidx.compose.material3.Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable {
+                                        activeBuildingId = profile.buildingHash
+                                        // For simplicity, we just reuse the activeMeasurementId or generate a mock.
+                                        // A fully complete system would tie a MeasurementProfile to the selected building properly.
+                                        onSessionUpdated(activeBuildingId, activeMeasurementId)
+                                        showSwitcherDialog = false
+                                    },
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = if (profile.buildingHash == activeBuildingId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(profile.displayName, fontWeight = FontWeight.Bold)
+                                    Text("${profile.buildingType} - ${profile.buildingHash}", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { 
+                        showSwitcherDialog = false
+                        currentScreen = "ONBOARDING" 
+                    }) {
+                        Text("New Building")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { showSwitcherDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

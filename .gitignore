@@ -36,3 +36,9 @@ scratch/
 logs_and_others/
 
 parse_snr.py
+test_output*.txt
+viewmodel_diff.txt
+patch2.py
+patch_worker.py
+pr_desc.md
+issue_desc.md
