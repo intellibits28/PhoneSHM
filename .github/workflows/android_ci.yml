@@ -8,6 +8,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -39,6 +40,15 @@ jobs:
         with:
           name: phoneshm-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload to Firebase App Distribution
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: 1:890891071272:android:660b495463fa8d73a9aa1d
+          serviceCredentialsFileContent: ${{ secrets.CREDENTIAL_FILE_CONTENT }}
+          groups: trusted-testers
+          file: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Test Results
         if: always()
