@@ -18,12 +18,20 @@ class VibrationSensorEngineTest {
         }
 
         override suspend fun recordSession(
-        sessionId: String,
-        profileId: String,
-        buildingHash: String?,
-        buildingDisplayName: String?,
-        durationSec: Int
-    ): MeasurementSessionMetadata {
+            sessionId: String,
+            profileId: String,
+            buildingHash: String?,
+            buildingDisplayName: String?,
+            buildingType: String?,
+            floors: Int?,
+            constructionYear: Int?,
+            primaryMaterial: String?,
+            measurementFloorLevel: Int?,
+            surfaceType: String?,
+            locationType: String?,
+            phonePlacement: String?,
+            durationSec: Int
+        ): MeasurementSessionMetadata {
             return MeasurementSessionMetadata(
                 sessionId = sessionId,
                 measurementProfileId = profileId,
@@ -41,7 +49,11 @@ class VibrationSensorEngineTest {
     @Test
     fun testRecordSessionMetadata() = runTest {
         val engine = FakeVibrationSensorEngine()
-        val meta = engine.recordSession("session_abc", "profile_xyz", null, null, 30)
+        val meta = engine.recordSession(
+            sessionId = "session_abc", 
+            profileId = "profile_xyz",
+            durationSec = 30
+        )
         assertEquals("session_abc", meta.sessionId)
         assertTrue(meta.sampleJitterStdMs < 3.0f)
         assertEquals(45.0f, meta.clockDriftPpm, 0.001f)

@@ -8,6 +8,7 @@ data class BuildingProfile(
     val displayName: String,
     val buildingType: String,
     val floors: Int? = null,
+    val constructionYear: Int? = null,
     val material: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val lastUsedAt: Long = System.currentTimeMillis()

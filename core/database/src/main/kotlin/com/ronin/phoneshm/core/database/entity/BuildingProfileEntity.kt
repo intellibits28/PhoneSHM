@@ -22,6 +22,7 @@ data class BuildingProfileEntity(
     val displayName: String,
     val buildingType: String,
     val floors: Int?,
+    val constructionYear: Int?,
     val material: String?,
     val createdAt: Long = System.currentTimeMillis(),
     val lastUsedAt: Long = System.currentTimeMillis()

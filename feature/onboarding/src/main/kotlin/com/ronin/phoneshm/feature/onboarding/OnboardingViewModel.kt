@@ -211,6 +211,7 @@ class OnboardingViewModel(
                     displayName = s.buildingName,
                     buildingType = s.buildingType,
                     floors = s.floors.toIntOrNull() ?: 1,
+                    constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
                     material = s.material
                 )
 

@@ -21,6 +21,7 @@ class ProfileRepositoryImpl(
             displayName = profile.displayName,
             buildingType = profile.buildingType,
             floors = profile.floors,
+            constructionYear = profile.constructionYear,
             material = profile.material,
             createdAt = profile.createdAt,
             lastUsedAt = profile.lastUsedAt
@@ -35,6 +36,7 @@ class ProfileRepositoryImpl(
             displayName = entity.displayName,
             buildingType = entity.buildingType,
             floors = entity.floors,
+            constructionYear = entity.constructionYear,
             material = entity.material,
             createdAt = entity.createdAt,
             lastUsedAt = entity.lastUsedAt
@@ -49,6 +51,7 @@ class ProfileRepositoryImpl(
                     displayName = entity.displayName,
                     buildingType = entity.buildingType,
                     floors = entity.floors,
+                    constructionYear = entity.constructionYear,
                     material = entity.material,
                     createdAt = entity.createdAt,
                     lastUsedAt = entity.lastUsedAt

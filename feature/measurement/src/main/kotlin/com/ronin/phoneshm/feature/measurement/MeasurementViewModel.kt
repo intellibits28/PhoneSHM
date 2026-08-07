@@ -41,6 +41,7 @@ class MeasurementViewModel(
 
     fun startRecording(
         buildingHash: String,
+        measurementId: String,
         durationSec: Int,
         onSessionRecorded: ((sessionId: String, rawStorageFileUri: String) -> Unit)? = null
     ) {
@@ -86,15 +87,23 @@ class MeasurementViewModel(
         // 2. Continuous record session
         recordingJob = viewModelScope.launch {
             try {
-                // Fetch building display name if we have the repository
                 val buildingProfile = profileRepository?.getBuildingProfile(buildingHash)
+                val measurementProfile = profileRepository?.getMeasurementProfile(measurementId)
                 val displayName = buildingProfile?.displayName
 
                 val metadata = sensorEngine.recordSession(
                     sessionId = sessionId, 
-                    profileId = "ambient_baseline_continuous", 
+                    profileId = measurementId, 
                     buildingHash = buildingHash,
                     buildingDisplayName = displayName,
+                    buildingType = buildingProfile?.buildingType,
+                    floors = buildingProfile?.floors,
+                    constructionYear = buildingProfile?.constructionYear,
+                    primaryMaterial = buildingProfile?.material,
+                    measurementFloorLevel = measurementProfile?.floorLevel,
+                    surfaceType = measurementProfile?.surfaceType,
+                    locationType = measurementProfile?.locationType,
+                    phonePlacement = measurementProfile?.placement,
                     durationSec = durationSec
                 )
                 streamingJob?.cancel()

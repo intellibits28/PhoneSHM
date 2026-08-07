@@ -38,6 +38,14 @@ class MeasurementViewModelTest {
             profileId: String,
             buildingHash: String?,
             buildingDisplayName: String?,
+            buildingType: String?,
+            floors: Int?,
+            constructionYear: Int?,
+            primaryMaterial: String?,
+            measurementFloorLevel: Int?,
+            surfaceType: String?,
+            locationType: String?,
+            phonePlacement: String?,
             durationSec: Int
         ): MeasurementSessionMetadata {
             recordSessionCalledCount++
@@ -75,7 +83,7 @@ class MeasurementViewModelTest {
         assertFalse(viewModel.uiState.value.recordingFinished)
 
         // Start recording for 1 second
-        viewModel.startRecording("profile_xyz", 1)
+        viewModel.startRecording("b_hash_123", "m_hash_456", 1)
         
         // Wait for recording to complete (runTest scheduler fast forwards delays)
         delay(1200L)

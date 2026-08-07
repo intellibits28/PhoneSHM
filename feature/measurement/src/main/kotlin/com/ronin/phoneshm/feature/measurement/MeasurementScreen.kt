@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 fun MeasurementScreen(
     viewModel: MeasurementViewModel,
     activeBuildingHash: String,
+    activeMeasurementId: String,
     modifier: Modifier = Modifier,
     onNavigateToAnalysis: (String?) -> Unit = {}
 ) {
@@ -335,7 +336,11 @@ fun MeasurementScreen(
             } else {
                 Button(
                     onClick = {
-                        viewModel.startRecording(activeBuildingHash, 10) { sid, uri ->
+                        viewModel.startRecording(
+                            buildingHash = activeBuildingHash,
+                            measurementId = activeMeasurementId,
+                            durationSec = 10
+                        ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
                     },
@@ -345,7 +350,11 @@ fun MeasurementScreen(
                 }
                 Button(
                     onClick = {
-                        viewModel.startRecording(activeBuildingHash, 30) { sid, uri ->
+                        viewModel.startRecording(
+                            buildingHash = activeBuildingHash,
+                            measurementId = activeMeasurementId,
+                            durationSec = 30
+                        ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
                     },
@@ -359,7 +368,11 @@ fun MeasurementScreen(
                         // For the demo, we use a placeholder lookup.
                         val config = com.ronin.phoneshm.core.physics.PhysicsRulesConfig.loadBundledConfig()
                         val duration = config.getRecommendedDurationSec("RESIDENTIAL_CONCRETE", 3)
-                        viewModel.startRecording(activeBuildingHash, duration) { sid, uri ->
+                        viewModel.startRecording(
+                            buildingHash = activeBuildingHash,
+                            measurementId = activeMeasurementId,
+                            durationSec = duration
+                        ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
                     },
@@ -406,7 +419,11 @@ fun MeasurementScreen(
                     androidx.compose.material3.TextButton(
                         onClick = {
                             showBatteryWarningDialog = false
-                            viewModel.startRecording(activeBuildingHash, 600) { sid, uri ->
+                            viewModel.startRecording(
+                                buildingHash = activeBuildingHash,
+                                measurementId = activeMeasurementId,
+                                durationSec = 600
+                            ) { sid, uri ->
                                 com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                             }
                         }
@@ -425,7 +442,11 @@ fun MeasurementScreen(
                     if (com.ronin.phoneshm.core.device.BatteryOptimizationHelper.shouldShowBatteryWarning(context)) {
                         showBatteryWarningDialog = true
                     } else {
-                        viewModel.startRecording(activeBuildingHash, 600) { sid, uri ->
+                        viewModel.startRecording(
+                            buildingHash = activeBuildingHash,
+                            measurementId = activeMeasurementId,
+                            durationSec = 600
+                        ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
                     }

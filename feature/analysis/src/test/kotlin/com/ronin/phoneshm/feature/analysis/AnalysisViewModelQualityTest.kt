@@ -67,7 +67,7 @@ class AnalysisViewModelQualityTest {
                 "buildingName": "Test Bldg",
                 "buildingHash": "hash1",
                 "floors": 3,
-                "constructionYear": "2000-2010",
+                "constructionYear": 2005,
                 "material": "Reinforced Concrete",
                 "floorLevel": "Ground",
                 "surfaceType": "Tile",

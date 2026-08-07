@@ -237,6 +237,7 @@ fun PhoneShmAppHost(
                 MeasurementScreen(
                     viewModel = measurementViewModel,
                     activeBuildingHash = activeBuildingId,
+                    activeMeasurementId = activeMeasurementId,
                     modifier = Modifier.weight(1f),
                     onNavigateToAnalysis = { fileUri ->
                         val onboardState = onboardingViewModel.state.value

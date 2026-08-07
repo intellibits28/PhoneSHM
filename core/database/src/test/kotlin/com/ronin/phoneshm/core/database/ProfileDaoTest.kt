@@ -13,6 +13,7 @@ class ProfileDaoTest {
             displayName = "Test Building",
             buildingType = "RESIDENTIAL_CONCRETE",
             floors = 12,
+            constructionYear = 2020,
             material = "Concrete"
         )
         assertEquals("hash_123", entity.buildingHash)

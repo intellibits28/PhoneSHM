@@ -22,7 +22,7 @@ import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
         BaselineProfileEntity::class,
         BaselineHistoryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class PhoneShmDatabase : RoomDatabase() {
