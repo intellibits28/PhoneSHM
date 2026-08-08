@@ -42,6 +42,8 @@ class MeasurementViewModelTest {
             floors: Int?,
             constructionYear: Int?,
             primaryMaterial: String?,
+            latitude: Double?,
+            longitude: Double?,
             measurementFloorLevel: Int?,
             surfaceType: String?,
             locationType: String?,
