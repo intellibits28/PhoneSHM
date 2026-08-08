@@ -35,8 +35,8 @@ class AndroidLocationResolver(
     override suspend fun resolveLocation(privacyLevel: PrivacyLevel): LocationProfile? {
         if (privacyLevel == PrivacyLevel.LOCAL_ONLY) {
             return LocationProfile(
-                latitude = 0.0,
-                longitude = 0.0,
+                latitude = null,
+                longitude = null,
                 accuracyMeters = 0.0f,
                 source = "LOCAL_ONLY",
                 buildingHash = "local_only_anonymized",

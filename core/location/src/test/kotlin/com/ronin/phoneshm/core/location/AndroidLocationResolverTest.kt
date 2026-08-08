@@ -56,8 +56,8 @@ class AndroidLocationResolverTest {
 
         val localProfile = resolver.resolveLocation(PrivacyLevel.LOCAL_ONLY)
         assertNotNull(localProfile)
-        assertEquals(0.0, localProfile?.latitude ?: 0.0, 0.0)
-        assertEquals(0.0, localProfile?.longitude ?: 0.0, 0.0)
+        org.junit.Assert.assertNull(localProfile?.latitude)
+        org.junit.Assert.assertNull(localProfile?.longitude)
         assertEquals("local_only_anonymized", localProfile?.buildingHash)
     }
 }

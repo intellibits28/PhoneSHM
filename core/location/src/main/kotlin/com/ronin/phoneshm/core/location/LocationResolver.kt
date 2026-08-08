@@ -10,8 +10,8 @@ enum class PrivacyLevel {
  * LocationProfile encapsulates geographic position and unique crowdsourcing buildingHash ID.
  */
 data class LocationProfile(
-    val latitude: Double,
-    val longitude: Double,
+    val latitude: Double?,
+    val longitude: Double?,
     val accuracyMeters: Float,
     val source: String,
     val buildingHash: String, // SHA-256 or geohash representing unique physical structural identity
