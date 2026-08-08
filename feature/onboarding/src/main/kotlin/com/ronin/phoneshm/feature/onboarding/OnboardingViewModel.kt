@@ -216,7 +216,9 @@ class OnboardingViewModel(
                     buildingType = s.buildingType,
                     floors = s.floors.toIntOrNull() ?: 1,
                     constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
-                    material = s.material
+                    material = s.material,
+                    latitude = s.resolvedLatitude,
+                    longitude = s.resolvedLongitude
                 )
 
                 val measurementProfile = MeasurementProfile(
@@ -254,10 +256,16 @@ class OnboardingViewModel(
         return profileRepository?.getAllBuildingProfiles() ?: kotlinx.coroutines.flow.flowOf(emptyList())
     }
 
+    suspend fun getMeasurementProfilesForBuilding(hash: String): List<com.ronin.phoneshm.core.database.model.MeasurementProfile> {
+        return profileRepository?.getMeasurementProfilesForBuilding(hash) ?: emptyList()
+    }
+
     fun loadProfileForEditing(hash: String) {
         viewModelScope.launch {
             val building = profileRepository?.getBuildingProfile(hash) ?: return@launch
             val hasSessions = profileRepository.hasAnyRecordingForBuilding(hash)
+            val measurementProfiles = profileRepository.getMeasurementProfilesForBuilding(hash)
+            val measurementId = measurementProfiles.firstOrNull()?.id
             
             _state.value = OnboardingState(
                 step = if (hasSessions) 5 else 1,
@@ -269,10 +277,9 @@ class OnboardingViewModel(
                 constructionYear = building.constructionYear?.toString() ?: "2020",
                 material = building.material ?: "Unknown",
                 resolvedBuildingHash = building.buildingHash,
-                savedBuildingId = building.buildingHash // preserve original hash
+                savedBuildingId = building.buildingHash, // preserve original hash
+                savedMeasurementId = measurementId
             )
-            // Note: In a complete implementation we'd also load the measurement profile,
-            // but the simplified workflow keeps it to the building primarily.
         }
     }
 

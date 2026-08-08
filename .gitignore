@@ -43,3 +43,4 @@ patch*.py
 .agy_scratch/
 app-distribution.json
 google-services.json
+phoneshm-research-firebase-adminsdk-fbsvc-af2bf25fdc.json

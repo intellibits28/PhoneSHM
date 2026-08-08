@@ -14,6 +14,7 @@ interface ProfileRepository {
 
     suspend fun saveMeasurementProfile(profile: MeasurementProfile)
     suspend fun getMeasurementProfile(id: String): MeasurementProfile?
+    suspend fun getMeasurementProfilesForBuilding(buildingHash: String): List<MeasurementProfile>
 
     suspend fun hasAnyRecordingForBuilding(buildingHash: String): Boolean
     suspend fun deleteBuildingAndRelatedData(buildingHash: String)

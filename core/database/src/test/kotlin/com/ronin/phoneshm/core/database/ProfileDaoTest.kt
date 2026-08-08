@@ -14,7 +14,9 @@ class ProfileDaoTest {
             buildingType = "RESIDENTIAL_CONCRETE",
             floors = 12,
             constructionYear = 2020,
-            material = "Concrete"
+            material = "Concrete",
+            latitude = 37.7749,
+            longitude = -122.4194
         )
         assertEquals("hash_123", entity.buildingHash)
         assertEquals(12, entity.floors)

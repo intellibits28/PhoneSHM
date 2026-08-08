@@ -10,5 +10,10 @@ service cloud.firestore {
         allow read, update, delete: if false;
       }
     }
+    
+    match /deletionRequests/{requestId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
   }
 }

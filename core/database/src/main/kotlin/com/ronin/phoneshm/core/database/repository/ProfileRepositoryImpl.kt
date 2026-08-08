@@ -26,6 +26,8 @@ class ProfileRepositoryImpl(
             floors = profile.floors,
             constructionYear = profile.constructionYear,
             material = profile.material,
+            latitude = profile.latitude,
+            longitude = profile.longitude,
             createdAt = profile.createdAt,
             lastUsedAt = profile.lastUsedAt
         )
@@ -41,6 +43,8 @@ class ProfileRepositoryImpl(
             floors = entity.floors,
             constructionYear = entity.constructionYear,
             material = entity.material,
+            latitude = entity.latitude,
+            longitude = entity.longitude,
             createdAt = entity.createdAt,
             lastUsedAt = entity.lastUsedAt
         )
@@ -56,6 +60,8 @@ class ProfileRepositoryImpl(
                     floors = entity.floors,
                     constructionYear = entity.constructionYear,
                     material = entity.material,
+                    latitude = entity.latitude,
+                    longitude = entity.longitude,
                     createdAt = entity.createdAt,
                     lastUsedAt = entity.lastUsedAt
                 )
@@ -87,6 +93,20 @@ class ProfileRepositoryImpl(
             placement = entity.placement,
             createdAt = entity.createdAt
         )
+    }
+
+    override suspend fun getMeasurementProfilesForBuilding(buildingHash: String): List<MeasurementProfile> {
+        return profileDao.getMeasurementProfilesForBuilding(buildingHash).map { entity ->
+            MeasurementProfile(
+                id = entity.id,
+                buildingId = entity.buildingId,
+                floorLevel = entity.floorLevel,
+                surfaceType = entity.surfaceType,
+                locationType = entity.locationType,
+                placement = entity.placement,
+                createdAt = entity.createdAt
+            )
+        }
     }
 
     override suspend fun hasAnyRecordingForBuilding(buildingHash: String): Boolean {

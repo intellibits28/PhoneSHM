@@ -24,6 +24,8 @@ data class BuildingProfileEntity(
     val floors: Int?,
     val constructionYear: Int?,
     val material: String?,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val lastUsedAt: Long = System.currentTimeMillis()
 )

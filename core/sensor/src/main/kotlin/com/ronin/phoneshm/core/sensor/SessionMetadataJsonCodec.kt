@@ -17,6 +17,8 @@ object SessionMetadataJsonCodec {
             metadata.floors?.let { put("floors", it) }
             metadata.constructionYear?.let { put("constructionYear", it) }
             metadata.primaryMaterial?.let { put("primaryMaterial", it) }
+            metadata.latitude?.let { put("latitude", it) }
+            metadata.longitude?.let { put("longitude", it) }
             metadata.measurementFloorLevel?.let { put("measurementFloorLevel", it) }
             metadata.surfaceType?.let { put("surfaceType", it) }
             metadata.locationType?.let { put("locationType", it) }
@@ -64,6 +66,8 @@ object SessionMetadataJsonCodec {
                 floors = if (metaJson.has("floors")) metaJson.getInt("floors") else null,
                 constructionYear = if (metaJson.has("constructionYear")) metaJson.getInt("constructionYear") else null,
                 primaryMaterial = if (metaJson.has("primaryMaterial")) metaJson.getString("primaryMaterial") else null,
+                latitude = if (metaJson.has("latitude")) metaJson.getDouble("latitude") else null,
+                longitude = if (metaJson.has("longitude")) metaJson.getDouble("longitude") else null,
                 measurementFloorLevel = if (metaJson.has("measurementFloorLevel")) metaJson.getInt("measurementFloorLevel") else null,
                 surfaceType = if (metaJson.has("surfaceType")) metaJson.getString("surfaceType") else null,
                 locationType = if (metaJson.has("locationType")) metaJson.getString("locationType") else null,

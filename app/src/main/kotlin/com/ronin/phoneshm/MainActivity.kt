@@ -147,16 +147,48 @@ fun PhoneShmAppHost(
 
     var showSwitcherDialog by remember { mutableStateOf(false) }
 
-    androidx.compose.runtime.LaunchedEffect(initialBuildingId) {
-        if (initialBuildingId.isNotEmpty()) {
-            val exists = onboardingViewModel.checkBuildingExists(initialBuildingId)
-            val resolvedScreen = resolveStartupScreen(initialBuildingId, exists, initialScreen)
-            currentScreen = resolvedScreen
+    androidx.compose.runtime.LaunchedEffect(activeBuildingId) {
+        if (activeBuildingId.isNotEmpty()) {
+            val exists = onboardingViewModel.checkBuildingExists(activeBuildingId)
             
-            if (resolvedScreen == "ONBOARDING") {
-                onSessionUpdated("", "")
-                activeBuildingId = ""
-                activeMeasurementId = ""
+            if (!exists) {
+                // If it doesn't exist, it means it was deleted or invalid. Try to find a fallback.
+                val allProfiles = kotlinx.coroutines.flow.first(onboardingViewModel.getAllBuildingProfiles())
+                if (allProfiles.isNotEmpty()) {
+                    val fallback = allProfiles.first()
+                    val measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(fallback.buildingHash)
+                    val mId = measurementProfiles.firstOrNull()?.id ?: ""
+                    
+                    activeBuildingId = fallback.buildingHash
+                    activeMeasurementId = mId
+                    onSessionUpdated(activeBuildingId, mId)
+                    currentScreen = "MEASUREMENT"
+                } else {
+                    currentScreen = "ONBOARDING"
+                    onSessionUpdated("", "")
+                    activeBuildingId = ""
+                    activeMeasurementId = ""
+                }
+            } else {
+                // If it exists, and we are currently LOADING, transition to MEASUREMENT
+                if (currentScreen == "LOADING") {
+                    currentScreen = "MEASUREMENT"
+                }
+            }
+        } else {
+            // Also if activeBuildingId is empty (e.g. just deleted the last profile), try to auto-load a profile
+            val allProfiles = kotlinx.coroutines.flow.first(onboardingViewModel.getAllBuildingProfiles())
+            if (allProfiles.isNotEmpty()) {
+                val fallback = allProfiles.first()
+                val measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(fallback.buildingHash)
+                val mId = measurementProfiles.firstOrNull()?.id ?: ""
+                
+                activeBuildingId = fallback.buildingHash
+                activeMeasurementId = mId
+                onSessionUpdated(activeBuildingId, mId)
+                currentScreen = "MEASUREMENT"
+            } else {
+                currentScreen = "ONBOARDING"
             }
         }
     }
@@ -173,6 +205,11 @@ fun PhoneShmAppHost(
                 activeMeasurementId = mId
                 onSessionUpdated(bId, mId)
                 currentScreen = "MEASUREMENT"
+            },
+            onBuildingDeleted = {
+                activeBuildingId = ""
+                activeMeasurementId = ""
+                onSessionUpdated("", "")
             }
         )
     } else if (currentScreen == "REPORT") {
@@ -214,19 +251,6 @@ fun PhoneShmAppHost(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        androidx.compose.foundation.layout.Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "ID: ${activeBuildingId.take(8)}.. | Profile: $activeMeasurementId",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.weight(1f).padding(end = 8.dp)
-                            )
                             androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
@@ -245,6 +269,12 @@ fun PhoneShmAppHost(
                                 }
                             }
                         }
+                        Text(
+                            text = "Building ID: ${activeBuildingId.take(8)}.. | Session: $activeMeasurementId",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
             }

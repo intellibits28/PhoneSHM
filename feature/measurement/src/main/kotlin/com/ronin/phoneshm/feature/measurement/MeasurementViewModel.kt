@@ -100,6 +100,8 @@ class MeasurementViewModel(
                     floors = buildingProfile?.floors,
                     constructionYear = buildingProfile?.constructionYear,
                     primaryMaterial = buildingProfile?.material,
+                    latitude = buildingProfile?.latitude,
+                    longitude = buildingProfile?.longitude,
                     measurementFloorLevel = measurementProfile?.floorLevel,
                     surfaceType = measurementProfile?.surfaceType,
                     locationType = measurementProfile?.locationType,

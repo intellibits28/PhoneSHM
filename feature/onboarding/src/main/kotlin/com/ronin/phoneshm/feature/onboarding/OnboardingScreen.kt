@@ -45,6 +45,7 @@ import com.ronin.phoneshm.core.location.PrivacyLevel
 fun OnboardingScreen(
     viewModel: OnboardingViewModel,
     onFinished: (String, String) -> Unit = { _, _ -> },
+    onBuildingDeleted: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.state.collectAsState()
@@ -103,7 +104,7 @@ fun OnboardingScreen(
             2 -> StepTwoBuildingTypology(state, viewModel)
             3 -> StepThreeLocationPrivacy(state, viewModel)
             4 -> StepFourPlacementSetup(state, viewModel)
-            5 -> StepFiveSummary(state, viewModel, onFinished)
+            5 -> StepFiveSummary(state, viewModel, onFinished, onBuildingDeleted)
         }
     }
 }
@@ -806,7 +807,8 @@ private fun StepFourPlacementSetup(
 private fun StepFiveSummary(
     state: OnboardingState,
     viewModel: OnboardingViewModel,
-    onFinished: (String, String) -> Unit
+    onFinished: (String, String) -> Unit,
+    onBuildingDeleted: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
@@ -860,9 +862,8 @@ private fun StepFiveSummary(
                         showDeleteConfirm = false
                         state.savedBuildingId?.let {
                             viewModel.deleteBuildingProfile(it) {
-                                // Once deleted, navigate to Onboarding logic natively
-                                // We can just reset the state to step 1 of a new building.
                                 viewModel.resetState()
+                                onBuildingDeleted()
                             }
                         }
                     },

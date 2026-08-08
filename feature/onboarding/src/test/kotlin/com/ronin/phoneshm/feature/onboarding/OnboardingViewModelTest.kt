@@ -61,6 +61,10 @@ class OnboardingViewModelTest {
         }
 
         override suspend fun getMeasurementProfile(id: String): MeasurementProfile? = savedMeasurement
+        
+        override suspend fun getMeasurementProfilesForBuilding(buildingHash: String): List<MeasurementProfile> {
+            return if (savedMeasurement?.buildingId == buildingHash) listOf(savedMeasurement!!) else emptyList()
+        }
 
         override suspend fun hasAnyRecordingForBuilding(buildingHash: String): Boolean {
             // Mirror the actual ProfileRepositoryImpl logic: scan tempDir for .meta.json
