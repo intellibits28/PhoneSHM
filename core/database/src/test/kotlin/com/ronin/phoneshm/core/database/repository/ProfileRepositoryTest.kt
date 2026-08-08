@@ -38,6 +38,10 @@ class ProfileRepositoryTest {
             return measurements[id]
         }
 
+        override suspend fun getMeasurementProfilesForBuilding(buildingHash: String): List<MeasurementProfileEntity> {
+            return measurements.values.filter { it.buildingId == buildingHash }
+        }
+
         override suspend fun deleteBuildingProfile(buildingHash: String) {
             buildings.remove(buildingHash)
         }
