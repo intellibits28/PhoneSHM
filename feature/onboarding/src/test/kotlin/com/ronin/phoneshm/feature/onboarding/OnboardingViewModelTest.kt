@@ -70,7 +70,7 @@ class OnboardingViewModelTest {
                     try {
                         val content = file.readText()
                         val json = org.json.JSONObject(content)
-                        if (json.optString("buildingHash") == buildingHash) {
+                        if (json.optJSONObject("metadata")?.optString("buildingHash") == buildingHash) {
                             return true
                         }
                     } catch (e: Exception) { }
@@ -89,7 +89,7 @@ class OnboardingViewModelTest {
             // 1. Always write raw session metadata to disk (regardless of quality gate)
             val sessionId = java.util.UUID.randomUUID().toString()
             val metaFile = java.io.File(tempDir, "$sessionId.meta.json")
-            metaFile.writeText("{\"buildingHash\":\"$buildingHash\"}")
+            metaFile.writeText("{\"metadata\":{\"buildingHash\":\"$buildingHash\"}}")
             
             // 2. Only enter baseline history if passed
             if (qualityGatePassed) {

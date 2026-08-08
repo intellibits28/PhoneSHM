@@ -98,7 +98,7 @@ class ProfileRepositoryImpl(
                 try {
                     val content = file.readText()
                     val json = org.json.JSONObject(content)
-                    if (json.optString("buildingHash") == buildingHash) {
+                    if (json.optJSONObject("metadata")?.optString("buildingHash") == buildingHash) {
                         return true
                     }
                 } catch (e: Exception) {
