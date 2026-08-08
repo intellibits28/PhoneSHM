@@ -37,12 +37,42 @@ class ProfileRepositoryTest {
         override suspend fun getMeasurementProfileById(id: String): MeasurementProfileEntity? {
             return measurements[id]
         }
+
+        override suspend fun deleteBuildingProfile(buildingHash: String) {
+            buildings.remove(buildingHash)
+        }
+
+        override suspend fun deleteMeasurementProfilesForBuilding(buildingHash: String) {
+            val toRemove = measurements.filterValues { it.buildingId == buildingHash }.keys
+            toRemove.forEach { measurements.remove(it) }
+        }
+    }
+
+    private class FakeBaselineDao : com.ronin.phoneshm.core.database.dao.BaselineDao {
+        private val profiles = mutableMapOf<String, com.ronin.phoneshm.core.database.entity.BaselineProfileEntity>()
+        private val history = mutableListOf<com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity>()
+
+        override suspend fun upsertProfile(profile: com.ronin.phoneshm.core.database.entity.BaselineProfileEntity) {
+            profiles[profile.buildingHash] = profile
+        }
+        override suspend fun insertHistory(historyEntity: com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity) {
+            history.add(historyEntity)
+        }
+        override suspend fun getProfile(buildingHash: String): com.ronin.phoneshm.core.database.entity.BaselineProfileEntity? = profiles[buildingHash]
+        override suspend fun getHistory(buildingHash: String): List<com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity> = history.filter { it.buildingHash == buildingHash }
+        override suspend fun trimHistoryTo20(buildingHash: String) {}
+        override suspend fun updateBaselineWithHistory(profile: com.ronin.phoneshm.core.database.entity.BaselineProfileEntity, historyEntity: com.ronin.phoneshm.core.database.entity.BaselineHistoryEntity) {}
+        override suspend fun deleteProfile(buildingHash: String) { profiles.remove(buildingHash) }
+        override suspend fun deleteHistory(buildingHash: String) { history.removeIf { it.buildingHash == buildingHash } }
+        override suspend fun deleteOrphanedLegacyProfiles() {}
+        override suspend fun deleteOrphanedLegacyHistory() {}
     }
 
     @Test
     fun testSaveAndGetBuildingProfile() = runTest {
         val dao = FakeProfileDao()
-        val repo = ProfileRepositoryImpl(dao)
+        val baselineDao = FakeBaselineDao()
+        val repo = ProfileRepositoryImpl(dao, baselineDao)
 
         val profile = BuildingProfile(
             buildingHash = "hash_abc",
@@ -62,7 +92,8 @@ class ProfileRepositoryTest {
     @Test
     fun testSaveAndGetMeasurementProfile() = runTest {
         val dao = FakeProfileDao()
-        val repo = ProfileRepositoryImpl(dao)
+        val baselineDao = FakeBaselineDao()
+        val repo = ProfileRepositoryImpl(dao, baselineDao)
 
         val profile = MeasurementProfile(
             id = "m_123",

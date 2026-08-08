@@ -85,12 +85,25 @@ fun OnboardingScreen(
             }
         }
 
+        if (state.hasRecordedSessions) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "This building profile has recorded sessions and is locked for editing.",
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+
         when (state.step) {
             1 -> StepOneHardwareEvaluation(state, viewModel)
             2 -> StepTwoBuildingTypology(state, viewModel)
             3 -> StepThreeLocationPrivacy(state, viewModel)
             4 -> StepFourPlacementSetup(state, viewModel)
-            5 -> StepFiveSummary(state, onFinished)
+            5 -> StepFiveSummary(state, viewModel, onFinished)
         }
     }
 }
@@ -180,7 +193,8 @@ private fun StepTwoBuildingTypology(
                 value = state.buildingName,
                 onValueChange = { viewModel.updateBuildingName(it) },
                 label = { Text("Building Name / Identifier") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.hasRecordedSessions
             )
 
             // Dropdown Selector for Building Type
@@ -193,11 +207,13 @@ private fun StepTwoBuildingTypology(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { dropdownExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { dropdownExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = dropdownExpanded,
                     onDismissRequest = { dropdownExpanded = false },
@@ -225,11 +241,13 @@ private fun StepTwoBuildingTypology(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { floorsDropdownExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { floorsDropdownExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = floorsDropdownExpanded,
                     onDismissRequest = { floorsDropdownExpanded = false },
@@ -257,11 +275,13 @@ private fun StepTwoBuildingTypology(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { yearDropdownExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { yearDropdownExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = yearDropdownExpanded,
                     onDismissRequest = { yearDropdownExpanded = false },
@@ -289,11 +309,13 @@ private fun StepTwoBuildingTypology(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { materialDropdownExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { materialDropdownExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = materialDropdownExpanded,
                     onDismissRequest = { materialDropdownExpanded = false },
@@ -344,13 +366,14 @@ private fun StepThreeLocationPrivacy(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.updatePrivacyLevel(level) }
+                        .clickable(enabled = !state.hasRecordedSessions) { viewModel.updatePrivacyLevel(level) }
                         .padding(vertical = 8.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = state.privacyLevel == level,
-                        onClick = { viewModel.updatePrivacyLevel(level) }
+                        onClick = { viewModel.updatePrivacyLevel(level) },
+                        enabled = !state.hasRecordedSessions
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text(text = level.name, fontWeight = FontWeight.Bold)
@@ -397,6 +420,7 @@ private fun StepThreeLocationPrivacy(
                             OutlinedButton(
                                 onClick = { viewModel.adjustCoordinates(0.0001, 0.0) },
                                 modifier = Modifier.size(50.dp),
+                                enabled = !state.hasRecordedSessions,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                             ) {
                                 Text("▲")
@@ -405,6 +429,7 @@ private fun StepThreeLocationPrivacy(
                                 OutlinedButton(
                                     onClick = { viewModel.adjustCoordinates(0.0, -0.0001) },
                                     modifier = Modifier.size(50.dp),
+                                    enabled = !state.hasRecordedSessions,
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                                 ) {
                                     Text("◀")
@@ -413,6 +438,7 @@ private fun StepThreeLocationPrivacy(
                                 OutlinedButton(
                                     onClick = { viewModel.adjustCoordinates(0.0, 0.0001) },
                                     modifier = Modifier.size(50.dp),
+                                    enabled = !state.hasRecordedSessions,
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                                 ) {
                                     Text("▶")
@@ -421,6 +447,7 @@ private fun StepThreeLocationPrivacy(
                             OutlinedButton(
                                 onClick = { viewModel.adjustCoordinates(-0.0001, 0.0) },
                                 modifier = Modifier.size(50.dp),
+                                enabled = !state.hasRecordedSessions,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                             ) {
                                 Text("▼")
@@ -637,11 +664,13 @@ private fun StepFourPlacementSetup(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { floorLevelExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { floorLevelExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = floorLevelExpanded,
                     onDismissRequest = { floorLevelExpanded = false },
@@ -669,11 +698,13 @@ private fun StepFourPlacementSetup(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { surfaceTypeExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { surfaceTypeExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = surfaceTypeExpanded,
                     onDismissRequest = { surfaceTypeExpanded = false },
@@ -701,11 +732,13 @@ private fun StepFourPlacementSetup(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { locationTypeExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { locationTypeExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = locationTypeExpanded,
                     onDismissRequest = { locationTypeExpanded = false },
@@ -733,11 +766,13 @@ private fun StepFourPlacementSetup(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = true
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { placementExpanded = true }
-                )
+                if (!state.hasRecordedSessions) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { placementExpanded = true }
+                    )
+                }
                 DropdownMenu(
                     expanded = placementExpanded,
                     onDismissRequest = { placementExpanded = false },
@@ -770,8 +805,11 @@ private fun StepFourPlacementSetup(
 @Composable
 private fun StepFiveSummary(
     state: OnboardingState,
+    viewModel: OnboardingViewModel,
     onFinished: (String, String) -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "5. Profile Configuration Complete!", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -784,16 +822,60 @@ private fun StepFiveSummary(
             Text(text = "Measurement Profile ID: ${state.savedMeasurementId ?: "N/A"}")
 
             Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    if (state.savedBuildingId != null && state.savedMeasurementId != null) {
-                        onFinished(state.savedBuildingId, state.savedMeasurementId)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                if (state.hasRecordedSessions && state.savedBuildingId != null) {
+                    Button(
+                        onClick = { showDeleteConfirm = true },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete this building")
                     }
-                },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Proceed to Real-Time Recording HUD ->")
+                } else {
+                    OutlinedButton(onClick = { viewModel.setStep(4) }) {
+                        Text("<- Back")
+                    }
+                }
+                
+                Button(
+                    onClick = {
+                        if (state.savedBuildingId != null && state.savedMeasurementId != null) {
+                            onFinished(state.savedBuildingId, state.savedMeasurementId)
+                        }
+                    }
+                ) {
+                    Text("Proceed to Real-Time Recording HUD ->")
+                }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Building Profile?") },
+            text = { Text("This will permanently remove the building profile, local session metadata, and all baseline histories from this device. Are you sure you want to delete this building?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        state.savedBuildingId?.let {
+                            viewModel.deleteBuildingProfile(it) {
+                                // Once deleted, navigate to Onboarding logic natively
+                                // We can just reset the state to step 1 of a new building.
+                                viewModel.resetState()
+                            }
+                        }
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

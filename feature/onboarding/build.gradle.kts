@@ -12,6 +12,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -38,4 +42,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("org.robolectric:robolectric:4.11.1")
+
+    // Firebase for deletion requests
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.firestore.ktx)
 }

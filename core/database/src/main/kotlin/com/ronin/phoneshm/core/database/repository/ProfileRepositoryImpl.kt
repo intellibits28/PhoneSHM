@@ -1,5 +1,6 @@
 package com.ronin.phoneshm.core.database.repository
 
+import com.ronin.phoneshm.core.database.dao.BaselineDao
 import com.ronin.phoneshm.core.database.dao.ProfileDao
 import com.ronin.phoneshm.core.database.entity.BuildingProfileEntity
 import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
@@ -12,7 +13,9 @@ import kotlinx.coroutines.flow.map
  * ProfileRepositoryImpl maps Domain profiles to/from Room entities and manages database operations.
  */
 class ProfileRepositoryImpl(
-    private val profileDao: ProfileDao
+    private val profileDao: ProfileDao,
+    private val baselineDao: BaselineDao,
+    private val context: android.content.Context
 ) : ProfileRepository {
 
     override suspend fun saveBuildingProfile(profile: BuildingProfile) {
@@ -84,5 +87,32 @@ class ProfileRepositoryImpl(
             placement = entity.placement,
             createdAt = entity.createdAt
         )
+    }
+
+    override suspend fun hasAnyRecordingForBuilding(buildingHash: String): Boolean {
+        // Query the raw sessions directory (applicationContext.filesDir) to check if any .meta.json file exists for this buildingHash
+        val filesDir = context.filesDir
+        val metaFiles = filesDir.listFiles { _, name -> name.endsWith(".meta.json") }
+        if (metaFiles != null) {
+            for (file in metaFiles) {
+                try {
+                    val content = file.readText()
+                    val json = org.json.JSONObject(content)
+                    if (json.optString("buildingHash") == buildingHash) {
+                        return true
+                    }
+                } catch (e: Exception) {
+                    // Ignore read or parse errors
+                }
+            }
+        }
+        return false
+    }
+
+    override suspend fun deleteBuildingAndRelatedData(buildingHash: String) {
+        profileDao.deleteBuildingProfile(buildingHash)
+        profileDao.deleteMeasurementProfilesForBuilding(buildingHash)
+        baselineDao.deleteProfile(buildingHash)
+        baselineDao.deleteHistory(buildingHash)
     }
 }

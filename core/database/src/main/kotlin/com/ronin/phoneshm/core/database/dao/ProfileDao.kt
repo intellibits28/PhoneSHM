@@ -27,4 +27,10 @@ interface ProfileDao {
 
     @Query("SELECT * FROM measurement_profiles WHERE id = :id")
     suspend fun getMeasurementProfileById(id: String): MeasurementProfileEntity?
+
+    @Query("DELETE FROM building_profiles WHERE buildingHash = :buildingHash")
+    suspend fun deleteBuildingProfile(buildingHash: String)
+
+    @Query("DELETE FROM measurement_profiles WHERE buildingId = :buildingHash")
+    suspend fun deleteMeasurementProfilesForBuilding(buildingHash: String)
 }

@@ -23,6 +23,9 @@ data class OnboardingState(
     val isDeviceCalibrated: Boolean = false,
     val calibrationBias: FloatArray = floatArrayOf(0f, 0f, 0f),
 
+    val isEditMode: Boolean = false,
+    val hasRecordedSessions: Boolean = false,
+
     // Step 2: Building Typology
     val buildingName: String = "",
     val buildingType: String = "RESIDENTIAL_CONCRETE",
@@ -191,8 +194,8 @@ class OnboardingViewModel(
             return
         }
 
-        val bId = "b_" + UUID.randomUUID().toString().substring(0, 8)
-        val mId = "m_" + UUID.randomUUID().toString().substring(0, 8)
+        val bId = s.savedBuildingId ?: ("b_" + UUID.randomUUID().toString().substring(0, 8))
+        val mId = s.savedMeasurementId ?: ("m_" + UUID.randomUUID().toString().substring(0, 8))
 
         viewModelScope.launch {
             _state.value = _state.value.copy(isSaving = true, errorMessage = null)
@@ -205,7 +208,8 @@ class OnboardingViewModel(
                     }
                 }
 
-                val hashToUse = finalHash ?: "crowd_anonymized_$bId"
+                // Use the originally saved hash if we are in edit mode, so we update the same row
+                val hashToUse = if (s.isEditMode && s.savedBuildingId != null) s.savedBuildingId else (finalHash ?: "crowd_anonymized_$bId")
                 val buildingProfile = BuildingProfile(
                     buildingHash = hashToUse,
                     displayName = s.buildingName,
@@ -248,5 +252,58 @@ class OnboardingViewModel(
 
     fun getAllBuildingProfiles(): kotlinx.coroutines.flow.Flow<List<com.ronin.phoneshm.core.database.model.BuildingProfile>> {
         return profileRepository?.getAllBuildingProfiles() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+
+    fun loadProfileForEditing(hash: String) {
+        viewModelScope.launch {
+            val building = profileRepository?.getBuildingProfile(hash) ?: return@launch
+            val hasSessions = profileRepository.hasAnyRecordingForBuilding(hash)
+            
+            _state.value = OnboardingState(
+                step = 1,
+                isEditMode = true,
+                hasRecordedSessions = hasSessions,
+                buildingName = building.displayName,
+                buildingType = building.buildingType,
+                floors = building.floors?.toString() ?: "4",
+                constructionYear = building.constructionYear?.toString() ?: "2020",
+                material = building.material ?: "Unknown",
+                resolvedBuildingHash = building.buildingHash,
+                savedBuildingId = building.buildingHash // preserve original hash
+            )
+            // Note: In a complete implementation we'd also load the measurement profile,
+            // but the simplified workflow keeps it to the building primarily.
+        }
+    }
+
+    fun resetState() {
+        _state.value = OnboardingState(step = 1)
+    }
+
+    fun deleteBuildingProfile(hash: String, onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            profileRepository?.deleteBuildingAndRelatedData(hash)
+            
+            // TASK 3: create deletionRequests document in Firestore
+            try {
+                val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                val uid = auth.currentUser?.uid
+                if (uid != null) {
+                    val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    val requestPayload = hashMapOf(
+                        "buildingHash" to hash,
+                        "requestedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "firebaseAuthUid" to uid
+                    )
+                    db.collection("deletionRequests").add(requestPayload).addOnSuccessListener {
+                        android.util.Log.d("PhoneSHM", "Deletion request queued in Firestore for building: $hash")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PhoneSHM", "Failed to queue deletion request in Firestore", e)
+            }
+            
+            onDeleted()
+        }
     }
 }

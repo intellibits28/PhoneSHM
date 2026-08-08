@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
         requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
 
         val db = PhoneShmDatabase.getDatabase(applicationContext)
-        val profileRepo = ProfileRepositoryImpl(db.profileDao())
+        val profileRepo = ProfileRepositoryImpl(db.profileDao(), db.baselineDao(), applicationContext)
         val deviceEngine = AndroidDeviceCapabilityEngine(applicationContext)
         val locationResolver = com.ronin.phoneshm.core.location.AndroidLocationResolver(applicationContext)
         val storageEngine = com.ronin.phoneshm.core.storage.DefaultRawSampleStorageEngine(applicationContext.filesDir)
@@ -214,8 +214,16 @@ fun PhoneShmAppHost(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            Button(onClick = { showSwitcherDialog = true }) {
-                                Text("Switch / New")
+                            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = {
+                                    onboardingViewModel.loadProfileForEditing(activeBuildingId)
+                                    currentScreen = "ONBOARDING"
+                                }) {
+                                    Text("Edit Profile")
+                                }
+                                Button(onClick = { showSwitcherDialog = true }) {
+                                    Text("Switch / New")
+                                }
                             }
                         }
                         Text(
@@ -291,6 +299,7 @@ fun PhoneShmAppHost(
                 confirmButton = {
                     Button(onClick = { 
                         showSwitcherDialog = false
+                        onboardingViewModel.resetState()
                         currentScreen = "ONBOARDING" 
                     }) {
                         Text("New Building")
