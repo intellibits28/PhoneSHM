@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -153,7 +154,7 @@ fun PhoneShmAppHost(
             
             if (!exists) {
                 // If it doesn't exist, it means it was deleted or invalid. Try to find a fallback.
-                val allProfiles = kotlinx.coroutines.flow.first(onboardingViewModel.getAllBuildingProfiles())
+                val allProfiles = onboardingViewModel.getAllBuildingProfiles().first()
                 if (allProfiles.isNotEmpty()) {
                     val fallback = allProfiles.first()
                     val measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(fallback.buildingHash)
@@ -177,7 +178,7 @@ fun PhoneShmAppHost(
             }
         } else {
             // Also if activeBuildingId is empty (e.g. just deleted the last profile), try to auto-load a profile
-            val allProfiles = kotlinx.coroutines.flow.first(onboardingViewModel.getAllBuildingProfiles())
+            val allProfiles = onboardingViewModel.getAllBuildingProfiles().first()
             if (allProfiles.isNotEmpty()) {
                 val fallback = allProfiles.first()
                 val measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(fallback.buildingHash)
