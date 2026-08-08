@@ -53,7 +53,7 @@ class OnboardingViewModelTest {
             savedBuilding = profile
         }
 
-        override suspend fun getBuildingProfile(id: String): BuildingProfile? = savedBuilding
+        override suspend fun getBuildingProfile(buildingHash: String): BuildingProfile? = savedBuilding
         override fun getAllBuildingProfiles(): Flow<List<BuildingProfile>> = flowOf(listOfNotNull(savedBuilding))
 
         override suspend fun saveMeasurementProfile(profile: MeasurementProfile) {
@@ -121,7 +121,7 @@ class OnboardingViewModelTest {
 
     @Test
     fun testOnboardingWizardFlowAndPersistence() = runTest {
-        val repo = FakeProfileRepository(java.io.File(System.getProperty("java.io.tmpdir")))
+        val repo = FakeProfileRepository(java.io.File(System.getProperty("java.io.tmpdir") ?: "/tmp"))
         val resolver = FakeLocationResolver()
         val viewModel = OnboardingViewModel(
             profileRepository = repo,

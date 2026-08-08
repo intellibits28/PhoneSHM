@@ -159,7 +159,7 @@ class OnboardingViewModel(
             try {
                 val profile = resolver.resolveLocation(_state.value.privacyLevel)
                 profile?.let {
-                    val hash = resolver.generateBuildingHash(it.latitude, it.longitude, _state.value.buildingName)
+                    val hash = resolver.generateBuildingHash(it.latitude ?: 0.0, it.longitude ?: 0.0, _state.value.buildingName)
                     _state.value = _state.value.copy(
                         resolvedLatitude = it.latitude,
                         resolvedLongitude = it.longitude,
@@ -204,7 +204,7 @@ class OnboardingViewModel(
                 if (finalHash == null && locationResolver != null) {
                     val loc = locationResolver.resolveLocation(s.privacyLevel)
                     if (loc != null) {
-                        finalHash = locationResolver.generateBuildingHash(loc.latitude, loc.longitude, s.buildingName)
+                        finalHash = locationResolver.generateBuildingHash(loc.latitude ?: 0.0, loc.longitude ?: 0.0, s.buildingName)
                     }
                 }
 
