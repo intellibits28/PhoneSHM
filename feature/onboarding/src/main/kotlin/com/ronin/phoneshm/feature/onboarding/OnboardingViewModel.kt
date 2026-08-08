@@ -260,7 +260,7 @@ class OnboardingViewModel(
             val hasSessions = profileRepository.hasAnyRecordingForBuilding(hash)
             
             _state.value = OnboardingState(
-                step = 1,
+                step = if (hasSessions) 5 else 1,
                 isEditMode = true,
                 hasRecordedSessions = hasSessions,
                 buildingName = building.displayName,

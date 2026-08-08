@@ -214,23 +214,37 @@ fun PhoneShmAppHost(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "ID: ${activeBuildingId.take(8)}.. | Profile: $activeMeasurementId",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            )
                             androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = {
-                                    onboardingViewModel.loadProfileForEditing(activeBuildingId)
-                                    currentScreen = "ONBOARDING"
-                                }) {
-                                    Text("Edit Profile")
+                                Button(
+                                    onClick = {
+                                        onboardingViewModel.loadProfileForEditing(activeBuildingId)
+                                        currentScreen = "ONBOARDING"
+                                    },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Edit")
                                 }
-                                Button(onClick = { showSwitcherDialog = true }) {
-                                    Text("Switch / New")
+                                Button(
+                                    onClick = { showSwitcherDialog = true },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Switch")
                                 }
                             }
                         }
-                        Text(
-                            text = "Building ID: $activeBuildingId | Profile: $activeMeasurementId",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
                     }
                 }
             }
