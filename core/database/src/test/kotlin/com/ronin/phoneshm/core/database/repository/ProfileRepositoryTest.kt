@@ -72,7 +72,8 @@ class ProfileRepositoryTest {
     fun testSaveAndGetBuildingProfile() = runTest {
         val dao = FakeProfileDao()
         val baselineDao = FakeBaselineDao()
-        val repo = ProfileRepositoryImpl(dao, baselineDao)
+        val mockContext = io.mockk.mockk<android.content.Context>(relaxed = true)
+        val repo = ProfileRepositoryImpl(dao, baselineDao, mockContext)
 
         val profile = BuildingProfile(
             buildingHash = "hash_abc",
@@ -93,7 +94,8 @@ class ProfileRepositoryTest {
     fun testSaveAndGetMeasurementProfile() = runTest {
         val dao = FakeProfileDao()
         val baselineDao = FakeBaselineDao()
-        val repo = ProfileRepositoryImpl(dao, baselineDao)
+        val mockContext = io.mockk.mockk<android.content.Context>(relaxed = true)
+        val repo = ProfileRepositoryImpl(dao, baselineDao, mockContext)
 
         val profile = MeasurementProfile(
             id = "m_123",
