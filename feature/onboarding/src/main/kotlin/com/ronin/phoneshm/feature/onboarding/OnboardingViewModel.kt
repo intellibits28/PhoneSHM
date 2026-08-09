@@ -202,9 +202,14 @@ class OnboardingViewModel(
             _state.value = _state.value.copy(isSaving = true, errorMessage = null)
             try {
                 var finalHash = s.resolvedBuildingHash
+                var finalLat = s.resolvedLatitude
+                var finalLon = s.resolvedLongitude
+                
                 if (finalHash == null && locationResolver != null) {
                     val loc = locationResolver.resolveLocation(s.privacyLevel)
                     if (loc != null) {
+                        finalLat = loc.latitude
+                        finalLon = loc.longitude
                         finalHash = locationResolver.generateBuildingHash(loc.latitude ?: 0.0, loc.longitude ?: 0.0, s.buildingName)
                     }
                 }
@@ -218,8 +223,8 @@ class OnboardingViewModel(
                     floors = s.floors.toIntOrNull() ?: 1,
                     constructionYear = s.constructionYear.toIntOrNull() ?: 2020,
                     material = s.material,
-                    latitude = s.resolvedLatitude,
-                    longitude = s.resolvedLongitude
+                    latitude = finalLat,
+                    longitude = finalLon
                 )
 
                 val measurementProfile = MeasurementProfile(
