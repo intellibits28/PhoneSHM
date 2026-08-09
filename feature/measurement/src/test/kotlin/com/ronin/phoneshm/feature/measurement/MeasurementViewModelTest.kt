@@ -90,7 +90,8 @@ class MeasurementViewModelTest {
         viewModel.startRecording("b_hash_123", "m_hash_456", 1)
         
         // Wait for recording to complete (runTest scheduler fast forwards delays)
-        delay(1200L)
+        // 2000ms calibration settle window + 1000ms recording + padding
+        delay(3500L)
 
         // Verify completed state
         assertFalse(viewModel.uiState.value.isRecording)

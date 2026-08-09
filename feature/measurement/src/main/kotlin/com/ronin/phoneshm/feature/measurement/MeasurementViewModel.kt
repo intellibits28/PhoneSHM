@@ -53,7 +53,10 @@ class MeasurementViewModel(
         val sessionId = UUID.randomUUID().toString()
 
         viewModelScope.launch {
-            _uiState.value = MeasurementUiState(isCalibrating = true, calibrationStatus = "Calibrating sensor...")
+            _uiState.value = MeasurementUiState(isCalibrating = true, calibrationStatus = "Place your phone, calibrating in 2s...")
+            delay(2000L)
+            
+            _uiState.value = _uiState.value.copy(calibrationStatus = "Calibrating sensor...")
             deviceCapabilityEngine?.runZeroVelocityCalibration(3)
             val calibratedReport = deviceCapabilityEngine?.inspectDeviceCapabilities()
             val noiseFloorMg = calibratedReport?.estimatedNoiseFloorMg
