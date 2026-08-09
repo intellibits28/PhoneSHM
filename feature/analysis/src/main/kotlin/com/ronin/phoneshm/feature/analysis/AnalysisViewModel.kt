@@ -296,6 +296,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     errorMessage = snrWarning,
                     isWeakSignalFailure = snrWarning != null,
                     consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0,
+                    buildingType = sessionMeta?.buildingType ?: buildingType,
+                    floors = sessionMeta?.floors ?: floors,
                     measurementProfileId = profileId
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
