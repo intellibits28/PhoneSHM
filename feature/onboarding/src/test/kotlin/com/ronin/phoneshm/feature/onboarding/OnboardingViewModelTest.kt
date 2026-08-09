@@ -108,8 +108,9 @@ class OnboardingViewModelTest {
         fun simulateSessionRecord(buildingHash: String, qualityGatePassed: Boolean) {
             // 1. Always write raw session metadata to disk (regardless of quality gate)
             val sessionId = java.util.UUID.randomUUID().toString()
+            val measurementId = savedMeasurement?.id ?: ""
             val metaFile = java.io.File(tempDir, "$sessionId.meta.json")
-            metaFile.writeText("{\"metadata\":{\"buildingHash\":\"$buildingHash\"}}")
+            metaFile.writeText("{\"metadata\":{\"buildingHash\":\"$buildingHash\",\"measurementProfileId\":\"$measurementId\"}}")
             
             // 2. Only enter baseline history if passed
             if (qualityGatePassed) {
