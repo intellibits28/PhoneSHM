@@ -40,7 +40,9 @@ data class MeasurementSessionMetadata(
     val rawStorageFileUri: String,
     val appVersionName: String = BuildConfig.VERSION_NAME,
     val appVersionCode: Int = BuildConfig.VERSION_CODE,
-    val gitCommitHash: String = BuildConfig.GIT_COMMIT_HASH
+    val gitCommitHash: String = BuildConfig.GIT_COMMIT_HASH,
+    val sessionNoiseFloorMg: Float? = null,
+    val sessionAccelerometerBias: FloatArray? = null
 )
 
 /**
@@ -71,6 +73,8 @@ interface VibrationSensorEngine {
         surfaceType: String? = null,
         locationType: String? = null,
         phonePlacement: String? = null,
-        durationSec: Int = 30
+        durationSec: Int = 30,
+        sessionNoiseFloorMg: Float? = null,
+        sessionAccelerometerBias: FloatArray? = null
     ): MeasurementSessionMetadata
 }

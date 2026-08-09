@@ -83,6 +83,22 @@ class OnboardingViewModelTest {
             return false
         }
 
+        override suspend fun hasAnyRecordingForMeasurementProfile(measurementId: String): Boolean {
+            val metaFiles = tempDir.listFiles { _, name -> name.endsWith(".meta.json") }
+            if (metaFiles != null) {
+                for (file in metaFiles) {
+                    try {
+                        val content = file.readText()
+                        val json = org.json.JSONObject(content)
+                        if (json.optJSONObject("metadata")?.optString("measurementProfileId") == measurementId) {
+                            return true
+                        }
+                    } catch (e: Exception) { }
+                }
+            }
+            return false
+        }
+
         override suspend fun deleteBuildingAndRelatedData(buildingHash: String) {
             if (savedBuilding?.buildingHash == buildingHash) {
                 savedBuilding = null

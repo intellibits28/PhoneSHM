@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         val measurementFactory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return com.ronin.phoneshm.feature.measurement.MeasurementViewModel(sensorEngine, profileRepo) as T
+                return com.ronin.phoneshm.feature.measurement.MeasurementViewModel(sensorEngine, profileRepo, deviceEngine) as T
             }
         }
 
@@ -147,6 +147,7 @@ fun PhoneShmAppHost(
     val reportViewModel: ReportViewModel = viewModel()
 
     var showSwitcherDialog by remember { mutableStateOf(false) }
+    var showLocationDialog by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(activeBuildingId) {
         if (activeBuildingId.isNotEmpty()) {
@@ -255,12 +256,18 @@ fun PhoneShmAppHost(
                             androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        onboardingViewModel.loadProfileForEditing(activeBuildingId)
+                                        onboardingViewModel.loadProfileForEditing(activeBuildingId, activeMeasurementId)
                                         currentScreen = "ONBOARDING"
                                     },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
                                     Text("Edit")
+                                }
+                                Button(
+                                    onClick = { showLocationDialog = true },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Locations")
                                 }
                                 Button(
                                     onClick = { showSwitcherDialog = true },
@@ -309,6 +316,7 @@ fun PhoneShmAppHost(
             }
         }
         
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         if (showSwitcherDialog) {
             val profiles by onboardingViewModel.getAllBuildingProfiles().collectAsState(initial = emptyList())
             androidx.compose.material3.AlertDialog(
@@ -324,10 +332,14 @@ fun PhoneShmAppHost(
                                     .padding(vertical = 4.dp)
                                     .clickable {
                                         activeBuildingId = profile.buildingHash
-                                        // For simplicity, we just reuse the activeMeasurementId or generate a mock.
-                                        // A fully complete system would tie a MeasurementProfile to the selected building properly.
-                                        onSessionUpdated(activeBuildingId, activeMeasurementId)
-                                        showSwitcherDialog = false
+                                        // Auto-select the first measurement profile when switching buildings
+                                        scope.launch {
+                                            val measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(activeBuildingId)
+                                            val mId = measurementProfiles.firstOrNull()?.id ?: ""
+                                            activeMeasurementId = mId
+                                            onSessionUpdated(activeBuildingId, activeMeasurementId)
+                                            showSwitcherDialog = false
+                                        }
                                     },
                                 colors = androidx.compose.material3.CardDefaults.cardColors(
                                     containerColor = if (profile.buildingHash == activeBuildingId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -352,6 +364,57 @@ fun PhoneShmAppHost(
                 },
                 dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { showSwitcherDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showLocationDialog) {
+            var measurementProfiles by remember { mutableStateOf<List<com.ronin.phoneshm.core.database.model.MeasurementProfile>>(emptyList()) }
+            androidx.compose.runtime.LaunchedEffect(activeBuildingId) {
+                measurementProfiles = onboardingViewModel.getMeasurementProfilesForBuilding(activeBuildingId)
+            }
+
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showLocationDialog = false },
+                title = { Text("Select Measurement Location") },
+                text = {
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(measurementProfiles.size) { index ->
+                            val profile = measurementProfiles[index]
+                            androidx.compose.material3.Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable {
+                                        activeMeasurementId = profile.id
+                                        onSessionUpdated(activeBuildingId, activeMeasurementId)
+                                        showLocationDialog = false
+                                    },
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = if (profile.id == activeMeasurementId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("Floor ${profile.floorLevel} · ${profile.locationType} · ${profile.placement}", fontWeight = FontWeight.Bold)
+                                    Text("ID: ${profile.id}", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { 
+                        showLocationDialog = false
+                        onboardingViewModel.startNewMeasurementLocation(activeBuildingId)
+                        currentScreen = "ONBOARDING" 
+                    }) {
+                        Text("Add New Location")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { showLocationDialog = false }) {
                         Text("Cancel")
                     }
                 }

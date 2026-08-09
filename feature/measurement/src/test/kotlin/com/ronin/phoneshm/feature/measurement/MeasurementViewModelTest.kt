@@ -48,7 +48,9 @@ class MeasurementViewModelTest {
             surfaceType: String?,
             locationType: String?,
             phonePlacement: String?,
-            durationSec: Int
+            durationSec: Int,
+            sessionNoiseFloorMg: Float?,
+            sessionAccelerometerBias: FloatArray?
         ): MeasurementSessionMetadata {
             recordSessionCalledCount++
             return MeasurementSessionMetadata(

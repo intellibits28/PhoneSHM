@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class MeasurementUiState(
+    val isCalibrating: Boolean = false,
+    val calibrationStatus: String = "",
     val isRecording: Boolean = false,
     val elapsedSeconds: Int = 0,
     val currentSampleRateHz: Float = 0f,
@@ -31,7 +33,8 @@ data class MeasurementUiState(
  */
 class MeasurementViewModel(
     private val sensorEngine: VibrationSensorEngine,
-    private val profileRepository: ProfileRepository? = null
+    private val profileRepository: ProfileRepository? = null,
+    private val deviceCapabilityEngine: com.ronin.phoneshm.core.device.DeviceCapabilityEngine? = null
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MeasurementUiState())
     val uiState: StateFlow<MeasurementUiState> = _uiState.asStateFlow()
@@ -45,12 +48,19 @@ class MeasurementViewModel(
         durationSec: Int,
         onSessionRecorded: ((sessionId: String, rawStorageFileUri: String) -> Unit)? = null
     ) {
-        if (_uiState.value.isRecording) return
+        if (_uiState.value.isRecording || _uiState.value.isCalibrating) return
 
-        _uiState.value = MeasurementUiState(isRecording = true)
         val sessionId = UUID.randomUUID().toString()
 
-        // 1. Live stream updates (to update raw accelerometer visualizers and sample counts)
+        viewModelScope.launch {
+            _uiState.value = MeasurementUiState(isCalibrating = true, calibrationStatus = "Calibrating sensor...")
+            deviceCapabilityEngine?.runZeroVelocityCalibration(3)
+            val calibratedReport = deviceCapabilityEngine?.inspectDeviceCapabilities()
+            val noiseFloorMg = calibratedReport?.estimatedNoiseFloorMg
+            val bias = calibratedReport?.accelerometerBias
+            _uiState.value = MeasurementUiState(isRecording = true)
+
+            // 1. Live stream updates (to update raw accelerometer visualizers and sample counts)
         streamingJob = viewModelScope.launch {
             var count = 0
             val startTime = System.currentTimeMillis()
@@ -85,7 +95,7 @@ class MeasurementViewModel(
         }
 
         // 2. Continuous record session
-        recordingJob = viewModelScope.launch {
+        recordingJob = launch {
             try {
                 val buildingProfile = profileRepository?.getBuildingProfile(buildingHash)
                 val measurementProfile = profileRepository?.getMeasurementProfile(measurementId)
@@ -106,7 +116,9 @@ class MeasurementViewModel(
                     surfaceType = measurementProfile?.surfaceType,
                     locationType = measurementProfile?.locationType,
                     phonePlacement = measurementProfile?.placement,
-                    durationSec = durationSec
+                    durationSec = durationSec,
+                    sessionNoiseFloorMg = noiseFloorMg,
+                    sessionAccelerometerBias = bias
                 )
                 streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
@@ -124,6 +136,7 @@ class MeasurementViewModel(
                     isRecording = false,
                     rawStorageFileUri = "Error: ${e.message}"
                 )
+            }
             }
         }
     }

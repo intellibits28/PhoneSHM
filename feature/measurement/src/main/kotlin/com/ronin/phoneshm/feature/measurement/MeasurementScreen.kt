@@ -67,11 +67,13 @@ fun MeasurementScreen(
     ) {
         // Status indicator
         val statusText = when {
+            uiState.isCalibrating -> uiState.calibrationStatus
             uiState.isRecording -> "RECORDING LIVE DATA"
             uiState.recordingFinished -> "RECORDING COMPLETED"
             else -> "IDLE (READY TO RECORD)"
         }
         val statusColor = when {
+            uiState.isCalibrating -> Color(0xFFF57F17) // Warning/Orange
             uiState.isRecording -> Color(0xFFE53935) // Vibrant Red
             uiState.recordingFinished -> Color(0xFF43A047) // Vibrant Green
             else -> Color(0xFF757575)
@@ -94,7 +96,7 @@ fun MeasurementScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         // Prominent Top Analyze Button (Always visible when not actively recording)
-        if (!uiState.isRecording) {
+        if (!uiState.isRecording && !uiState.isCalibrating) {
             Button(
                 onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
                 modifier = Modifier.fillMaxWidth(),
@@ -301,7 +303,7 @@ fun MeasurementScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         // Quick jump to Phase 5 Analysis if not recording
-        if (!uiState.isRecording) {
+        if (!uiState.isRecording && !uiState.isCalibrating) {
             Button(
                 onClick = { onNavigateToAnalysis(uiState.rawStorageFileUri) },
                 modifier = Modifier
@@ -325,7 +327,9 @@ fun MeasurementScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (uiState.isRecording) {
+            if (uiState.isCalibrating) {
+                // Hide recording actions during calibration
+            } else if (uiState.isRecording) {
                 Button(
                     onClick = { viewModel.stopRecordingEarly() },
                     modifier = Modifier.weight(1f),
@@ -435,7 +439,7 @@ fun MeasurementScreen(
         }
 
         // Ambient Baseline Mode: 10-minute continuous recording for weak-signal buildings
-        if (!uiState.isRecording) {
+        if (!uiState.isRecording && !uiState.isCalibrating) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = {

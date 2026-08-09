@@ -50,6 +50,16 @@ object SessionMetadataJsonCodec {
         json.put("metadata", metaJson)
         json.put("deviceReport", devJson)
         
+        if (metadata.sessionNoiseFloorMg != null && metadata.sessionAccelerometerBias != null) {
+            val sessionBiasArr = JSONArray()
+            metadata.sessionAccelerometerBias.forEach { sessionBiasArr.put(it) }
+            val calibJson = JSONObject().apply {
+                put("noiseFloorMg", metadata.sessionNoiseFloorMg)
+                put("accelerometerBias", sessionBiasArr)
+            }
+            json.put("sessionCalibration", calibJson)
+        }
+        
         return json.toString(4)
     }
 
@@ -81,7 +91,12 @@ object SessionMetadataJsonCodec {
                 rawStorageFileUri = metaJson.getString("rawStorageFileUri"),
                 appVersionName = metaJson.optString("appVersionName", BuildConfig.VERSION_NAME),
                 appVersionCode = metaJson.optInt("appVersionCode", BuildConfig.VERSION_CODE),
-                gitCommitHash = metaJson.optString("gitCommitHash", BuildConfig.GIT_COMMIT_HASH)
+                gitCommitHash = metaJson.optString("gitCommitHash", BuildConfig.GIT_COMMIT_HASH),
+                sessionNoiseFloorMg = if (json.has("sessionCalibration")) json.getJSONObject("sessionCalibration").getDouble("noiseFloorMg").toFloat() else null,
+                sessionAccelerometerBias = if (json.has("sessionCalibration")) {
+                    val arr = json.getJSONObject("sessionCalibration").getJSONArray("accelerometerBias")
+                    FloatArray(arr.length()) { i -> arr.getDouble(i).toFloat() }
+                } else null
             )
 
             val devJson = json.getJSONObject("deviceReport")

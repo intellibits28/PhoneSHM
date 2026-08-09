@@ -79,7 +79,9 @@ class AndroidVibrationSensorEngine(
         surfaceType: String?,
         locationType: String?,
         phonePlacement: String?,
-        durationSec: Int
+        durationSec: Int,
+        sessionNoiseFloorMg: Float?,
+        sessionAccelerometerBias: FloatArray?
     ): MeasurementSessionMetadata = withContext(Dispatchers.Default) {
         val capabilityReport = deviceCapabilityEngine.inspectDeviceCapabilities()
         val file = storageEngine.createSessionFile(sessionId, StorageFormat.BINARY_LITTLE_ENDIAN)
@@ -195,7 +197,9 @@ class AndroidVibrationSensorEngine(
             rawStorageFileUri = finalFile.absolutePath,
             appVersionName = BuildConfig.VERSION_NAME,
             appVersionCode = BuildConfig.VERSION_CODE,
-            gitCommitHash = BuildConfig.GIT_COMMIT_HASH
+            gitCommitHash = BuildConfig.GIT_COMMIT_HASH,
+            sessionNoiseFloorMg = sessionNoiseFloorMg,
+            sessionAccelerometerBias = sessionAccelerometerBias
         )
 
         // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject

@@ -129,6 +129,26 @@ class ProfileRepositoryImpl(
         return false
     }
 
+    override suspend fun hasAnyRecordingForMeasurementProfile(measurementId: String): Boolean {
+        // Query the raw sessions directory (applicationContext.filesDir) to check if any .meta.json file exists for this measurementId
+        val filesDir = context.filesDir
+        val metaFiles = filesDir.listFiles { _, name -> name.endsWith(".meta.json") }
+        if (metaFiles != null) {
+            for (file in metaFiles) {
+                try {
+                    val content = file.readText()
+                    val json = org.json.JSONObject(content)
+                    if (json.optJSONObject("metadata")?.optString("measurementProfileId") == measurementId) {
+                        return true
+                    }
+                } catch (e: Exception) {
+                    // Ignore read or parse errors
+                }
+            }
+        }
+        return false
+    }
+
     override suspend fun deleteBuildingAndRelatedData(buildingHash: String) {
         profileDao.deleteBuildingProfile(buildingHash)
         profileDao.deleteMeasurementProfilesForBuilding(buildingHash)

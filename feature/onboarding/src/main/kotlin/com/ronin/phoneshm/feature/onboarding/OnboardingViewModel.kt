@@ -24,6 +24,7 @@ data class OnboardingState(
     val calibrationBias: FloatArray = floatArrayOf(0f, 0f, 0f),
 
     val isEditMode: Boolean = false,
+    val isAddingNewMeasurementLocation: Boolean = false,
     val hasRecordedSessions: Boolean = false,
 
     // Step 2: Building Typology
@@ -230,9 +231,15 @@ class OnboardingViewModel(
                     placement = s.placement
                 )
 
-                if (profileRepository != null) {
-                    profileRepository.saveBuildingProfile(buildingProfile)
-                    profileRepository.saveMeasurementProfile(measurementProfile)
+                if (s.isAddingNewMeasurementLocation) {
+                    if (profileRepository != null) {
+                        profileRepository.saveMeasurementProfile(measurementProfile)
+                    }
+                } else {
+                    if (profileRepository != null) {
+                        profileRepository.saveBuildingProfile(buildingProfile)
+                        profileRepository.saveMeasurementProfile(measurementProfile)
+                    }
                 }
 
                 _state.value = _state.value.copy(
@@ -260,12 +267,17 @@ class OnboardingViewModel(
         return profileRepository?.getMeasurementProfilesForBuilding(hash) ?: emptyList()
     }
 
-    fun loadProfileForEditing(hash: String) {
+    fun loadProfileForEditing(hash: String, measurementId: String? = null) {
         viewModelScope.launch {
             val building = profileRepository?.getBuildingProfile(hash) ?: return@launch
-            val hasSessions = profileRepository.hasAnyRecordingForBuilding(hash)
             val measurementProfiles = profileRepository.getMeasurementProfilesForBuilding(hash)
-            val measurementId = measurementProfiles.firstOrNull()?.id
+            val mIdToUse = measurementId ?: measurementProfiles.firstOrNull()?.id
+            val hasSessions = if (mIdToUse != null) {
+                profileRepository.hasAnyRecordingForMeasurementProfile(mIdToUse)
+            } else {
+                profileRepository.hasAnyRecordingForBuilding(hash)
+            }
+            val measurement = measurementProfiles.find { it.id == mIdToUse }
             
             _state.value = OnboardingState(
                 step = if (hasSessions) 5 else 1,
@@ -278,7 +290,31 @@ class OnboardingViewModel(
                 material = building.material ?: "Unknown",
                 resolvedBuildingHash = building.buildingHash,
                 savedBuildingId = building.buildingHash, // preserve original hash
-                savedMeasurementId = measurementId
+                savedMeasurementId = mIdToUse,
+                floorLevel = measurement?.floorLevel?.toString() ?: "1",
+                surfaceType = measurement?.surfaceType ?: "CONCRETE",
+                locationType = measurement?.locationType ?: "CENTER_SPAN",
+                placement = measurement?.placement ?: "FLAT_ON_FLOOR"
+            )
+        }
+    }
+
+    fun startNewMeasurementLocation(buildingHash: String) {
+        viewModelScope.launch {
+            val building = profileRepository?.getBuildingProfile(buildingHash) ?: return@launch
+            
+            _state.value = OnboardingState(
+                step = 4, // skip Steps 1-3
+                isEditMode = false,
+                isAddingNewMeasurementLocation = true,
+                buildingName = building.displayName,
+                buildingType = building.buildingType,
+                floors = building.floors?.toString() ?: "4",
+                constructionYear = building.constructionYear?.toString() ?: "2020",
+                material = building.material ?: "Unknown",
+                resolvedBuildingHash = building.buildingHash,
+                savedBuildingId = building.buildingHash,
+                savedMeasurementId = null // clear so it generates new
             )
         }
     }
