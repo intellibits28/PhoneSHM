@@ -4,7 +4,66 @@
 
 using namespace phoneshm::dsp;
 
+#include "fdd_core.h"
+
 extern "C" {
+
+JNIEXPORT jobject JNICALL
+Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFdd(
+    JNIEnv* env, jobject /* this */,
+    jlongArray timestamps, jfloatArray xArray, jfloatArray yArray, jfloatArray zArray,
+    jfloat sampleRateHz, jint fftSize, jfloat overlapPct
+) {
+    jsize n = env->GetArrayLength(timestamps);
+    
+    jlong* ts = env->GetLongArrayElements(timestamps, nullptr);
+    jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
+    jfloat* y = env->GetFloatArrayElements(yArray, nullptr);
+    jfloat* z = env->GetFloatArrayElements(zArray, nullptr);
+
+    std::vector<AccelerationSample> samples(n);
+    for (jsize i = 0; i < n; ++i) {
+        samples[i] = {ts[i], x[i], y[i], z[i]};
+    }
+
+    env->ReleaseLongArrayElements(timestamps, ts, JNI_ABORT);
+    env->ReleaseFloatArrayElements(xArray, x, JNI_ABORT);
+    env->ReleaseFloatArrayElements(yArray, y, JNI_ABORT);
+    env->ReleaseFloatArrayElements(zArray, z, JNI_ABORT);
+
+    FddResult result = calculateFdd(samples, sampleRateHz, fftSize, overlapPct);
+
+    jclass resultClass = env->FindClass("com/ronin/phoneshm/core/dsp/NativeFddResult");
+    jmethodID ctor = env->GetMethodID(resultClass, "<init>", "([F[F[F[F[F)V");
+
+    jsize freqLen = result.frequencies.size();
+    jfloatArray freqs = env->NewFloatArray(freqLen);
+    jfloatArray sv = env->NewFloatArray(freqLen);
+
+    if (freqLen > 0) {
+        env->SetFloatArrayRegion(freqs, 0, freqLen, result.frequencies.data());
+        env->SetFloatArrayRegion(sv, 0, freqLen, result.firstSingularValues.data());
+    }
+    
+    jsize peaksLen = result.modes.size();
+    jfloatArray pFreqs = env->NewFloatArray(peaksLen);
+    jfloatArray pMags = env->NewFloatArray(peaksLen);
+    jfloatArray pProms = env->NewFloatArray(peaksLen);
+    
+    if (peaksLen > 0) {
+        std::vector<float> pF(peaksLen), pM(peaksLen), pP(peaksLen);
+        for(size_t i = 0; i < peaksLen; i++) {
+            pF[i] = result.modes[i].frequencyHz;
+            pM[i] = result.modes[i].powerMagnitude;
+            pP[i] = result.modes[i].prominence;
+        }
+        env->SetFloatArrayRegion(pFreqs, 0, peaksLen, pF.data());
+        env->SetFloatArrayRegion(pMags, 0, peaksLen, pM.data());
+        env->SetFloatArrayRegion(pProms, 0, peaksLen, pP.data());
+    }
+
+    return env->NewObject(resultClass, ctor, freqs, sv, pFreqs, pMags, pProms);
+}
 
 JNIEXPORT jfloatArray JNICALL
 Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeWelchPsdSingleAxis(

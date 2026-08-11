@@ -9,6 +9,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffp-contract=off")
 add_library(phoneshm_dsp SHARED
     dsp_core.cpp
     fft_backend.cpp
+    fdd_core.cpp
     dsp_jni.cpp
 )
 

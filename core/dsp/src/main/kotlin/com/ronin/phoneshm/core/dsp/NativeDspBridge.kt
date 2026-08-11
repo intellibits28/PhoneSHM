@@ -9,10 +9,28 @@ data class NativeWelchResult(
     val psdMagnitude: FloatArray
 )
 
+data class NativeFddResult(
+    val frequencies: FloatArray,
+    val firstSingularValues: FloatArray,
+    val peakFrequencies: FloatArray,
+    val peakMagnitudes: FloatArray,
+    val peakProminences: FloatArray
+)
+
 object NativeDspBridge {
     init {
         System.loadLibrary("phoneshm_dsp")
     }
+
+    external fun nativeCalculateFdd(
+        timestamps: LongArray,
+        x: FloatArray,
+        y: FloatArray,
+        z: FloatArray,
+        sampleRateHz: Float,
+        fftSize: Int,
+        overlapPct: Float
+    ): NativeFddResult
 
     external fun nativeWelchPsdSingleAxis(
         signal: FloatArray,

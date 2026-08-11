@@ -38,6 +38,8 @@ struct AxisPsdResult {
     std::vector<Peak> peaks;
 };
 
+std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::vector<float>& psd);
+
 struct WelchPsdParams {
     int fftSize = 1024;
     float overlapPercentage = 0.50f;
