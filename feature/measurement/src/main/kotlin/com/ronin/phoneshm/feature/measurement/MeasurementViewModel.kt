@@ -54,6 +54,7 @@ class MeasurementViewModel(
         buildingHash: String,
         measurementId: String,
         durationSec: Int,
+        startDelaySec: Int = 2,
         onSessionRecorded: ((sessionId: String, rawStorageFileUri: String) -> Unit)? = null
     ) {
         if (_uiState.value.isRecording || _uiState.value.isCalibrating) return
@@ -61,8 +62,11 @@ class MeasurementViewModel(
         val sessionId = UUID.randomUUID().toString()
 
         viewModelScope.launch {
-            _uiState.value = MeasurementUiState(isCalibrating = true, calibrationStatus = "Place your phone, calibrating in 2s...")
-            delay(2000L)
+            _uiState.value = MeasurementUiState(isCalibrating = true)
+            for (i in startDelaySec downTo 1) {
+                _uiState.value = _uiState.value.copy(calibrationStatus = "Place your phone, starting in ${i}s...")
+                delay(1000L)
+            }
             
             _uiState.value = _uiState.value.copy(calibrationStatus = "Calibrating sensor...")
             deviceCapabilityEngine?.runZeroVelocityCalibration(3)

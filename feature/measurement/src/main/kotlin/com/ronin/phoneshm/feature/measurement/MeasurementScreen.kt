@@ -46,6 +46,8 @@ fun MeasurementScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    
+    var startDelay by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(5) }
 
     androidx.compose.runtime.LaunchedEffect(activeMeasurementId) {
         viewModel.checkPastSessions(activeMeasurementId)
@@ -340,6 +342,25 @@ fun MeasurementScreen(
                     fontWeight = FontWeight.Bold
                 )
             }
+            
+            // Start Delay Selection
+            Text("Start Delay Timer (before recording)", style = MaterialTheme.typography.labelMedium, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(0, 5, 10, 15).forEach { delay ->
+                    OutlinedButton(
+                        onClick = { startDelay = delay },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (startDelay == delay) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                        )
+                    ) {
+                        Text("${delay}s", color = if (startDelay == delay) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
         }
 
         // Recording Actions
@@ -363,7 +384,8 @@ fun MeasurementScreen(
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
                             measurementId = activeMeasurementId,
-                            durationSec = 10
+                            durationSec = 10,
+                            startDelaySec = startDelay
                         ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
@@ -377,7 +399,8 @@ fun MeasurementScreen(
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
                             measurementId = activeMeasurementId,
-                            durationSec = 30
+                            durationSec = 30,
+                            startDelaySec = startDelay
                         ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
@@ -395,7 +418,8 @@ fun MeasurementScreen(
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
                             measurementId = activeMeasurementId,
-                            durationSec = duration
+                            durationSec = duration,
+                            startDelaySec = startDelay
                         ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
