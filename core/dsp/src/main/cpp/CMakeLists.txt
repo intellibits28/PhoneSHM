@@ -12,6 +12,6 @@ add_library(phoneshm_dsp SHARED
     dsp_jni.cpp
 )
 
-target_include_directories(phoneshm_dsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(phoneshm_dsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/eigen-3.4.0)
 find_library(log-lib log)
 target_link_libraries(phoneshm_dsp ${log-lib})
