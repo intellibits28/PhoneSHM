@@ -319,7 +319,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0,
                     buildingType = sessionMeta?.buildingType ?: buildingType,
                     floors = sessionMeta?.floors ?: floors,
-                    measurementProfileId = profileId
+                    measurementProfileId = profileId,
+                    spectrum = mainSpectrum,
+                    sessionMeta = sessionMeta,
+                    deviceReport = deviceReport
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
