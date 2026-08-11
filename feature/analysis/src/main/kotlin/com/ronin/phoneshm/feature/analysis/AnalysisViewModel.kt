@@ -56,7 +56,8 @@ data class AnalysisUiState(
     val errorMessage: String? = null,
     val consecutiveFailureCount: Int = 0,
     val isWeakSignalFailure: Boolean = false,
-    val measurementProfileId: String = "building_profile_active"
+    val measurementProfileId: String = "building_profile_active",
+    val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null
 )
 
 
@@ -192,6 +193,21 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
                 )
 
+                // Run EFDD via JNI natively
+                val efddResult = try {
+                    val tsArray = samples.map { it.timestampNs }.toLongArray()
+                    val xArray = samples.map { it.x }.toFloatArray()
+                    val yArray = samples.map { it.y }.toFloatArray()
+                    val zArray = samples.map { it.z }.toFloatArray()
+                    com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(
+                        tsArray, xArray, yArray, zArray,
+                        sampleRateHz, mainFftSize, 0.5f
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("Analysis", "Failed to compute EFDD: ${e.message}")
+                    null
+                }
+
                 val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
                 val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
                 if (samples.size >= windowSize) {
@@ -322,7 +338,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     measurementProfileId = profileId,
                     spectrum = mainSpectrum,
                     sessionMeta = sessionMeta,
-                    deviceReport = deviceReport
+                    deviceReport = deviceReport,
+                    efddResult = efddResult
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
