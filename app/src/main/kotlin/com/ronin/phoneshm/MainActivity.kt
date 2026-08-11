@@ -244,7 +244,7 @@ fun PhoneShmAppHost(
                     spectrum = state.spectrum,
                     sessionMeta = state.sessionMeta,
                     deviceReport = state.deviceReport,
-                    welfordBaselineShiftPct = state.baselineComparison?.baselineShiftPct ?: 0.0
+                    welfordBaselineShiftPct = state.baselineComparison?.percentageShift ?: 0.0
                 )
                 currentScreen = "REPORT"
             }
