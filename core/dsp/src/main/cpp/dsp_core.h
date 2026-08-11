@@ -86,6 +86,14 @@ std::vector<float> highPassFilterFiltfilt(
 // Per-segment linear detrend
 void detrendInPlace(std::vector<double>& data);
 
+// Single axis PSD calculation
+std::vector<float> welchPsdSingleAxis(
+    const std::vector<float>& signal,
+    int fftSize,
+    float overlapFraction,
+    float sampleRateHz
+);
+
 // Full multi-axis Welch PSD pipeline (B2: post-session accurate path)
 // C1: Uses double accumulation internally
 MultiAxisSpectrumResult calculateMultiAxisWelchPsd(
