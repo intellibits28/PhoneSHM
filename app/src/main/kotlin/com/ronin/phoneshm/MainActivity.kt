@@ -38,6 +38,7 @@ import com.ronin.phoneshm.core.device.AndroidDeviceCapabilityEngine
 import com.ronin.phoneshm.feature.analysis.AnalysisScreen
 import com.ronin.phoneshm.feature.analysis.AnalysisViewModel
 import com.ronin.phoneshm.feature.measurement.MeasurementScreen
+import com.ronin.phoneshm.feature.measurement.SessionHistoryScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingScreen
 import com.ronin.phoneshm.feature.onboarding.OnboardingViewModel
 import com.ronin.phoneshm.feature.report.ReportScreen
@@ -225,14 +226,45 @@ fun PhoneShmAppHost(
             viewModel = analysisViewModel,
             buildingHash = activeBuildingId,
             onBackToMeasurement = { currentScreen = "MEASUREMENT" },
-            onNavigateToReport = { f0, anomaly, quality, building ->
+            onNavigateToReport = { state ->
+                val quality = when {
+                    state.qualityReport == null -> "UNAVAILABLE (Missing Metadata)"
+                    state.qualityScorePct >= 85 -> "RESEARCH_GRADE"
+                    state.qualityScorePct >= 70 -> "GOOD"
+                    state.qualityScorePct >= 50 -> "FAIR"
+                    else -> "UNRELIABLE"
+                }
                 reportViewModel.setReportSummary(
-                    building = building,
+                    building = state.buildingType,
                     quality = quality,
-                    f0 = f0,
-                    anomaly = anomaly
+                    f0 = state.fundamentalFrequencyHz,
+                    anomaly = state.baselineComparison?.isAnomaly ?: false
+                )
+                reportViewModel.setAdvancedDiagnostics(
+                    spectrum = state.spectrum,
+                    sessionMeta = state.sessionMeta,
+                    deviceReport = state.deviceReport,
+                    welfordBaselineShiftPct = state.baselineComparison?.baselineShiftPct ?: 0.0
                 )
                 currentScreen = "REPORT"
+            }
+        )
+    } else if (currentScreen == "HISTORY") {
+        SessionHistoryScreen(
+            measurementProfileId = activeMeasurementId,
+            onNavigateBack = { currentScreen = "MEASUREMENT" },
+            onSessionSelected = { fileUri ->
+                val onboardState = onboardingViewModel.state.value
+                val bType = onboardState.buildingType
+                val bFloors = onboardState.floors.toIntOrNull() ?: 3
+                val bHash = onboardState.resolvedBuildingHash ?: activeBuildingId
+                analysisViewModel.analyzeSessionFileOrDemo(
+                    filePath = fileUri,
+                    buildingType = bType,
+                    floors = bFloors,
+                    buildingHash = bHash
+                )
+                currentScreen = "ANALYSIS"
             }
         )
     } else {
@@ -312,6 +344,9 @@ fun PhoneShmAppHost(
                             buildingHash = bHash
                         )
                         currentScreen = "ANALYSIS"
+                    },
+                    onNavigateToHistory = {
+                        currentScreen = "HISTORY"
                     }
                 )
             }

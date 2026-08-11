@@ -25,7 +25,8 @@ data class MeasurementUiState(
     val currentY: Float = 0f,
     val currentZ: Float = 0f,
     val totalSamplesCollected: Int = 0,
-    val recordingFinished: Boolean = false
+    val recordingFinished: Boolean = false,
+    val hasPastSessions: Boolean = false
 )
 
 /**
@@ -41,6 +42,13 @@ class MeasurementViewModel(
 
     private var recordingJob: Job? = null
     private var streamingJob: Job? = null
+
+    fun checkPastSessions(measurementProfileId: String) {
+        viewModelScope.launch {
+            val hasSessions = profileRepository?.hasAnyRecordingForMeasurementProfile(measurementProfileId) ?: false
+            _uiState.value = _uiState.value.copy(hasPastSessions = hasSessions)
+        }
+    }
 
     fun startRecording(
         buildingHash: String,

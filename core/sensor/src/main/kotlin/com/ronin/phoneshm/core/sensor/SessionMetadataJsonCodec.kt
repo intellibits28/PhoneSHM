@@ -33,6 +33,10 @@ object SessionMetadataJsonCodec {
             put("appVersionName", metadata.appVersionName)
             put("appVersionCode", metadata.appVersionCode)
             put("gitCommitHash", metadata.gitCommitHash)
+            metadata.recordedAtEpochMs?.let { put("recordedAtEpochMs", it) }
+            metadata.isImpulseValid?.let { put("isImpulseValid", it) }
+            metadata.isContinuityPassed?.let { put("isContinuityPassed", it) }
+            metadata.qualityGatePassed?.let { put("qualityGatePassed", it) }
         }
         
         val biasArr = JSONArray()
@@ -96,7 +100,11 @@ object SessionMetadataJsonCodec {
                 sessionAccelerometerBias = if (json.has("sessionCalibration")) {
                     val arr = json.getJSONObject("sessionCalibration").getJSONArray("accelerometerBias")
                     FloatArray(arr.length()) { i -> arr.getDouble(i).toFloat() }
-                } else null
+                } else null,
+                recordedAtEpochMs = if (metaJson.has("recordedAtEpochMs")) metaJson.getLong("recordedAtEpochMs") else null,
+                isImpulseValid = if (metaJson.has("isImpulseValid")) metaJson.getBoolean("isImpulseValid") else null,
+                isContinuityPassed = if (metaJson.has("isContinuityPassed")) metaJson.getBoolean("isContinuityPassed") else null,
+                qualityGatePassed = if (metaJson.has("qualityGatePassed")) metaJson.getBoolean("qualityGatePassed") else null
             )
 
             val devJson = json.getJSONObject("deviceReport")

@@ -42,7 +42,11 @@ data class MeasurementSessionMetadata(
     val appVersionCode: Int = BuildConfig.VERSION_CODE,
     val gitCommitHash: String = BuildConfig.GIT_COMMIT_HASH,
     val sessionNoiseFloorMg: Float? = null,
-    val sessionAccelerometerBias: FloatArray? = null
+    val sessionAccelerometerBias: FloatArray? = null,
+    val recordedAtEpochMs: Long? = null,
+    val isImpulseValid: Boolean? = null,
+    val isContinuityPassed: Boolean? = null,
+    val qualityGatePassed: Boolean? = null
 )
 
 /**

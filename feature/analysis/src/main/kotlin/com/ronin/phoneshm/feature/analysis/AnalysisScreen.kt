@@ -50,7 +50,7 @@ fun AnalysisScreen(
     viewModel: AnalysisViewModel = viewModel(),
     buildingHash: String = java.util.UUID.randomUUID().toString(),
     onBackToMeasurement: () -> Unit = {},
-    onNavigateToReport: (f0: Double, anomaly: Boolean, quality: String, building: String) -> Unit = { _, _, _, _ -> },
+    onNavigateToReport: (AnalysisUiState) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -687,17 +687,7 @@ softWrap = false,
                 }
                 Button(
                     onClick = {
-                        val f0 = uiState.fundamentalFrequencyHz
-                        val anomaly = uiState.baselineComparison?.isAnomaly ?: false
-                        val quality = when {
-                            uiState.qualityReport == null -> "UNAVAILABLE (Missing Metadata)"
-                            uiState.qualityScorePct >= 85 -> "RESEARCH_GRADE"
-                            uiState.qualityScorePct >= 70 -> "GOOD"
-                            uiState.qualityScorePct >= 50 -> "FAIR"
-                            else -> "UNRELIABLE"
-                        }
-                        val building = uiState.buildingType
-                        onNavigateToReport(f0, anomaly, quality, building)
+                        onNavigateToReport(uiState)
                     },
                     modifier = Modifier.weight(1.2f),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),

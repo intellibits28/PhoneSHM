@@ -46,6 +46,9 @@ data class AnalysisUiState(
     val baselineComparison: BaselineComparisonResult? = null,
     val classificationLabel: String = "GLOBAL_MODE",
     val modalResult: ModalAnalysisResult? = null,
+    val spectrum: com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult? = null,
+    val sessionMeta: com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata? = null,
+    val deviceReport: com.ronin.phoneshm.core.device.DeviceCapabilityReport? = null,
     val buildingType: String = "RESIDENTIAL_CONCRETE",
     val floors: Int = 3,
     val buildingHash: String = "",
@@ -282,6 +285,24 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     currentF0Hz = modalRes.fundamentalFrequencyHz,
                     qualityScorePct = finalQualityScorePct
                 )
+
+                // Update sidecar metadata with quality results so Session History can display it
+                if (sessionMeta != null && deviceReport != null && filePath != null) {
+                    try {
+                        val updatedMeta = sessionMeta!!.copy(
+                            isImpulseValid = impulseQuality?.isImpulseValid ?: true,
+                            isContinuityPassed = samplingContinuity.isContinuityPassed,
+                            qualityGatePassed = finalQualityScorePct >= 50
+                        )
+                        val metaFile = java.io.File(filePath.replace(".bin", ".meta.json"))
+                        if (metaFile.exists()) {
+                            val jsonString = com.ronin.phoneshm.core.sensor.SessionMetadataJsonCodec.encode(updatedMeta, deviceReport!!)
+                            metaFile.writeText(jsonString)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("Analysis", "Failed to update sidecar meta file: ${e.message}")
+                    }
+                }
 
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,

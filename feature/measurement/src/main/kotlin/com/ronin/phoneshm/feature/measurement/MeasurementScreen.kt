@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -40,10 +41,15 @@ fun MeasurementScreen(
     activeBuildingHash: String,
     activeMeasurementId: String,
     modifier: Modifier = Modifier,
-    onNavigateToAnalysis: (String?) -> Unit = {}
+    onNavigateToAnalysis: (String?) -> Unit = {},
+    onNavigateToHistory: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+
+    androidx.compose.runtime.LaunchedEffect(activeMeasurementId) {
+        viewModel.checkPastSessions(activeMeasurementId)
+    }
 
     androidx.compose.runtime.LaunchedEffect(uiState.recordingFinished) {
         if (uiState.recordingFinished) {
@@ -112,6 +118,20 @@ fun MeasurementScreen(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
+
+            if (uiState.hasPastSessions) {
+                OutlinedButton(
+                    onClick = onNavigateToHistory,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "View Past Sessions",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
         }
 
         // Realtime Visualizer Card

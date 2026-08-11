@@ -225,12 +225,26 @@ fun EngineerAdvancedView(uiState: ReportUiState) {
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                val telemetryStr = StringBuilder()
+                telemetryStr.append("• Welch PSD Matrix (1024-bin FFT)\n")
+                if (uiState.spectrum != null) {
+                    telemetryStr.append("• Tri-Axial SNR Fusion: X=%.1f dB, Y=%.1f dB, Z=%.1f dB\n".format(
+                        10 * kotlin.math.log10(uiState.spectrum.psdX.powerSpectralDensity.average().coerceAtLeast(1e-9)),
+                        10 * kotlin.math.log10(uiState.spectrum.psdY.powerSpectralDensity.average().coerceAtLeast(1e-9)),
+                        10 * kotlin.math.log10(uiState.spectrum.psdZ.powerSpectralDensity.average().coerceAtLeast(1e-9))
+                    ))
+                }
+                if (uiState.sessionMeta != null) {
+                    telemetryStr.append("• Clock Drift: %.1f PPM, Jitter: %.2f ms\n".format(
+                        uiState.sessionMeta.clockDriftPpm,
+                        uiState.sessionMeta.sampleJitterStdMs
+                    ))
+                }
+                telemetryStr.append("• Acoustic Event Classification Logs (Coming Soon)\n")
+                telemetryStr.append("• Welford Baseline Shift Confidence Intervals (Shift: %.1f%%)".format(uiState.welfordBaselineShiftPct * 100))
+
                 Text(
-                    text = "• Welch PSD Matrix (1024-bin FFT)\n" +
-                           "• Tri-Axial Correlation & SNR Fusion\n" +
-                           "• Clock Drift & Jitter Telemetry\n" +
-                           "• Acoustic Event Classification Logs\n" +
-                           "• Welford Baseline Shift Confidence Intervals",
+                    text = telemetryStr.toString(),
                     color = Color(0xFF94A3B8),
                     fontSize = 14.sp,
                     lineHeight = 22.sp
@@ -241,18 +255,84 @@ fun EngineerAdvancedView(uiState: ReportUiState) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp)
-                        .background(Color(0xFF0F172A), RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
+                        .height(250.dp)
+                        .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                        .padding(8.dp)
                 ) {
-                    Text(
-                        text = "[ Interactive PSD Chart Placeholder ]",
-                        color = Color(0xFF475569),
-                        fontSize = 13.sp
-                    )
+                    if (uiState.spectrum != null) {
+                        PsdChartView(spectrum = uiState.spectrum, modifier = Modifier.fillMaxSize())
+                    } else {
+                        Text(
+                            text = "[ Interactive PSD Chart Placeholder - Data Unavailable ]",
+                            color = Color(0xFF475569),
+                            fontSize = 13.sp,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PsdChartView(spectrum: com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+
+        val xColor = Color(0xFF2196F3)
+        val yColor = Color(0xFF4CAF50)
+        val zColor = Color(0xFFFF9800)
+        val magColor = Color.White
+
+        // Find max power for scaling
+        var maxPower = 1e-9f
+        spectrum.psdMagnitude.powerSpectralDensity.forEach { if (it > maxPower) maxPower = it }
+        val logMaxPower = kotlin.math.log10(maxPower.toDouble())
+        val logMinPower = logMaxPower - 4.0 // 4 decades
+
+        fun getY(power: Float): Float {
+            val logP = kotlin.math.log10(power.coerceAtLeast(1e-9f).toDouble())
+            val normalized = ((logP - logMinPower) / (logMaxPower - logMinPower)).toFloat().coerceIn(0f, 1f)
+            return height - (normalized * height)
+        }
+
+        // Draw grids
+        val numGridLines = 5
+        for (i in 0..numGridLines) {
+            val yPos = height * i / numGridLines
+            drawLine(
+                color = Color(0xFF334155),
+                start = androidx.compose.ui.geometry.Offset(0f, yPos),
+                end = androidx.compose.ui.geometry.Offset(width, yPos),
+                strokeWidth = 1f
+            )
+        }
+
+        val freqs = spectrum.psdMagnitude.frequencies
+        if (freqs.isEmpty()) return@Canvas
+
+        val maxFreq = freqs.last().coerceAtMost(50f) // Show up to 50Hz
+        val maxIndex = freqs.indexOfFirst { it > maxFreq }.takeIf { it > 0 } ?: (freqs.size - 1)
+
+        val stepX = width / maxIndex.coerceAtLeast(1)
+
+        fun drawAxisLine(psd: FloatArray, color: Color, stroke: Float) {
+            val path = androidx.compose.ui.graphics.Path()
+            path.moveTo(0f, getY(psd[0]))
+            for (i in 1..maxIndex) {
+                if (i < psd.size) {
+                    path.lineTo(i * stepX, getY(psd[i]))
+                }
+            }
+            drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
+        }
+
+        drawAxisLine(spectrum.psdX.powerSpectralDensity, xColor.copy(alpha = 0.5f), 2f)
+        drawAxisLine(spectrum.psdY.powerSpectralDensity, yColor.copy(alpha = 0.5f), 2f)
+        drawAxisLine(spectrum.psdZ.powerSpectralDensity, zColor.copy(alpha = 0.5f), 2f)
+        drawAxisLine(spectrum.psdMagnitude.powerSpectralDensity, magColor, 4f)
     }
 }
 

@@ -15,7 +15,11 @@ data class ReportUiState(
     val buildingName: String = "",
     val qualityCategory: String = "RESEARCH_GRADE",
     val f0Hz: Double = 0.0,
-    val anomalyDetected: Boolean = false
+    val anomalyDetected: Boolean = false,
+    val spectrum: com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult? = null,
+    val sessionMeta: com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata? = null,
+    val deviceReport: com.ronin.phoneshm.core.device.DeviceCapabilityReport? = null,
+    val welfordBaselineShiftPct: Double = 0.0
 )
 
 /**
@@ -35,6 +39,20 @@ class ReportViewModel : ViewModel() {
             qualityCategory = quality,
             f0Hz = f0,
             anomalyDetected = anomaly
+        )
+    }
+
+    fun setAdvancedDiagnostics(
+        spectrum: com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult?,
+        sessionMeta: com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata?,
+        deviceReport: com.ronin.phoneshm.core.device.DeviceCapabilityReport?,
+        welfordBaselineShiftPct: Double
+    ) {
+        _uiState.value = _uiState.value.copy(
+            spectrum = spectrum,
+            sessionMeta = sessionMeta,
+            deviceReport = deviceReport,
+            welfordBaselineShiftPct = welfordBaselineShiftPct
         )
     }
 }
