@@ -203,7 +203,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         tsArray, xArray, yArray, zArray,
                         sampleRateHz, mainFftSize, 0.5f
                     )
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     android.util.Log.e("Analysis", "Failed to compute EFDD: ${e.message}")
                     null
                 }

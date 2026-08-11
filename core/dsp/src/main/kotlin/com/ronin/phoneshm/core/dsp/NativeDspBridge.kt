@@ -19,7 +19,11 @@ data class NativeFddResult(
 
 object NativeDspBridge {
     init {
-        System.loadLibrary("phoneshm_dsp")
+        try {
+            System.loadLibrary("phoneshm_dsp")
+        } catch (e: Throwable) {
+            println("NativeDspBridge: Failed to load phoneshm_dsp (Expected during JVM Unit Tests)")
+        }
     }
 
     external fun nativeCalculateFdd(
