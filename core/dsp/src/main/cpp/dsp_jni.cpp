@@ -6,6 +6,26 @@ using namespace phoneshm::dsp;
 
 extern "C" {
 
+JNIEXPORT jfloatArray JNICALL
+Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeWelchPsdSingleAxis(
+    JNIEnv* env, jobject /* this */,
+    jfloatArray signalArray, jint fftSize, jfloat overlapPct, jfloat sampleRateHz
+) {
+    jsize n = env->GetArrayLength(signalArray);
+    jfloat* signalData = env->GetFloatArrayElements(signalArray, nullptr);
+
+    std::vector<float> signal(signalData, signalData + n);
+    env->ReleaseFloatArrayElements(signalArray, signalData, JNI_ABORT);
+
+    std::vector<float> psd = welchPsdSingleAxis(signal, fftSize, overlapPct, sampleRateHz);
+
+    jfloatArray resultArray = env->NewFloatArray(psd.size());
+    if (psd.size() > 0) {
+        env->SetFloatArrayRegion(resultArray, 0, psd.size(), psd.data());
+    }
+    return resultArray;
+}
+
 JNIEXPORT jobject JNICALL
 Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateMultiAxisWelchPsd(
     JNIEnv* env, jobject /* this */,

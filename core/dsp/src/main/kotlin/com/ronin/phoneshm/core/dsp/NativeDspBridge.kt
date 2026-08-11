@@ -14,6 +14,13 @@ object NativeDspBridge {
         System.loadLibrary("phoneshm_dsp")
     }
 
+    external fun nativeWelchPsdSingleAxis(
+        signal: FloatArray,
+        fftSize: Int,
+        overlapPct: Float,
+        sampleRateHz: Float
+    ): FloatArray
+
     external fun nativeCalculateMultiAxisWelchPsd(
         timestamps: LongArray,
         x: FloatArray,
