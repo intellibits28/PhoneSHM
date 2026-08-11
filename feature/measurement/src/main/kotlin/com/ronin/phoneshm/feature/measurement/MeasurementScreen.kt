@@ -470,7 +470,8 @@ fun MeasurementScreen(
                             viewModel.startRecording(
                                 buildingHash = activeBuildingHash,
                                 measurementId = activeMeasurementId,
-                                durationSec = 600
+                                durationSec = 600,
+                                startDelaySec = startDelay
                             ) { sid, uri ->
                                 com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                             }
@@ -493,7 +494,8 @@ fun MeasurementScreen(
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
                             measurementId = activeMeasurementId,
-                            durationSec = 600
+                            durationSec = 600,
+                            startDelaySec = startDelay
                         ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
                         }
