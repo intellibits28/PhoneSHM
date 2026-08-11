@@ -214,6 +214,14 @@ class OnboardingViewModel(
                     }
                 }
 
+                // Ensure unique hash if creating a new building that happens to match an existing hash (same name + same location)
+                if (!s.isEditMode && finalHash != null && profileRepository != null) {
+                    val exists = profileRepository.getBuildingProfile(finalHash) != null
+                    if (exists) {
+                        finalHash = finalHash + "_" + java.util.UUID.randomUUID().toString().substring(0, 4)
+                    }
+                }
+
                 // Use the originally saved hash if we are in edit mode, so we update the same row
                 val hashToUse = if (s.isEditMode && s.savedBuildingId != null) s.savedBuildingId else (finalHash ?: "crowd_anonymized_$bId")
                 val buildingProfile = BuildingProfile(
