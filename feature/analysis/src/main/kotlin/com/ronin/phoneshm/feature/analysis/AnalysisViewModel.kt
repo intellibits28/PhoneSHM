@@ -157,7 +157,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val effectiveNoiseThreshold = if (isAmbientMode) {
                     noiseFloor * com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier
                 } else {
-                    noiseFloor
+                    // Apply multiplier to active mode as well for testing purposes
+                    noiseFloor * com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier
                 }
                 if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
                     snrWarning = if (isAmbientMode) {
