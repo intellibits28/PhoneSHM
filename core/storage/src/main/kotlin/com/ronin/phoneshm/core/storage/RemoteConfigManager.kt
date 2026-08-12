@@ -18,12 +18,14 @@ object RemoteConfigManager {
     private const val DEFAULT_AMBIENT_SNR = 1.0
     private const val DEFAULT_SPECTRAL_SANITY = 0.15
     private const val DEFAULT_GAP_MISSING_RATIO = 0.05
+    private const val DEFAULT_MIN_RMS_MULTIPLIER = 0.1
 
     // Remote Config Keys
     private const val KEY_PEAK_TO_RMS = "PEAK_TO_RMS_THRESHOLD"
     private const val KEY_AMBIENT_SNR = "AMBIENT_SNR_THRESHOLD_DB"
     private const val KEY_SPECTRAL_SANITY = "SPECTRAL_SANITY_THRESHOLD"
     private const val KEY_GAP_MISSING_RATIO = "GAP_MISSING_TIME_RATIO_THRESHOLD"
+    private const val KEY_MIN_RMS_MULTIPLIER = "MIN_RMS_MULTIPLIER"
 
     private lateinit var remoteConfig: FirebaseRemoteConfig
 
@@ -39,7 +41,8 @@ object RemoteConfigManager {
             KEY_PEAK_TO_RMS to DEFAULT_PEAK_TO_RMS,
             KEY_AMBIENT_SNR to DEFAULT_AMBIENT_SNR,
             KEY_SPECTRAL_SANITY to DEFAULT_SPECTRAL_SANITY,
-            KEY_GAP_MISSING_RATIO to DEFAULT_GAP_MISSING_RATIO
+            KEY_GAP_MISSING_RATIO to DEFAULT_GAP_MISSING_RATIO,
+            KEY_MIN_RMS_MULTIPLIER to DEFAULT_MIN_RMS_MULTIPLIER
         )
         remoteConfig.setDefaultsAsync(defaults)
 
@@ -88,6 +91,13 @@ object RemoteConfigManager {
             getSafeDouble(KEY_GAP_MISSING_RATIO, DEFAULT_GAP_MISSING_RATIO),
             0.01, 0.3,
             DEFAULT_GAP_MISSING_RATIO
+        )
+
+    val minRmsMultiplier: Double
+        get() = clamp(
+            getSafeDouble(KEY_MIN_RMS_MULTIPLIER, DEFAULT_MIN_RMS_MULTIPLIER),
+            0.01, 1.0,
+            DEFAULT_MIN_RMS_MULTIPLIER
         )
 
     private fun clamp(value: Double, min: Double, max: Double, default: Double): Double {

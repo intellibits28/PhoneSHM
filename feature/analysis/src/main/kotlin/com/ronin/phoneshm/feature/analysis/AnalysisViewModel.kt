@@ -154,7 +154,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val isSynthetic = (sessionMeta == null)
                 val isAmbientMode = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
                 val profileId = sessionMeta?.measurementProfileId ?: "building_profile_active"
-                val effectiveNoiseThreshold = if (isAmbientMode) noiseFloor * 0.3 else noiseFloor
+                val effectiveNoiseThreshold = if (isAmbientMode) {
+                    noiseFloor * com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier
+                } else {
+                    noiseFloor
+                }
                 if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
                     snrWarning = if (isAmbientMode) {
                         "Ambient signal extremely weak — even with extended averaging, structural frequencies may not be recoverable. Try recording when there is more environmental activity (traffic, wind, footfall)."
