@@ -48,6 +48,7 @@ fun MeasurementScreen(
     val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     
     var startDelay by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(5) }
+    var showConfigDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(activeMeasurementId) {
         viewModel.checkPastSessions(activeMeasurementId)
@@ -134,6 +135,34 @@ fun MeasurementScreen(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
+            
+            androidx.compose.material3.TextButton(
+                onClick = { showConfigDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("View Current Active Configuration")
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        if (showConfigDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showConfigDialog = false },
+                title = { Text("Active Configuration") },
+                text = {
+                    Column {
+                        Text("These values are loaded from Firebase Remote Config or fallback to defaults.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("MIN_RMS_MULTIPLIER: ${com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier}")
+                        // Add more config parameters here as they are added to RemoteConfigManager
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { showConfigDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            )
         }
 
         // Realtime Visualizer Card
