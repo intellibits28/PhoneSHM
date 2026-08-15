@@ -116,8 +116,9 @@ fun AnalysisScreen(
                         fontWeight = FontWeight.Black
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    val fftSizeStr = uiState.spectrum?.output?.parameters?.fftSize?.toString() ?: "---"
                     Text(
-                        text = "Typology: ${uiState.buildingType} (${uiState.floors} floors) | 1024-bin FFT @ 100Hz",
+                        text = "Typology: ${uiState.buildingType} (${uiState.floors} floors) | ${fftSizeStr}-bin FFT @ 100Hz",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF94A3B8)
                     )

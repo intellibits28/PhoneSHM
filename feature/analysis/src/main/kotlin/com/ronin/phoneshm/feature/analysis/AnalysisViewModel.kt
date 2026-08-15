@@ -138,12 +138,16 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                                 AccelerationSample(data.timestampsNs[i], data.x[i], data.y[i], data.z[i])
                             }
                         } else {
-                            generateSyntheticStructuralSamples(buildingType, floors)
+                            generateSyntheticStructuralSamples(sessionMeta?.buildingType ?: buildingType, sessionMeta?.floors ?: floors)
                         }
                     } else {
                         generateSyntheticStructuralSamples(buildingType, floors)
                     }
                 }
+
+                // Use metadata values if available, otherwise fall back to arguments
+                val actualBuildingType = sessionMeta?.buildingType ?: buildingType
+                val actualFloors = sessionMeta?.floors ?: floors
 
                 // Recommendation #3: On-device SNR/quality gate
                 val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
@@ -152,7 +156,12 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val noiseFloor = (sessionMeta?.sessionNoiseFloorMg ?: deviceReport?.estimatedNoiseFloorMg)?.toDouble() ?: 0.45
                 var snrWarning: String? = null
                 val isSynthetic = (sessionMeta == null)
-                val isAmbientMode = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                
+                // If it's a known ambient profile OR it's a custom profile longer than 60s, treat it as ambient.
+                val isAmbientProfileId = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                val isAmbientDuration = (sessionMeta?.targetDurationSeconds ?: 0) >= 60
+                val isAmbientMode = isAmbientProfileId || isAmbientDuration
+                
                 val profileId = sessionMeta?.measurementProfileId ?: "building_profile_active"
                 val effectiveNoiseThreshold = if (isAmbientMode) {
                     noiseFloor * com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier
@@ -238,8 +247,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         physicsEngine.classifyFrequency(
                             f0Hz = f0Hz,
                             prominence = prominence.toFloat(),
-                            buildingType = buildingType,
-                            floors = floors
+                            buildingType = actualBuildingType,
+                            floors = actualFloors
                         )
                     }
                 )
@@ -338,8 +347,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     errorMessage = snrWarning,
                     isWeakSignalFailure = snrWarning != null,
                     consecutiveFailureCount = if (snrWarning != null) _uiState.value.consecutiveFailureCount + 1 else 0,
-                    buildingType = sessionMeta?.buildingType ?: buildingType,
-                    floors = sessionMeta?.floors ?: floors,
+                    buildingType = actualBuildingType,
+                    floors = actualFloors,
                     measurementProfileId = profileId,
                     spectrum = mainSpectrum,
                     sessionMeta = sessionMeta,

@@ -57,8 +57,18 @@ class DefaultModalAnalyzer : ModalAnalyzer {
                 )
             }
         } else {
-            // Select the candidate peak with highest power magnitude across all axes
-            val bestCandidate = candidatePeaks.maxByOrNull { it.second.powerMagnitude }!!
+            // Select the candidate peak by weighting power magnitude with physics plausibility
+            val bestCandidate = candidatePeaks.maxByOrNull { (_, peak) ->
+                val classification = evaluatePhysics(peak.frequencyHz.toDouble(), peak.prominence.toDouble()).classification
+                val multiplier = when (classification) {
+                    FrequencyClassification.GLOBAL_MODE -> 1.0
+                    FrequencyClassification.LOCAL_MODE -> 0.8
+                    FrequencyClassification.BELOW_EXPECTED_RANGE -> 0.1
+                    FrequencyClassification.SENSOR_ARTIFACT -> 0.01
+                    FrequencyClassification.UNKNOWN -> 0.5
+                }
+                peak.powerMagnitude * multiplier
+            }!!
             dominantAxis = bestCandidate.first
             fundamentalFrequencyHz = bestCandidate.second.frequencyHz.toDouble()
             dominantPeakPower = bestCandidate.second.powerMagnitude.toDouble()

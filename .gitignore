@@ -34,6 +34,20 @@ local.properties
 scratch/
 *.log
 logs_and_others/
+sessions.json
+rc.json
+test.csv
+*.bin
+*.meta.json
+
+# Scripts and specific utilities
+*.py
+*.sh
+!scripts/
+
+# Node modules
+node_modules/
+scripts/node_verify/node_modules/
 
 # Scratch files and temporary artifacts
 test_output*
@@ -43,5 +57,5 @@ patch*.py
 .agy_scratch/
 app-distribution.json
 google-services.json
-phoneshm-research-firebase-adminsdk-fbsvc-af2bf25fdc.json
+*firebase-adminsdk*.json
 analysis_scripts/
