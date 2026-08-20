@@ -36,11 +36,24 @@ function generate_autotoc() {
       if(cur_id == undefined) {
         current.attr('id', 'title' + i);
         current.addClass('anchor');
-        toc.append("<li class='level" + levelTag + "'><a id='link" + i + "' href='#title" +
-                    i + "' title='" + current.prop("tagName") + "'>" + current.text() + "</a></li>");
+
+        var li = $("<li></li>").addClass("level" + levelTag);
+        var link = $("<a></a>")
+          .attr("id", "link" + i)
+          .attr("href", "#title" + i)
+          .attr("title", current.prop("tagName"))
+          .text(current.text());
+        li.append(link);
+        toc.append(li);
       } else {
-        toc.append("<li class='level" + levelTag + "'><a id='" + cur_id + "' href='#title" +
-                    i + "' title='" + current.prop("tagName") + "'>" + current.text() + "</a></li>");
+        var liExisting = $("<li></li>").addClass("level" + levelTag);
+        var linkExisting = $("<a></a>")
+          .attr("id", cur_id)
+          .attr("href", "#title" + i)
+          .attr("title", current.prop("tagName"))
+          .text(current.text());
+        liExisting.append(linkExisting);
+        toc.append(liExisting);
       }
     });
     resizeHeight();
