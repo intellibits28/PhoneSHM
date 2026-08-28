@@ -46,7 +46,8 @@ data class MeasurementSessionMetadata(
     val recordedAtEpochMs: Long? = null,
     val isImpulseValid: Boolean? = null,
     val isContinuityPassed: Boolean? = null,
-    val qualityGatePassed: Boolean? = null
+    val qualityGatePassed: Boolean? = null,
+    val binaryChecksumCrc32: String? = null
 )
 
 /**

@@ -174,6 +174,18 @@ class AndroidVibrationSensorEngine(
             systemArrivalTimesNs.toLongArray()
         )
 
+        // Calculate CRC32 Checksum
+        val crc32 = java.util.zip.CRC32()
+        finalFile.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead = input.read(buffer)
+            while (bytesRead != -1) {
+                crc32.update(buffer, 0, bytesRead)
+                bytesRead = input.read(buffer)
+            }
+        }
+        val checksumStr = String.format("%08X", crc32.value)
+
         val metadata = MeasurementSessionMetadata(
             sessionId = sessionId,
             measurementProfileId = profileId,
@@ -201,7 +213,8 @@ class AndroidVibrationSensorEngine(
             gitCommitHash = BuildConfig.GIT_COMMIT_HASH,
             sessionNoiseFloorMg = sessionNoiseFloorMg,
             sessionAccelerometerBias = sessionAccelerometerBias,
-            recordedAtEpochMs = recordedAtEpochMs
+            recordedAtEpochMs = recordedAtEpochMs,
+            binaryChecksumCrc32 = checksumStr
         )
 
         // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject

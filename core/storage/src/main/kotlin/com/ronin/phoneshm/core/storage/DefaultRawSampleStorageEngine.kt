@@ -27,6 +27,9 @@ class DefaultRawSampleStorageEngine(
             file.delete()
         }
         file.createNewFile()
+        if (format == StorageFormat.BINARY_LITTLE_ENDIAN) {
+            FileOutputStream(file).use { it.write("SHM1".toByteArray(Charsets.US_ASCII)) }
+        }
         file
     }
 
@@ -90,7 +93,18 @@ class DefaultRawSampleStorageEngine(
             Pair(gzipFile.length(), sampleCount)
         } else {
             // Binary file
-            val sampleCount = (file.length() / 20).toInt()
+            var offset = 0L
+            val raf = java.io.RandomAccessFile(file, "r")
+            if (raf.length() >= 4) {
+                val header = ByteArray(4)
+                raf.readFully(header)
+                if (String(header, Charsets.US_ASCII) == "SHM1") {
+                    offset = 4L
+                }
+            }
+            raf.close()
+            
+            val sampleCount = ((file.length() - offset) / 20).toInt()
             val finalFile = File(file.parentFile, file.name.removeSuffix(".tmp"))
             file.renameTo(finalFile)
             Pair(finalFile.length(), sampleCount)
@@ -104,12 +118,16 @@ class DefaultRawSampleStorageEngine(
 
         if (file.name.endsWith(".bin")) {
             val bytes = file.readBytes()
-            val sampleCount = bytes.size / 20
+            var offset = 0
+            if (bytes.size >= 4 && String(bytes.copyOfRange(0, 4), Charsets.US_ASCII) == "SHM1") {
+                offset = 4
+            }
+            val sampleCount = (bytes.size - offset) / 20
             val timestamps = LongArray(sampleCount)
             val x = FloatArray(sampleCount)
             val y = FloatArray(sampleCount)
             val z = FloatArray(sampleCount)
-            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            val buffer = ByteBuffer.wrap(bytes, offset, bytes.size - offset).order(ByteOrder.LITTLE_ENDIAN)
             for (i in 0 until sampleCount) {
                 timestamps[i] = buffer.long
                 x[i] = buffer.float
