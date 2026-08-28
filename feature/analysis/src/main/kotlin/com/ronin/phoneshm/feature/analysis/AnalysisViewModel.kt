@@ -243,6 +243,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val modalRes = modalAnalyzer.analyzeMultiAxisSpectrum(
                     spectrum = mainSpectrum,
                     slidingWindowSpectra = slidingSpectra,
+                    buildingType = actualBuildingType,
                     evaluatePhysics = { f0Hz, prominence ->
                         physicsEngine.classifyFrequency(
                             f0Hz = f0Hz,

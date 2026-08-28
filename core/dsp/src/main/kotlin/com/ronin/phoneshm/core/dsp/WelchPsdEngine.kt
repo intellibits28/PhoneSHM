@@ -524,7 +524,7 @@ class WelchPsdEngine : DspEngine {
                             if (psd[j] < rightMin) rightMin = psd[j]
                             if (j > k + 1 && psd[j] > psd[j - 1]) break
                         }
-                        val referenceLevel = maxOf((leftMin + rightMin) / 2.0f, 1e-15f)
+                        val referenceLevel = maxOf((leftMin + rightMin) / 2.0f, 1e-30f)
                         val prominence = psd[k] / referenceLevel
                         peaks.add(Peak(frequencyHz = frequencies[k], powerMagnitude = psd[k], prominence = prominence))
                     }

@@ -220,7 +220,7 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
                 if (j > k + 1 && psd[j] > psd[j - 1]) break;
             }
 
-            float referenceLevel = std::max((leftMin + rightMin) / 2.0f, 1e-15f);
+            float referenceLevel = std::max((leftMin + rightMin) / 2.0f, 1e-30f);
             float prominence = psd[k] / referenceLevel;
 
             peaks.push_back({frequencies[k], psd[k], prominence});

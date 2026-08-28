@@ -21,14 +21,22 @@ class DefaultModalAnalyzer : ModalAnalyzer {
     override fun analyzeMultiAxisSpectrum(
         spectrum: MultiAxisSpectrumResult,
         slidingWindowSpectra: List<MultiAxisSpectrumResult>,
+        buildingType: String,
         evaluatePhysics: (f0Hz: Double, prominence: Double) -> PlausibilityClassificationResult
     ): ModalAnalysisResult {
-        // Collect candidate peaks from X, Y, Z, and Magnitude within valid structural bounds (0.3 Hz to 45.0 Hz)
+        // Topology Masking for upper bound
+        val upperLimitHz = if (buildingType.contains("TIMBER", ignoreCase = true) || buildingType.contains("WOOD", ignoreCase = true)) {
+            20.0f
+        } else {
+            45.0f
+        }
+
+        // Collect candidate peaks from X, Y, Z, and Magnitude within valid structural bounds
         val candidatePeaks = mutableListOf<Pair<String, Peak>>()
-        extractValidPeaks("X", spectrum.psdX, candidatePeaks)
-        extractValidPeaks("Y", spectrum.psdY, candidatePeaks)
-        extractValidPeaks("Z", spectrum.psdZ, candidatePeaks)
-        extractValidPeaks("MAGNITUDE", spectrum.psdMagnitude, candidatePeaks)
+        extractValidPeaks("X", spectrum.psdX, candidatePeaks, upperLimitHz)
+        extractValidPeaks("Y", spectrum.psdY, candidatePeaks, upperLimitHz)
+        extractValidPeaks("Z", spectrum.psdZ, candidatePeaks, upperLimitHz)
+        extractValidPeaks("MAGNITUDE", spectrum.psdMagnitude, candidatePeaks, upperLimitHz)
 
         val dominantAxis: String
         val fundamentalFrequencyHz: Double
@@ -37,7 +45,7 @@ class DefaultModalAnalyzer : ModalAnalyzer {
 
         if (candidatePeaks.isEmpty()) {
             // Fallback: no peaks identified, find max PSD bin from magnitude spectrum directly
-            val maxBin = findMaxBin(spectrum.psdMagnitude)
+            val maxBin = findMaxBin(spectrum.psdMagnitude, upperLimitHz)
             if (maxBin != null) {
                 fundamentalFrequencyHz = maxBin.first
                 dominantPeakPower = maxBin.second
@@ -78,8 +86,8 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         // Calculate frequency bin resolution deltaF
         val deltaF = calculateDeltaF(spectrum.psdX)
 
-        // Adaptive peak persistence tolerance: max(1% of f0, 2 * deltaF)
-        val adaptiveToleranceHz = max(0.01 * fundamentalFrequencyHz, deltaF * 2.0)
+        // Adaptive peak persistence tolerance: max(5% of f0, 4 * deltaF)
+        val adaptiveToleranceHz = max(0.05 * fundamentalFrequencyHz, deltaF * 4.0)
 
         // Calculate persistence: what ratio of sliding windows contain a matching peak within adaptive tolerance?
         val persistence = if (slidingWindowSpectra.isEmpty()) {
@@ -151,21 +159,21 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         )
     }
 
-    private fun extractValidPeaks(axisName: String, axisResult: AxisPsdResult, dest: MutableList<Pair<String, Peak>>) {
+    private fun extractValidPeaks(axisName: String, axisResult: AxisPsdResult, dest: MutableList<Pair<String, Peak>>, upperLimitHz: Float) {
         for (peak in axisResult.peaks) {
-            if (peak.frequencyHz >= 0.3f && peak.frequencyHz <= 45.0f) {
+            if (peak.frequencyHz >= 0.3f && peak.frequencyHz <= upperLimitHz) {
                 dest.add(Pair(axisName, peak))
             }
         }
     }
 
-    private fun findMaxBin(axisResult: AxisPsdResult): Pair<Double, Double>? {
+    private fun findMaxBin(axisResult: AxisPsdResult, upperLimitHz: Float): Pair<Double, Double>? {
         if (axisResult.frequencies.isEmpty() || axisResult.powerSpectralDensity.isEmpty()) return null
         var maxIdx = -1
         var maxPsd = Float.NEGATIVE_INFINITY
         for (i in axisResult.frequencies.indices) {
             val freq = axisResult.frequencies[i]
-            if (freq in 0.3f..45.0f) {
+            if (freq in 0.3f..upperLimitHz) {
                 val psd = axisResult.powerSpectralDensity[i]
                 if (psd > maxPsd) {
                     maxPsd = psd
