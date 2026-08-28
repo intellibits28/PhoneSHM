@@ -526,7 +526,27 @@ class WelchPsdEngine : DspEngine {
                         }
                         val referenceLevel = maxOf((leftMin + rightMin) / 2.0f, 1e-30f)
                         val prominence = psd[k] / referenceLevel
-                        peaks.add(Peak(frequencyHz = frequencies[k], powerMagnitude = psd[k], prominence = prominence))
+                        
+                        // Parabolic Interpolation (Log-magnitude for Hanning window)
+                        val alpha = kotlin.math.ln(maxOf(psd[k - 1], 1e-30f))
+                        val beta = kotlin.math.ln(maxOf(psd[k], 1e-30f))
+                        val gamma = kotlin.math.ln(maxOf(psd[k + 1], 1e-30f))
+                        
+                        val denom = alpha - 2.0f * beta + gamma
+                        var interpFreq = frequencies[k]
+                        var interpMag = psd[k]
+                        
+                        if (kotlin.math.abs(denom) > 1e-12f) {
+                            val p = 0.5f * (alpha - gamma) / denom
+                            if (p in -1.0f..1.0f) {
+                                val deltaF = frequencies[k + 1] - frequencies[k]
+                                interpFreq = frequencies[k] + p * deltaF
+                                val interpLogMag = beta - 0.25f * (alpha - gamma) * p
+                                interpMag = kotlin.math.exp(interpLogMag)
+                            }
+                        }
+                        
+                        peaks.add(Peak(frequencyHz = interpFreq, powerMagnitude = interpMag, prominence = prominence))
                     }
                 }
             }

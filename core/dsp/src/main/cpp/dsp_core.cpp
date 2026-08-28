@@ -223,7 +223,26 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
             float referenceLevel = std::max((leftMin + rightMin) / 2.0f, 1e-30f);
             float prominence = psd[k] / referenceLevel;
 
-            peaks.push_back({frequencies[k], psd[k], prominence});
+            // Parabolic Interpolation (Log-magnitude for Hanning window)
+            float alpha = std::log(std::max(psd[k - 1], 1e-30f));
+            float beta = std::log(std::max(psd[k], 1e-30f));
+            float gamma = std::log(std::max(psd[k + 1], 1e-30f));
+
+            float denom = alpha - 2.0f * beta + gamma;
+            float interpFreq = frequencies[k];
+            float interpMag = psd[k];
+
+            if (std::abs(denom) > 1e-12f) {
+                float p = 0.5f * (alpha - gamma) / denom;
+                if (p >= -1.0f && p <= 1.0f) {
+                    float deltaF = frequencies[k + 1] - frequencies[k];
+                    interpFreq = frequencies[k] + p * deltaF;
+                    float interpLogMag = beta - 0.25f * (alpha - gamma) * p;
+                    interpMag = std::exp(interpLogMag);
+                }
+            }
+
+            peaks.push_back({interpFreq, interpMag, prominence});
         }
     }
 
