@@ -64,6 +64,7 @@ class F4RegressionTest {
             val modalRes = modalAnalyzer.analyzeMultiAxisSpectrum(
                 spectrum = mainSpectrum,
                 slidingWindowSpectra = slidingSpectra,
+                buildingType = "RESIDENTIAL_CONCRETE",
                 evaluatePhysics = { f0Hz, prominence ->
                     physicsEngine.classifyFrequency(f0Hz, prominence.toFloat(), "RESIDENTIAL_CONCRETE", 3)
                 }
