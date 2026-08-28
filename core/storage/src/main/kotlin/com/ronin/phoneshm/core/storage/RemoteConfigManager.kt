@@ -1,67 +1,53 @@
 package com.ronin.phoneshm.core.storage
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.ktx.remoteConfig
-import com.google.firebase.remoteconfig.ktx.remoteConfigSettings
 
 /**
- * Manages Firebase Remote Config for DSP thresholds.
- * Fetches values with a 1-hour cache TTL and clamps them to sane limits.
+ * Manages local app settings for DSP thresholds.
+ * Replaces Firebase Remote Config for cost saving.
  */
 object RemoteConfigManager {
     private const val TAG = "RemoteConfigManager"
+    private const val PREFS_NAME = "phoneshm_config"
 
-    // Default values (fallback if remote fetch fails)
-    private const val DEFAULT_PEAK_TO_RMS = 5.0
-    private const val DEFAULT_AMBIENT_SNR = 1.0
-    private const val DEFAULT_SPECTRAL_SANITY = 0.15
-    private const val DEFAULT_GAP_MISSING_RATIO = 0.05
-    private const val DEFAULT_MIN_RMS_MULTIPLIER = 0.1
+    // Default values (fallback)
+    private const val DEFAULT_PEAK_TO_RMS = 5.0f
+    private const val DEFAULT_AMBIENT_SNR = 1.0f
+    private const val DEFAULT_SPECTRAL_SANITY = 0.15f
+    private const val DEFAULT_GAP_MISSING_RATIO = 0.05f
+    private const val DEFAULT_MIN_RMS_MULTIPLIER = 0.1f
 
-    // Remote Config Keys
+    // Keys
     private const val KEY_PEAK_TO_RMS = "PEAK_TO_RMS_THRESHOLD"
     private const val KEY_AMBIENT_SNR = "AMBIENT_SNR_THRESHOLD_DB"
     private const val KEY_SPECTRAL_SANITY = "SPECTRAL_SANITY_THRESHOLD"
     private const val KEY_GAP_MISSING_RATIO = "GAP_MISSING_TIME_RATIO_THRESHOLD"
     private const val KEY_MIN_RMS_MULTIPLIER = "MIN_RMS_MULTIPLIER"
 
-    private lateinit var remoteConfig: FirebaseRemoteConfig
+    private lateinit var prefs: SharedPreferences
 
-    fun initialize(isDebug: Boolean = false) {
-        remoteConfig = Firebase.remoteConfig
-        val configSettings = remoteConfigSettings {
-            minimumFetchIntervalInSeconds = if (isDebug) 0 else 3600 // 0s in debug, 1 hour in release
-        }
-        remoteConfig.setConfigSettingsAsync(configSettings)
-
-        // Set in-app fallback defaults
-        val defaults = mapOf(
-            KEY_PEAK_TO_RMS to DEFAULT_PEAK_TO_RMS,
-            KEY_AMBIENT_SNR to DEFAULT_AMBIENT_SNR,
-            KEY_SPECTRAL_SANITY to DEFAULT_SPECTRAL_SANITY,
-            KEY_GAP_MISSING_RATIO to DEFAULT_GAP_MISSING_RATIO,
-            KEY_MIN_RMS_MULTIPLIER to DEFAULT_MIN_RMS_MULTIPLIER
-        )
-        remoteConfig.setDefaultsAsync(defaults)
-
-        // Fetch and activate async (on startup)
-        remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                val updated = task.result
-                Log.d(TAG, "Config params updated: $updated")
-            } else {
-                Log.w(TAG, "Config fetch failed")
-            }
+    fun initialize(context: Context) {
+        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // Ensure defaults are populated if they don't exist
+        if (!prefs.contains(KEY_PEAK_TO_RMS)) {
+            prefs.edit()
+                .putFloat(KEY_PEAK_TO_RMS, DEFAULT_PEAK_TO_RMS)
+                .putFloat(KEY_AMBIENT_SNR, DEFAULT_AMBIENT_SNR)
+                .putFloat(KEY_SPECTRAL_SANITY, DEFAULT_SPECTRAL_SANITY)
+                .putFloat(KEY_GAP_MISSING_RATIO, DEFAULT_GAP_MISSING_RATIO)
+                .putFloat(KEY_MIN_RMS_MULTIPLIER, DEFAULT_MIN_RMS_MULTIPLIER)
+                .apply()
+            Log.d(TAG, "Populated default local config settings")
         }
     }
 
-    private fun getSafeDouble(key: String, default: Double): Double {
-        return if (::remoteConfig.isInitialized) {
-            remoteConfig.getDouble(key)
+    private fun getSafeDouble(key: String, default: Float): Double {
+        return if (::prefs.isInitialized) {
+            prefs.getFloat(key, default).toDouble()
         } else {
-            default
+            default.toDouble()
         }
     }
 
@@ -69,35 +55,35 @@ object RemoteConfigManager {
         get() = clamp(
             getSafeDouble(KEY_PEAK_TO_RMS, DEFAULT_PEAK_TO_RMS),
             2.0, 20.0,
-            DEFAULT_PEAK_TO_RMS
+            DEFAULT_PEAK_TO_RMS.toDouble()
         )
 
     val ambientSnrThresholdDb: Float
         get() = clamp(
             getSafeDouble(KEY_AMBIENT_SNR, DEFAULT_AMBIENT_SNR),
             0.1, 10.0,
-            DEFAULT_AMBIENT_SNR
+            DEFAULT_AMBIENT_SNR.toDouble()
         ).toFloat()
 
     val spectralSanityThreshold: Double
         get() = clamp(
             getSafeDouble(KEY_SPECTRAL_SANITY, DEFAULT_SPECTRAL_SANITY),
             0.01, 0.5,
-            DEFAULT_SPECTRAL_SANITY
+            DEFAULT_SPECTRAL_SANITY.toDouble()
         )
 
     val gapMissingTimeRatioThreshold: Double
         get() = clamp(
             getSafeDouble(KEY_GAP_MISSING_RATIO, DEFAULT_GAP_MISSING_RATIO),
             0.01, 0.3,
-            DEFAULT_GAP_MISSING_RATIO
+            DEFAULT_GAP_MISSING_RATIO.toDouble()
         )
 
     val minRmsMultiplier: Double
         get() = clamp(
             getSafeDouble(KEY_MIN_RMS_MULTIPLIER, DEFAULT_MIN_RMS_MULTIPLIER),
             0.01, 1.0,
-            DEFAULT_MIN_RMS_MULTIPLIER
+            DEFAULT_MIN_RMS_MULTIPLIER.toDouble()
         )
 
     private fun clamp(value: Double, min: Double, max: Double, default: Double): Double {

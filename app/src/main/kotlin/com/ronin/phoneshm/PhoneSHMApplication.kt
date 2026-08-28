@@ -19,8 +19,7 @@ class PhoneSHMApplication : Application() {
         super.onCreate()
         bootstrapAnonymousAuth()
         try {
-            val isDebug = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
-            com.ronin.phoneshm.core.storage.RemoteConfigManager.initialize(isDebug)
+            com.ronin.phoneshm.core.storage.RemoteConfigManager.initialize(this)
         } catch (e: Exception) {
             android.util.Log.e("PhoneSHMAuth", "RemoteConfigManager initialization exception", e)
         }
