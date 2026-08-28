@@ -86,6 +86,22 @@ object RemoteConfigManager {
             DEFAULT_MIN_RMS_MULTIPLIER.toDouble()
         )
 
+    fun updateConfig(
+        peakToRms: Float? = null,
+        ambientSnr: Float? = null,
+        spectralSanity: Float? = null,
+        gapMissingRatio: Float? = null,
+        minRmsMult: Float? = null
+    ) {
+        val editor = prefs.edit()
+        peakToRms?.let { editor.putFloat(KEY_PEAK_TO_RMS, it) }
+        ambientSnr?.let { editor.putFloat(KEY_AMBIENT_SNR, it) }
+        spectralSanity?.let { editor.putFloat(KEY_SPECTRAL_SANITY, it) }
+        gapMissingRatio?.let { editor.putFloat(KEY_GAP_MISSING_RATIO, it) }
+        minRmsMult?.let { editor.putFloat(KEY_MIN_RMS_MULTIPLIER, it) }
+        editor.apply()
+    }
+
     private fun clamp(value: Double, min: Double, max: Double, default: Double): Double {
         return if (value in min..max) {
             value

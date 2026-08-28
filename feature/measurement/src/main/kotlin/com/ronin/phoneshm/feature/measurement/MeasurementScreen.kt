@@ -140,26 +140,46 @@ fun MeasurementScreen(
                 onClick = { showConfigDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("View Current Active Configuration")
+                Text("View & Edit DSP Config Parameters")
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
 
         if (showConfigDialog) {
+            val configMgr = com.ronin.phoneshm.core.storage.RemoteConfigManager
+            var peakToRms by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.peakToRmsThreshold.toFloat()) }
+            var ambientSnr by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.ambientSnrThresholdDb) }
+            var sanity by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.spectralSanityThreshold.toFloat()) }
+
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showConfigDialog = false },
-                title = { Text("Active Configuration") },
+                title = { Text("Edit DSP Config Settings") },
                 text = {
                     Column {
-                        Text("These values are loaded from Firebase Remote Config or fallback to defaults.")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("MIN_RMS_MULTIPLIER: ${com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier}")
-                        // Add more config parameters here as they are added to RemoteConfigManager
+                        Text("These DSP threshold values are now stored locally.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text("PEAK_TO_RMS: ${String.format("%.1f", peakToRms)}", fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Slider(value = peakToRms, onValueChange = { peakToRms = it }, valueRange = 2f..20f)
+                        
+                        Text("AMBIENT_SNR_DB: ${String.format("%.1f", ambientSnr)}", fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Slider(value = ambientSnr, onValueChange = { ambientSnr = it }, valueRange = 0.1f..10f)
+                        
+                        Text("SPECTRAL_SANITY: ${String.format("%.2f", sanity)}", fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Slider(value = sanity, onValueChange = { sanity = it }, valueRange = 0.01f..0.5f)
                     }
                 },
                 confirmButton = {
+                    Button(onClick = {
+                        configMgr.updateConfig(peakToRms = peakToRms, ambientSnr = ambientSnr, spectralSanity = sanity)
+                        showConfigDialog = false
+                    }) {
+                        Text("Save & Apply")
+                    }
+                },
+                dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { showConfigDialog = false }) {
-                        Text("OK")
+                        Text("Cancel")
                     }
                 }
             )
