@@ -96,7 +96,7 @@ class AnalysisViewModelTest {
             excitationSufficiency = com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT
         )
         coEvery {
-            anyConstructed<DefaultModalAnalyzer>().analyzeMultiAxisSpectrum(any(), any(), any())
+            anyConstructed<DefaultModalAnalyzer>().analyzeMultiAxisSpectrum(any(), any(), any(), any())
         } returns mockModalResult
 
         val vm = AnalysisViewModel(application)
@@ -156,7 +156,7 @@ class AnalysisViewModelTest {
             excitationSufficiency = com.ronin.phoneshm.core.modal.ExcitationSufficiency.INSUFFICIENT
         )
         coEvery {
-            anyConstructed<DefaultModalAnalyzer>().analyzeMultiAxisSpectrum(any(), any(), any())
+            anyConstructed<DefaultModalAnalyzer>().analyzeMultiAxisSpectrum(any(), any(), any(), any())
         } returns mockModalResult
 
         val vm = AnalysisViewModel(application)
