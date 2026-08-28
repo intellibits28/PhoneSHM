@@ -150,12 +150,14 @@ fun MeasurementScreen(
             var peakToRms by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.peakToRmsThreshold.toFloat()) }
             var ambientSnr by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.ambientSnrThresholdDb) }
             var sanity by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.spectralSanityThreshold.toFloat()) }
+            var gapMissing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.gapMissingTimeRatioThreshold.toFloat()) }
+            var minRms by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(configMgr.minRmsMultiplier.toFloat()) }
 
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showConfigDialog = false },
                 title = { Text("Edit DSP Config Settings") },
                 text = {
-                    Column {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                         Text("These DSP threshold values are now stored locally.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Spacer(modifier = Modifier.height(16.dp))
                         
@@ -167,11 +169,23 @@ fun MeasurementScreen(
                         
                         Text("SPECTRAL_SANITY: ${String.format("%.2f", sanity)}", fontWeight = FontWeight.Bold)
                         androidx.compose.material3.Slider(value = sanity, onValueChange = { sanity = it }, valueRange = 0.01f..0.5f)
+
+                        Text("GAP_MISSING_RATIO: ${String.format("%.2f", gapMissing)}", fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Slider(value = gapMissing, onValueChange = { gapMissing = it }, valueRange = 0.01f..0.3f)
+
+                        Text("MIN_RMS_MULTIPLIER: ${String.format("%.2f", minRms)}", fontWeight = FontWeight.Bold)
+                        androidx.compose.material3.Slider(value = minRms, onValueChange = { minRms = it }, valueRange = 0.01f..1.0f)
                     }
                 },
                 confirmButton = {
                     Button(onClick = {
-                        configMgr.updateConfig(peakToRms = peakToRms, ambientSnr = ambientSnr, spectralSanity = sanity)
+                        configMgr.updateConfig(
+                            peakToRms = peakToRms, 
+                            ambientSnr = ambientSnr, 
+                            spectralSanity = sanity,
+                            gapMissingRatio = gapMissing,
+                            minRmsMult = minRms
+                        )
                         showConfigDialog = false
                     }) {
                         Text("Save & Apply")
