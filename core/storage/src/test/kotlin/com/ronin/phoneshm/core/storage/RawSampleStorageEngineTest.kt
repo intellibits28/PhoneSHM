@@ -41,13 +41,14 @@ class RawSampleStorageEngineTest {
         
         val (bytes, sampleCount) = storageEngine.finalizeSessionFile(file)
         
-        assertEquals(40L, bytes) // 2 samples * 20 bytes = 40 bytes
+        assertEquals(44L, bytes) // 4 bytes header + 2 samples * 20 bytes = 44 bytes
         assertEquals(2, sampleCount)
 
         // Read and verify little-endian values
         val finalFile = File(testDir, "$sessionId.bin")
         val readBytes = finalFile.readBytes()
-        val buffer = ByteBuffer.wrap(readBytes).order(ByteOrder.LITTLE_ENDIAN)
+        val offset = if (readBytes.size >= 4 && String(readBytes.copyOfRange(0, 4), Charsets.US_ASCII) == "SHM1") 4 else 0
+        val buffer = ByteBuffer.wrap(readBytes, offset, readBytes.size - offset).order(ByteOrder.LITTLE_ENDIAN)
 
         assertEquals(1000000000L, buffer.getLong())
         assertEquals(0.1f, buffer.getFloat(), 0.001f)
