@@ -46,7 +46,7 @@ class DefaultModalAnalyzerTest {
             explanation = "Valid global fundamental mode"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { _, _ -> classification }
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), "UNKNOWN") { _, _ -> classification }
 
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals("Y", result.dominantAxis)
@@ -72,7 +72,7 @@ class DefaultModalAnalyzerTest {
             explanation = "Valid"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3)) { _, _ -> classification }
+        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3), "UNKNOWN") { _, _ -> classification }
 
         // 2 out of 3 windows contain a peak matching f0 (8.17 Hz) within adaptive tolerance
         assertEquals(2.0 / 3.0, result.persistence, 0.001)
@@ -87,7 +87,7 @@ class DefaultModalAnalyzerTest {
             explanation = "No peaks"
         )
 
-        val result = analyzer.analyzeMultiAxisSpectrum(emptySpec, emptyList()) { _, _ -> classification }
+        val result = analyzer.analyzeMultiAxisSpectrum(emptySpec, emptyList(), "UNKNOWN") { _, _ -> classification }
         // Should fallback to highest PSD bin in valid range (in dummy spectrum, 8.17 Hz has psd 10.0)
         assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
         assertEquals("MAGNITUDE", result.dominantAxis)
@@ -98,7 +98,7 @@ class DefaultModalAnalyzerTest {
         val spec = createDummySpectrum(xPeak = Peak(3.2f, 5.0f, 0.6f))
         var capturedF0 = -1.0
         
-        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { f0Hz, _ ->
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), "UNKNOWN") { f0Hz, _ ->
             capturedF0 = f0Hz
             PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "")
         }
@@ -121,7 +121,7 @@ class DefaultModalAnalyzerTest {
         
         var capturedF0 = -1.0
         
-        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3)) { f0Hz, _ ->
+        val result = analyzer.analyzeMultiAxisSpectrum(mainSpec, listOf(win1, win2, win3), "UNKNOWN") { f0Hz, _ ->
             capturedF0 = f0Hz
             PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "")
         }
@@ -140,7 +140,7 @@ class DefaultModalAnalyzerTest {
         val xAxis = AxisPsdResult(freqs, psd, listOf(xPeak))
         val spec = MultiAxisSpectrumResult(xAxis, xAxis, xAxis, xAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))
         
-        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { _, _ -> PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "") }
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), "UNKNOWN") { _, _ -> PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "") }
         
         assertEquals(ExcitationSufficiency.INSUFFICIENT, result.excitationSufficiency)
         assertEquals(2.3, result.prominenceRatio, 0.001)
@@ -156,7 +156,7 @@ class DefaultModalAnalyzerTest {
         val xAxis = AxisPsdResult(freqs, psd, listOf(xPeak))
         val spec = MultiAxisSpectrumResult(xAxis, xAxis, xAxis, xAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))
         
-        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList()) { _, _ -> PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "") }
+        val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), "UNKNOWN") { _, _ -> PlausibilityClassificationResult(FrequencyClassification.UNKNOWN, 0.5, "") }
         
         assertEquals(ExcitationSufficiency.SUFFICIENT, result.excitationSufficiency)
         assertEquals(8.0, result.prominenceRatio, 0.001)
