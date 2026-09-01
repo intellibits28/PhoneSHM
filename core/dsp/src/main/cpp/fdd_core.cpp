@@ -32,7 +32,21 @@ FddResult calculateFdd(
     auto settlingResult = detectSettlingWindow(gravResult, sampleRateHz);
     int settlingN = settlingResult.settlingDurationSamples;
     int usableN = n - settlingN;
-    if (usableN < fftSize) return result;
+    if (usableN < 256) return result; // Minimum required
+    if (usableN < fftSize) {
+        // Adjust fftSize to highest power of 2 <= usableN
+        int newFftSize = 256;
+        while (newFftSize * 2 <= usableN) {
+            newFftSize *= 2;
+        }
+        fftSize = newFftSize;
+        freqBins = fftSize / 2 + 1;
+        result.frequencies.resize(freqBins);
+        result.firstSingularValues.resize(freqBins, 0.0f);
+        for (int i = 0; i < freqBins; ++i) {
+            result.frequencies[i] = i * sampleRateHz / fftSize;
+        }
+    }
 
     std::vector<float> rawX(usableN), rawY(usableN), rawZ(usableN);
     for (int i = 0; i < usableN; ++i) {

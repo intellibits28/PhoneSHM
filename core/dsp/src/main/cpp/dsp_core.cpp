@@ -199,15 +199,26 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
     int n = psd.size();
     if (n < 3) return {};
 
-    std::vector<float> sorted(psd);
-    std::sort(sorted.begin(), sorted.end());
-    float median = sorted[n / 2];
-    float threshold = median * 3.0f;
-
     std::vector<Peak> peaks;
+    int localWindowHalf = 20;
+    int guardBand = 2;
 
     for (int k = 1; k < n - 1; ++k) {
-        if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1] && psd[k] > threshold) {
+        if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1]) {
+            std::vector<float> localBins;
+            for (int j = std::max(0, k - localWindowHalf); j <= std::min(n - 1, k + localWindowHalf); ++j) {
+                if (std::abs(j - k) > guardBand) localBins.push_back(psd[j]);
+            }
+            if (localBins.empty()) continue;
+            std::sort(localBins.begin(), localBins.end());
+            float localMedian = localBins[localBins.size() / 2];
+            if (localMedian <= 0.0f) continue;
+            
+            float peakDb = 10.0f * std::log10(psd[k]);
+            float noiseDb = 10.0f * std::log10(localMedian);
+            float snrDb = peakDb - noiseDb;
+            
+            if (snrDb > 1.0f) {
             float leftMin = psd[k];
             for (int j = k - 1; j >= 0; --j) {
                 if (psd[j] < leftMin) leftMin = psd[j];
