@@ -27,6 +27,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -270,6 +275,33 @@ fun AnalysisScreen(
             } else {
                 val modal = uiState.modalResult
                 if (modal != null) {
+                    var selectedTabIndex by remember { mutableStateOf(0) }
+                    
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                color = Color(0xFF38BDF8)
+                            )
+                        }
+                    ) {
+                        Tab(
+                            selected = selectedTabIndex == 0,
+                            onClick = { selectedTabIndex = 0 },
+                            text = { Text("Overview (Welch PSD)", fontWeight = if(selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                        )
+                        Tab(
+                            selected = selectedTabIndex == 1,
+                            onClick = { selectedTabIndex = 1 },
+                            text = { Text("Advanced (EFDD)", fontWeight = if(selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                        )
+                    }
+
+                    if (selectedTabIndex == 0) {
                     // Fundamental Frequency Card
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
@@ -661,6 +693,100 @@ softWrap = false,
                                 if (index < modal.dominantPeaksTable.lastIndex) {
                                     HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
                                 }
+                            }
+                        }
+                    }
+                    } else if (selectedTabIndex == 1) {
+                        // EFDD Tab Content
+                        val efdd = uiState.efddResult
+                        if (efdd != null) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "EFDD MODAL PARAMETERS",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF94A3B8),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF334155), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(text = "Rank", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Text(text = "Freq (Hz)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+                                        Text(text = "Damping (ζ)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    efdd.peakFrequencies.forEachIndexed { index, freq ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "#${index + 1}",
+                                                color = if (index == 0) Color(0xFF10B981) else Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                text = String.format("%.3f Hz", freq),
+                                                color = if (index == 0) Color(0xFF10B981) else Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(2f)
+                                            )
+                                            val damping = if (index < efdd.peakDampingRatios.size) efdd.peakDampingRatios[index] else 0f
+                                            Text(
+                                                text = String.format("%.2f %%", damping * 100f),
+                                                color = Color(0xFFFDE047),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(2f)
+                                            )
+                                        }
+                                        if (index < efdd.peakFrequencies.lastIndex) {
+                                            HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "SINGULAR VALUE SPECTRUM (SVD)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF94A3B8),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                                        Text("SV1 Curve Plot Placeholder", color = Color.Gray, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        } else {
+                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("EFDD Result not available", color = Color(0xFF94A3B8))
                             }
                         }
                     }
