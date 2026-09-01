@@ -120,7 +120,79 @@ FddResult calculateFdd(
     }
 
     // Peak picking on the first singular value curve
-    result.modes = findPeaks(result.frequencies, result.firstSingularValues);
+    
+    auto peaks = findPeaks(result.frequencies, result.firstSingularValues);
+    for (const auto& p : peaks) {
+        EfddMode mode;
+        mode.frequencyHz = p.frequencyHz;
+        mode.powerMagnitude = p.powerMagnitude;
+        mode.prominence = p.prominence;
+        mode.dampingRatio = 0.0f;
+
+        // 1. Find SDOF bell limits
+        int k = -1;
+        for (int i = 0; i < freqBins; ++i) {
+            if (std::abs(result.frequencies[i] - p.frequencyHz) < 1e-4) {
+                k = i;
+                break;
+            }
+        }
+        
+        if (k > 0) {
+            int L = k, R = k;
+            while (L > 0 && result.firstSingularValues[L-1] < result.firstSingularValues[L]) L--;
+            while (R < freqBins - 1 && result.firstSingularValues[R+1] < result.firstSingularValues[R]) R++;
+            
+            // 2. Build two-sided spectrum for IDFT
+            std::vector<double> realX(fftSize, 0.0), imagX(fftSize, 0.0);
+            for (int i = L; i <= R; ++i) {
+                realX[i] = result.firstSingularValues[i];
+                if (i > 0 && i < fftSize / 2) {
+                    realX[fftSize - i] = result.firstSingularValues[i];
+                }
+            }
+            
+            // 3. IDFT (using FFT)
+            phoneshm::fft::getDefaultBackend().fft(realX.data(), imagX.data(), fftSize);
+            for (int i = 0; i < fftSize; ++i) {
+                realX[i] /= fftSize; // IFFT scaling
+            }
+            
+            // 4. Extract Free Decay Envelope Peaks
+            std::vector<double> peakTimes, peakVals;
+            peakTimes.push_back(0.0);
+            peakVals.push_back(realX[0]);
+            
+            for (int i = 1; i < fftSize / 2 - 1; ++i) {
+                if (realX[i] > realX[i-1] && realX[i] > realX[i+1] && realX[i] > 0) {
+                    peakTimes.push_back(i / sampleRateHz);
+                    peakVals.push_back(realX[i]);
+                    if (realX[i] < 0.1 * realX[0] || peakVals.size() > 15) break;
+                }
+            }
+            
+            // 5. Log-decrement linear regression
+            if (peakVals.size() >= 3) {
+                double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+                int n_peaks = peakVals.size();
+                for (int i = 0; i < n_peaks; ++i) {
+                    double x = peakTimes[i];
+                    double y = std::log(peakVals[i]);
+                    sumX += x; sumY += y;
+                    sumXY += x * y; sumX2 += x * x;
+                }
+                double denom = n_peaks * sumX2 - sumX * sumX;
+                if (std::abs(denom) > 1e-12) {
+                    double slope = (n_peaks * sumXY - sumX * sumY) / denom;
+                    double omega_n = 2.0 * std::numbers::pi * p.frequencyHz;
+                    mode.dampingRatio = static_cast<float>(-slope / omega_n);
+                    if (mode.dampingRatio < 0) mode.dampingRatio = 0.01f;
+                }
+            }
+        }
+        result.modes.push_back(mode);
+    }
+
 
     return result;
 }

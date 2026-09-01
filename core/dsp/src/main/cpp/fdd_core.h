@@ -6,10 +6,17 @@
 namespace phoneshm {
 namespace dsp {
 
+struct EfddMode {
+    float frequencyHz;
+    float powerMagnitude;
+    float prominence;
+    float dampingRatio;
+};
+
 struct FddResult {
     std::vector<float> frequencies;
     std::vector<float> firstSingularValues;
-    std::vector<Peak> modes;
+    std::vector<EfddMode> modes;
 };
 
 // Computes the Enhanced Frequency Domain Decomposition (EFDD) spectrum
