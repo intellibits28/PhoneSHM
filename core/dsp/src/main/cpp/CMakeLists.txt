@@ -10,6 +10,7 @@ add_library(phoneshm_dsp SHARED
     dsp_core.cpp
     fft_backend.cpp
     fdd_core.cpp
+    rdt_ssi_core.cpp
     dsp_jni.cpp
 )
 

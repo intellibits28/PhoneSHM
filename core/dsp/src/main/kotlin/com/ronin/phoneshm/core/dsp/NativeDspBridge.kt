@@ -60,4 +60,15 @@ object NativeDspBridge {
         z: Float,
         prevRms: Float
     ): Float
+
+    external fun nativeCalculateRdtSsi(
+        x: FloatArray,
+        y: FloatArray,
+        z: FloatArray,
+        sampleRateHz: Float,
+        minHz: Float,
+        maxHz: Float,
+        maxModelOrder: Int,
+        rdsDurationSec: Float
+    ): FloatArray
 }

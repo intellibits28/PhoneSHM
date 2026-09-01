@@ -299,6 +299,11 @@ fun AnalysisScreen(
                             onClick = { selectedTabIndex = 1 },
                             text = { Text("Advanced (EFDD)", fontWeight = if(selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
                         )
+                        Tab(
+                            selected = selectedTabIndex == 2,
+                            onClick = { selectedTabIndex = 2 },
+                            text = { Text("Advanced (RDT-SSI)", fontWeight = if(selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                        )
                     }
 
                     if (selectedTabIndex == 0) {
@@ -787,6 +792,79 @@ softWrap = false,
                         } else {
                             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                                 Text("EFDD Result not available", color = Color(0xFF94A3B8))
+                            }
+                        }
+                    } else if (selectedTabIndex == 2) {
+                        // RDT-SSI Tab Content
+                        val ssi = uiState.rdtSsiResult
+                        if (ssi != null) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "STABLE POLES (RDT-SSI)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF94A3B8),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF334155), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(text = "Freq (Hz)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Text(text = "Damping (ζ)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Text(text = "Order", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    ssi.poles.forEachIndexed { index, pole ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = String.format("%.3f Hz", pole.frequencyHz),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                text = String.format("%.2f %%", pole.dampingRatio * 100f),
+                                                color = Color(0xFFFDE047),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                text = "${pole.modelOrder}",
+                                                color = Color(0xFF94A3B8),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        if (index < ssi.poles.lastIndex) {
+                                            HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("RDT-SSI Result not available", color = Color(0xFF94A3B8))
                             }
                         }
                     }

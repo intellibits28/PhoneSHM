@@ -5,6 +5,7 @@
 using namespace phoneshm::dsp;
 
 #include "fdd_core.h"
+#include "rdt_ssi_core.h"
 
 extern "C" {
 
@@ -152,6 +153,39 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeStreamingRmsLevel(
 ) {
     AccelerationSample sample = {0, x, y, z};
     return streamingRmsLevel(sample, prevRms);
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateRdtSsi(
+    JNIEnv* env, jobject /* this */,
+    jfloatArray xArray, jfloatArray yArray, jfloatArray zArray,
+    jfloat fs, jfloat minHz, jfloat maxHz, jint maxOrder, jfloat rdsDurationSec
+) {
+    jsize len = env->GetArrayLength(xArray);
+    
+    jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
+    jfloat* y = env->GetFloatArrayElements(yArray, nullptr);
+    jfloat* z = env->GetFloatArrayElements(zArray, nullptr);
+
+    std::vector<phoneshm::dsp::RdtSsiPole> poles = phoneshm::dsp::calculateRdtSsi(
+        x, y, z, len, fs, minHz, maxHz, maxOrder, rdsDurationSec
+    );
+
+    env->ReleaseFloatArrayElements(xArray, x, JNI_ABORT);
+    env->ReleaseFloatArrayElements(yArray, y, JNI_ABORT);
+    env->ReleaseFloatArrayElements(zArray, z, JNI_ABORT);
+
+    jfloatArray resultArray = env->NewFloatArray(poles.size() * 3);
+    if (poles.size() > 0) {
+        std::vector<jfloat> flattened(poles.size() * 3);
+        for (size_t i = 0; i < poles.size(); ++i) {
+            flattened[i * 3 + 0] = poles[i].freq;
+            flattened[i * 3 + 1] = poles[i].damp;
+            flattened[i * 3 + 2] = static_cast<jfloat>(poles[i].order);
+        }
+        env->SetFloatArrayRegion(resultArray, 0, poles.size() * 3, flattened.data());
+    }
+    return resultArray;
 }
 
 } // extern "C"

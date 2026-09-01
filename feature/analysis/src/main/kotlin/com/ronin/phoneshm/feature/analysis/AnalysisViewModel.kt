@@ -57,7 +57,8 @@ data class AnalysisUiState(
     val consecutiveFailureCount: Int = 0,
     val isWeakSignalFailure: Boolean = false,
     val measurementProfileId: String = "building_profile_active",
-    val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null
+    val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null,
+    val rdtSsiResult: com.ronin.phoneshm.core.dsp.RdtSsiResult? = null
 )
 
 
@@ -69,6 +70,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val baseDir: File = application.filesDir ?: File(System.getProperty("java.io.tmpdir"), "phoneshm_data")
 
     private val dspEngine: DspEngine = WelchPsdEngine()
+    private val rdtSsiEngine = com.ronin.phoneshm.core.dsp.DefaultRdtSsiEngine()
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
     private val qualityScoreEngine: QualityScoreEngine = DefaultQualityScoreEngine()
@@ -208,17 +210,37 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 )
 
                 // Run EFDD via JNI natively
+                val tsArray = samples.map { it.timestampNs }.toLongArray()
+                val xArray = samples.map { it.x }.toFloatArray()
+                val yArray = samples.map { it.y }.toFloatArray()
+                val zArray = samples.map { it.z }.toFloatArray()
+
                 val efddResult = try {
-                    val tsArray = samples.map { it.timestampNs }.toLongArray()
-                    val xArray = samples.map { it.x }.toFloatArray()
-                    val yArray = samples.map { it.y }.toFloatArray()
-                    val zArray = samples.map { it.z }.toFloatArray()
                     com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(
                         tsArray, xArray, yArray, zArray,
                         sampleRateHz, mainFftSize, 0.5f
                     )
                 } catch (e: Throwable) {
                     android.util.Log.e("Analysis", "Failed to compute EFDD: ${e.message}")
+                    null
+                }
+
+                // Run Multi-Channel RDT-SSI via JNI natively
+                val rdtSsiResult = try {
+                    // Resolve band based on building type for dynamic filtering
+                    val config = com.ronin.phoneshm.core.physics.PhysicsRulesConfig.loadBundledConfig()
+                    val band = config.resolveBand(actualBuildingType)
+                    val (minGlobalHz, maxGlobalHz) = band.computeBand(actualFloors)
+                    // Widen the band slightly to capture edges
+                    val minHz = maxOf(0.5f, minGlobalHz.toFloat() - 0.5f)
+                    val maxHz = minOf(45.0f, maxGlobalHz.toFloat() + 2.0f)
+                    
+                    rdtSsiEngine.calculateSsi(
+                        tsArray, xArray, yArray, zArray,
+                        sampleRateHz, minHz, maxHz
+                    )
+                } catch (e: Throwable) {
+                    android.util.Log.e("Analysis", "Failed to compute RDT-SSI: ${e.message}")
                     null
                 }
 
@@ -354,7 +376,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     spectrum = mainSpectrum,
                     sessionMeta = sessionMeta,
                     deviceReport = deviceReport,
-                    efddResult = efddResult
+                    efddResult = efddResult,
+                    rdtSsiResult = rdtSsiResult
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
