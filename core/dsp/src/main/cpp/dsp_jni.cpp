@@ -34,7 +34,7 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFdd(
     FddResult result = calculateFdd(samples, sampleRateHz, fftSize, overlapPct);
 
     jclass resultClass = env->FindClass("com/ronin/phoneshm/core/dsp/NativeFddResult");
-    jmethodID ctor = env->GetMethodID(resultClass, "<init>", "([F[F[F[F[F)V");
+    jmethodID ctor = env->GetMethodID(resultClass, "<init>", "([F[F[F[F[F[F)V");
 
     jsize freqLen = result.frequencies.size();
     jfloatArray freqs = env->NewFloatArray(freqLen);
@@ -49,20 +49,23 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFdd(
     jfloatArray pFreqs = env->NewFloatArray(peaksLen);
     jfloatArray pMags = env->NewFloatArray(peaksLen);
     jfloatArray pProms = env->NewFloatArray(peaksLen);
+    jfloatArray pDamps = env->NewFloatArray(peaksLen);
     
     if (peaksLen > 0) {
-        std::vector<float> pF(peaksLen), pM(peaksLen), pP(peaksLen);
+        std::vector<float> pF(peaksLen), pM(peaksLen), pP(peaksLen), pD(peaksLen);
         for(size_t i = 0; i < peaksLen; i++) {
             pF[i] = result.modes[i].frequencyHz;
             pM[i] = result.modes[i].powerMagnitude;
             pP[i] = result.modes[i].prominence;
+            pD[i] = result.modes[i].dampingRatio;
         }
         env->SetFloatArrayRegion(pFreqs, 0, peaksLen, pF.data());
         env->SetFloatArrayRegion(pMags, 0, peaksLen, pM.data());
         env->SetFloatArrayRegion(pProms, 0, peaksLen, pP.data());
+        env->SetFloatArrayRegion(pDamps, 0, peaksLen, pD.data());
     }
 
-    return env->NewObject(resultClass, ctor, freqs, sv, pFreqs, pMags, pProms);
+    return env->NewObject(resultClass, ctor, freqs, sv, pFreqs, pMags, pProms, pDamps);
 }
 
 JNIEXPORT jfloatArray JNICALL

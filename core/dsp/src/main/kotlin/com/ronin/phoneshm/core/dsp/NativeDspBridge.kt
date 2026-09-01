@@ -14,7 +14,8 @@ data class NativeFddResult(
     val firstSingularValues: FloatArray,
     val peakFrequencies: FloatArray,
     val peakMagnitudes: FloatArray,
-    val peakProminences: FloatArray
+    val peakProminences: FloatArray,
+    val peakDampingRatios: FloatArray
 )
 
 object NativeDspBridge {
