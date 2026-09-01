@@ -145,10 +145,12 @@ FddResult calculateFdd(
 
         // 1. Find SDOF bell limits
         int k = -1;
+        float minDiff = 1e9f;
         for (int i = 0; i < freqBins; ++i) {
-            if (std::abs(result.frequencies[i] - p.frequencyHz) < 1e-4) {
+            float diff = std::abs(result.frequencies[i] - p.frequencyHz);
+            if (diff < minDiff) {
+                minDiff = diff;
                 k = i;
-                break;
             }
         }
         
