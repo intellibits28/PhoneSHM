@@ -255,6 +255,7 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
 
             peaks.push_back({interpFreq, interpMag, prominence});
         }
+        }
     }
 
     std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) {
