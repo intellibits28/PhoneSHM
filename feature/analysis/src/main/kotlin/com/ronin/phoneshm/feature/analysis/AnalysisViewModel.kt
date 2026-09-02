@@ -69,7 +69,8 @@ data class AnalysisUiState(
     val measurementProfileId: String = "building_profile_active",
     val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null,
     val rdtSsiResult: com.ronin.phoneshm.core.dsp.RdtSsiResult? = null,
-    val estimatedSampleRateHz: Float = 0f
+    val estimatedSampleRateHz: Float = 0f,
+    val consensusResult: com.ronin.phoneshm.core.modal.ModalConsensusResult? = null
 )
 
 
@@ -85,6 +86,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val physicsEngine: PhysicsRulesEngine = DefaultPhysicsRulesEngine()
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
     private val qualityScoreEngine: QualityScoreEngine = DefaultQualityScoreEngine()
+    private val modalConsensusEngine = com.ronin.phoneshm.core.modal.ModalConsensusEngine()
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
@@ -389,10 +391,18 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                // Phase 0-B: Determine final analysis status
+                // Phase 3-A: Evaluate Modal Consensus between Welch, EFDD, and SSI
+                val consensusResult = modalConsensusEngine.evaluateConsensus(
+                    modalRes = modalRes,
+                    efddResult = efddResult,
+                    ssiResult = rdtSsiResult
+                )
+
+                // Phase 0-B & Phase 3-A: Determine final analysis status
                 val finalStatus = when {
                     isDemoMode -> AnalysisStatus.DEMO_RESULT
                     snrWarning != null -> AnalysisStatus.INSUFFICIENT_EXCITATION
+                    consensusResult.status == com.ronin.phoneshm.core.modal.ConsensusStatus.DISAGREED -> AnalysisStatus.INCONCLUSIVE
                     modalRes.fundamentalFrequencyHz <= 0.0 -> AnalysisStatus.INCONCLUSIVE
                     else -> AnalysisStatus.VALID
                 }
@@ -400,7 +410,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,
                     analysisStatus = finalStatus,
-                    fundamentalFrequencyHz = modalRes.fundamentalFrequencyHz,
+                    fundamentalFrequencyHz = consensusResult.consensusF0 ?: modalRes.fundamentalFrequencyHz,
                     dominantAxis = modalRes.dominantAxis,
                     classificationLabel = modalRes.classification.classification.name,
                     modalResult = modalRes,
@@ -419,7 +429,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     deviceReport = deviceReport,
                     efddResult = efddResult,
                     rdtSsiResult = rdtSsiResult,
-                    estimatedSampleRateHz = sampleRateHz
+                    estimatedSampleRateHz = sampleRateHz,
+                    consensusResult = consensusResult
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
