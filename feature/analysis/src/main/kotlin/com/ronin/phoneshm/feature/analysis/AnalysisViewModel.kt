@@ -151,18 +151,23 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                                 AccelerationSample(data.timestampsNs[i], data.x[i], data.y[i], data.z[i])
                             }
                         } else {
-                            // Phase 0-B: Insufficient real data → report error, don't generate synthetic
-                            _uiState.value = _uiState.value.copy(
-                                isAnalyzing = false,
-                                analysisStatus = AnalysisStatus.INSUFFICIENT_DATA,
-                                errorMessage = "Insufficient data: only ${data.sampleCount} samples recorded. Need > 100."
-                            )
-                            return@launch
+                            // Phase 0-B: Insufficient real data — signal via empty list
+                            emptyList()
                         }
                     } else {
                         // Phase 0-B: No file → explicit demo mode
                         generateSyntheticStructuralSamples(buildingType, floors)
                     }
+                }
+
+                // Phase 0-B: Early exit for insufficient data (could not return@launch from withContext)
+                if (samples.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isAnalyzing = false,
+                        analysisStatus = AnalysisStatus.INSUFFICIENT_DATA,
+                        errorMessage = "Insufficient data: too few samples recorded. Need > 100."
+                    )
+                    return@launch
                 }
 
                 // Phase 0-B: Tag demo vs real analysis
