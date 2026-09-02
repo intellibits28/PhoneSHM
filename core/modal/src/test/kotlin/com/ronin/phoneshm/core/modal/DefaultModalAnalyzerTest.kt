@@ -88,9 +88,11 @@ class DefaultModalAnalyzerTest {
         )
 
         val result = analyzer.analyzeMultiAxisSpectrum(emptySpec, emptyList(), "UNKNOWN") { _, _ -> classification }
-        // Should fallback to highest PSD bin in valid range (in dummy spectrum, 8.17 Hz has psd 10.0)
-        assertEquals(8.17, result.fundamentalFrequencyHz, 0.001)
-        assertEquals("MAGNITUDE", result.dominantAxis)
+        // Phase 0-C: No valid peaks → explicit no-peak result, NOT fallback to max noise bin
+        assertEquals(0.0, result.fundamentalFrequencyHz, 0.001)
+        assertEquals("NONE", result.dominantAxis)
+        assertEquals(0.0, result.confidence, 0.001)
+        assertEquals(ExcitationSufficiency.INSUFFICIENT, result.excitationSufficiency)
     }
 
     @Test
