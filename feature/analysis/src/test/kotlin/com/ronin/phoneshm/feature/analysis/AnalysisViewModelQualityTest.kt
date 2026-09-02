@@ -118,7 +118,9 @@ class AnalysisViewModelQualityTest {
         field.set(vm, mockQualityScoreEngine)
 
         val mockStorageEngine = mockk<RawSampleStorageEngine>()
-        coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(LongArray(0), FloatArray(0), FloatArray(0), FloatArray(0))
+        val ts = LongArray(105) { it * 10_000_000L }
+        val xyz = FloatArray(105) { 0f }
+        coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
         storageField.isAccessible = true
         storageField.set(vm, mockStorageEngine)
@@ -170,7 +172,9 @@ class AnalysisViewModelQualityTest {
         field.set(vm, mockQualityScoreEngine)
 
         val mockStorageEngine = mockk<RawSampleStorageEngine>()
-        coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(LongArray(0), FloatArray(0), FloatArray(0), FloatArray(0))
+        val ts = LongArray(105) { it * 10_000_000L }
+        val xyz = FloatArray(105) { 0f }
+        coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
         storageField.isAccessible = true
         storageField.set(vm, mockStorageEngine)
