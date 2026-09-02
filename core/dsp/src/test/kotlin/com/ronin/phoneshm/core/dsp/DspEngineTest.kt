@@ -45,6 +45,13 @@ class DspEngineTest {
         ): WelchPsdEngine.SamplingContinuityResult {
             return WelchPsdEngine.SamplingContinuityResult(600.0, 0, 0.0, 0.0, true)
         }
+
+        override fun resampleToUniformGrid(
+            samples: List<AccelerationSample>,
+            targetSampleRateHz: Float
+        ): List<AccelerationSample> {
+            return samples
+        }
     }
 
     @Test

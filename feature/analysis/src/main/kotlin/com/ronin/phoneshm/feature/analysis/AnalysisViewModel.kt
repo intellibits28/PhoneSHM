@@ -179,8 +179,16 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val actualBuildingType = sessionMeta?.buildingType ?: buildingType
                 val actualFloors = sessionMeta?.floors ?: floors
 
+                // Phase 1-A: Use actual sample rate from session metadata or estimate from timestamps
+                val sampleRateHz: Float = sessionMeta?.actualAverageSampleRateHz
+                    ?: estimateSampleRateFromTimestamps(samples)
+                    ?: 100.0f  // Last-resort fallback for demo/legacy data
+
+                // Phase 1-B: Uniform Grid Resampling
+                val resampledSamples = dspEngine.resampleToUniformGrid(samples, sampleRateHz)
+
                 // Recommendation #3: On-device SNR/quality gate
-                val gravityRemoved = dspEngine.removeGravityAndDetrend(samples)
+                val gravityRemoved = dspEngine.removeGravityAndDetrend(resampledSamples)
                 val rms = kotlin.math.sqrt(gravityRemoved.gravityFreeSamples.map { (it.x * it.x + it.y * it.y + it.z * it.z).toDouble() }.average())
                 val rmsMg = rms * 1000.0 / 9.80665
                 val noiseFloor = (sessionMeta?.sessionNoiseFloorMg ?: deviceReport?.estimatedNoiseFloorMg)?.toDouble() ?: 0.45
@@ -207,11 +215,6 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                // Phase 1-A: Use actual sample rate from session metadata or estimate from timestamps
-                val sampleRateHz: Float = sessionMeta?.actualAverageSampleRateHz
-                    ?: estimateSampleRateFromTimestamps(samples)
-                    ?: 100.0f  // Last-resort fallback for demo/legacy data
-
                 // Profile-dependent Welch PSD parameters
                 val mainFftSize: Int
                 val windowSize: Int
@@ -220,13 +223,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
                 if (isAmbientMode) {
                     // Ambient mode: larger FFT for better frequency resolution, longer sliding windows
-                    mainFftSize = minOf(4096, Integer.highestOneBit(samples.size))
+                    mainFftSize = minOf(4096, Integer.highestOneBit(resampledSamples.size))
                     windowSize = 6000   // 60s segments
                     stepSize = 3000     // 50% overlap
                     slidingFftSize = 2048
                 } else {
                     // Impulse mode: standard parameters for 66s capture
-                    mainFftSize = minOf(2048, Integer.highestOneBit(samples.size))
+                    mainFftSize = minOf(2048, Integer.highestOneBit(resampledSamples.size))
                     windowSize = 512    // 5.12s windows
                     stepSize = 256      // 2.56s step
                     slidingFftSize = 256
@@ -234,17 +237,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
                 val mainParams = com.ronin.phoneshm.core.dsp.WelchPsdParameters(fftSize = mainFftSize)
                 val mainSpectrum = dspEngine.calculateMultiAxisWelchPsd(
-                    samples, 
+                    resampledSamples, 
                     sampleRateHz, 
                     mainParams, 
                     com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
                 )
 
                 // Run EFDD via JNI natively
-                val tsArray = samples.map { it.timestampNs }.toLongArray()
-                val xArray = samples.map { it.x }.toFloatArray()
-                val yArray = samples.map { it.y }.toFloatArray()
-                val zArray = samples.map { it.z }.toFloatArray()
+                val tsArray = resampledSamples.map { it.timestampNs }.toLongArray()
+                val xArray = resampledSamples.map { it.x }.toFloatArray()
+                val yArray = resampledSamples.map { it.y }.toFloatArray()
+                val zArray = resampledSamples.map { it.z }.toFloatArray()
 
                 val efddResult = try {
                     com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(

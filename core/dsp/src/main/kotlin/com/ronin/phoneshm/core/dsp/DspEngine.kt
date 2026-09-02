@@ -131,7 +131,13 @@ data class MultiAxisSpectrumResult(
  */
 interface DspEngine {
     /**
-     * Removes gravity via EMA and subtracts per-axis linear trend.
+     * Resamples irregular acceleration samples to a uniform grid using linear interpolation.
+     * This ensures the FFT/PSD algorithms do not suffer from leakage or jitter artifacts.
+     */
+    fun resampleToUniformGrid(samples: List<AccelerationSample>, targetSampleRateHz: Float): List<AccelerationSample>
+
+    /**
+     * Removes gravity component and detrends the signal using Exponential Moving Average.
      * Returns GravityRemovalResult including gravity vector time-series
      * and variance for QualityEngine coupling score.
      *

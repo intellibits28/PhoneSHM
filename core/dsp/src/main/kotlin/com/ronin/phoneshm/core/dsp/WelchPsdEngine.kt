@@ -22,6 +22,66 @@ class WelchPsdEngine : DspEngine {
     private var currentRms: Float = 0f
 
     // ─────────────────────────────────────────────────────────────
+    // 0. Resampling (Phase 1-B: Uniform Grid Resampling)
+    // ─────────────────────────────────────────────────────────────
+
+    override fun resampleToUniformGrid(samples: List<AccelerationSample>, targetSampleRateHz: Float): List<AccelerationSample> {
+        if (samples.size < 2) return samples
+
+        // Ensure samples are sorted by timestamp
+        val sorted = if (samples.zipWithNext().all { it.first.timestampNs <= it.second.timestampNs }) {
+            samples
+        } else {
+            samples.sortedBy { it.timestampNs }
+        }
+
+        val startNs = sorted.first().timestampNs
+        val endNs = sorted.last().timestampNs
+        val durationSec = (endNs - startNs) / 1e9
+        if (durationSec <= 0.0) return sorted
+
+        val targetCount = (durationSec * targetSampleRateHz).toInt() + 1
+        if (targetCount < 2) return sorted
+
+        val dtNs = (1e9 / targetSampleRateHz).toLong()
+        val resampled = ArrayList<AccelerationSample>(targetCount)
+        var srcIdx = 0
+
+        for (i in 0 until targetCount) {
+            val tTarget = startNs + i * dtNs
+
+            // Handle boundary cases
+            if (tTarget <= startNs) {
+                resampled.add(AccelerationSample(tTarget, sorted.first().x, sorted.first().y, sorted.first().z))
+                continue
+            }
+            if (tTarget >= endNs) {
+                resampled.add(AccelerationSample(tTarget, sorted.last().x, sorted.last().y, sorted.last().z))
+                continue
+            }
+
+            // Find bounding raw samples for interpolation
+            while (srcIdx < sorted.size - 2 && sorted[srcIdx + 1].timestampNs < tTarget) {
+                srcIdx++
+            }
+
+            val p1 = sorted[srcIdx]
+            val p2 = sorted[srcIdx + 1]
+
+            val gapNs = p2.timestampNs - p1.timestampNs
+            val fraction = if (gapNs > 0) (tTarget - p1.timestampNs).toFloat() / gapNs else 0f
+
+            val interpX = p1.x + fraction * (p2.x - p1.x)
+            val interpY = p1.y + fraction * (p2.y - p1.y)
+            val interpZ = p1.z + fraction * (p2.z - p1.z)
+
+            resampled.add(AccelerationSample(tTarget, interpX, interpY, interpZ))
+        }
+
+        return resampled
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 1. Gravity Removal & Detrending (B1)
     // ─────────────────────────────────────────────────────────────
 
@@ -96,7 +156,7 @@ class WelchPsdEngine : DspEngine {
     // ─────────────────────────────────────────────────────────────
 
     override fun highPassFilter(signal: FloatArray, sampleRateHz: Float, cutoffHz: Float): FloatArray {
-        if (signal.size < 3) return signal.copyOf()
+        if (signal.size < 9) return signal.copyOf()
 
         val wc = tan(PI * cutoffHz / sampleRateHz)
         val wc2 = wc * wc
@@ -109,28 +169,65 @@ class WelchPsdEngine : DspEngine {
         val a1 = (2.0 * (wc2 - 1.0) / k).toFloat()
         val a2 = ((1.0 - sqrt2wc + wc2) / k).toFloat()
 
-        // Forward-backward (filtfilt) for zero-phase
-        val forward = applyIir(signal, b0, b1, b2, a1, a2)
+        // Step response initial states (lfilter_zi) for Direct Form II Transposed
+        val sumA = 1.0f + a1 + a2
+        val zi1 = (b1 + b2 - (a1 + a2) * b0) / sumA
+        val zi2 = b2 - a2 * b0 - a2 * zi1
+
+        // Reflection padding (odd extension)
+        val padlen = minOf(9, signal.size - 1)
+        val padded = FloatArray(signal.size + 2 * padlen)
+        
+        // Left pad: odd reflection around signal[0]
+        val x0 = signal[0]
+        for (i in 0 until padlen) {
+            padded[i] = 2 * x0 - signal[padlen - i]
+        }
+        
+        // Copy center
+        System.arraycopy(signal, 0, padded, padlen, signal.size)
+        
+        // Right pad: odd reflection around signal[N-1]
+        val xN = signal[signal.size - 1]
+        for (i in 0 until padlen) {
+            padded[padlen + signal.size + i] = 2 * xN - signal[signal.size - 2 - i]
+        }
+
+        // Forward pass
+        val z1_fwd = zi1 * padded[0]
+        val z2_fwd = zi2 * padded[0]
+        val forward = applyIir(padded, b0, b1, b2, a1, a2, z1_fwd, z2_fwd)
+
+        // Reverse for backward pass
         forward.reverse()
-        val backward = applyIir(forward, b0, b1, b2, a1, a2)
+
+        // Backward pass
+        val z1_bwd = zi1 * forward[0]
+        val z2_bwd = zi2 * forward[0]
+        val backward = applyIir(forward, b0, b1, b2, a1, a2, z1_bwd, z2_bwd)
+
+        // Reverse again to original order
         backward.reverse()
 
-        return backward
+        // Trim padding
+        return backward.copyOfRange(padlen, padlen + signal.size)
     }
 
     private fun applyIir(
         input: FloatArray,
         b0: Float, b1: Float, b2: Float,
-        a1: Float, a2: Float
+        a1: Float, a2: Float,
+        zi1: Float = 0f, zi2: Float = 0f
     ): FloatArray {
         val output = FloatArray(input.size)
-        var w1 = 0f
-        var w2 = 0f
+        var z1 = zi1
+        var z2 = zi2
         for (i in input.indices) {
-            val w0 = input[i] - a1 * w1 - a2 * w2
-            output[i] = b0 * w0 + b1 * w1 + b2 * w2
-            w2 = w1
-            w1 = w0
+            val x = input[i]
+            val y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            output[i] = y
         }
         return output
     }
