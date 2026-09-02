@@ -366,9 +366,9 @@ softWrap = false,
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
-                                val isInsufficient = modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT
+                                val isInsufficient = modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT || uiState.analysisStatus == com.ronin.phoneshm.feature.analysis.AnalysisStatus.INCONCLUSIVE
                                 Text(
-                                    text = String.format("%.2f", modal.fundamentalFrequencyHz),
+                                    text = String.format("%.2f", uiState.fundamentalFrequencyHz),
                                     style = if (isInsufficient) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayMedium,
                                     color = if (isInsufficient) Color(0xFF64748B) else Color(0xFF38BDF8),
                                     fontWeight = FontWeight.Black,
@@ -388,6 +388,37 @@ softWrap = false,
                                 color = Color(0xFFCBD5E1),
                                 fontSize = 13.sp
                             )
+                            
+                            uiState.consensusResult?.let { consensus ->
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = when(consensus.status) {
+                                                com.ronin.phoneshm.core.modal.ConsensusStatus.AGREED -> Color(0xFF047857) // Green
+                                                com.ronin.phoneshm.core.modal.ConsensusStatus.PARTIAL -> Color(0xFFB45309) // Amber
+                                                com.ronin.phoneshm.core.modal.ConsensusStatus.DISAGREED -> Color(0xFF9A3412) // Red
+                                                com.ronin.phoneshm.core.modal.ConsensusStatus.INSUFFICIENT -> Color(0xFF475569) // Gray
+                                            }
+                                        ),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "CONSENSUS: ${consensus.status.name}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Agreement: ${(consensus.agreementScore * 100).toInt()}%",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
                             if (modal.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Card(
