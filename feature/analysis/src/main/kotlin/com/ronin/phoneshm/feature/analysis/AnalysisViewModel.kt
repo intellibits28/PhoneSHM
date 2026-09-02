@@ -36,15 +36,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Explicit analysis lifecycle states — prevents misleading default values
+ * from being shown before analysis completes. (Remediation Phase 0-A)
+ */
+enum class AnalysisStatus {
+    NOT_STARTED, ANALYZING, VALID, DEMO_RESULT,
+    INVALID_TIMING, INSUFFICIENT_EXCITATION, INSUFFICIENT_DATA, INCONCLUSIVE
+}
+
 data class AnalysisUiState(
     val isAnalyzing: Boolean = false,
+    val analysisStatus: AnalysisStatus = AnalysisStatus.NOT_STARTED,
     val fundamentalFrequencyHz: Double = 0.0,
-    val dominantAxis: String = "MAGNITUDE",
-    val qualityScorePct: Int = 98,
+    val dominantAxis: String = "UNKNOWN",
+    val qualityScorePct: Int = 0,
     val qualityReport: MeasurementQualityReport? = null,
     val baselineShiftPct: Double = 0.0,
     val baselineComparison: BaselineComparisonResult? = null,
-    val classificationLabel: String = "GLOBAL_MODE",
+    val classificationLabel: String = "PENDING",
     val modalResult: ModalAnalysisResult? = null,
     val spectrum: com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult? = null,
     val sessionMeta: com.ronin.phoneshm.core.sensor.MeasurementSessionMetadata? = null,
@@ -58,7 +68,8 @@ data class AnalysisUiState(
     val isWeakSignalFailure: Boolean = false,
     val measurementProfileId: String = "building_profile_active",
     val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null,
-    val rdtSsiResult: com.ronin.phoneshm.core.dsp.RdtSsiResult? = null
+    val rdtSsiResult: com.ronin.phoneshm.core.dsp.RdtSsiResult? = null,
+    val estimatedSampleRateHz: Float = 0f
 )
 
 
@@ -140,12 +151,22 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                                 AccelerationSample(data.timestampsNs[i], data.x[i], data.y[i], data.z[i])
                             }
                         } else {
-                            generateSyntheticStructuralSamples(sessionMeta?.buildingType ?: buildingType, sessionMeta?.floors ?: floors)
+                            // Phase 0-B: Insufficient real data → report error, don't generate synthetic
+                            _uiState.value = _uiState.value.copy(
+                                isAnalyzing = false,
+                                analysisStatus = AnalysisStatus.INSUFFICIENT_DATA,
+                                errorMessage = "Insufficient data: only ${data.sampleCount} samples recorded. Need > 100."
+                            )
+                            return@launch
                         }
                     } else {
+                        // Phase 0-B: No file → explicit demo mode
                         generateSyntheticStructuralSamples(buildingType, floors)
                     }
                 }
+
+                // Phase 0-B: Tag demo vs real analysis
+                val isDemoMode = (filePath == null || !File(filePath).exists())
 
                 // Use metadata values if available, otherwise fall back to arguments
                 val actualBuildingType = sessionMeta?.buildingType ?: buildingType
@@ -157,7 +178,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val rmsMg = rms * 1000.0 / 9.80665
                 val noiseFloor = (sessionMeta?.sessionNoiseFloorMg ?: deviceReport?.estimatedNoiseFloorMg)?.toDouble() ?: 0.45
                 var snrWarning: String? = null
-                val isSynthetic = (sessionMeta == null)
+                val isSynthetic = isDemoMode
                 
                 // If it's a known ambient profile OR it's a custom profile longer than 60s, treat it as ambient.
                 val isAmbientProfileId = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
@@ -179,7 +200,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                val sampleRateHz = 100.0f
+                // Phase 1-A: Use actual sample rate from session metadata or estimate from timestamps
+                val sampleRateHz: Float = sessionMeta?.actualAverageSampleRateHz
+                    ?: estimateSampleRateFromTimestamps(samples)
+                    ?: 100.0f  // Last-resort fallback for demo/legacy data
 
                 // Profile-dependent Welch PSD parameters
                 val mainFftSize: Int
@@ -331,13 +355,16 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     finalQualityScorePct = 49
                 }
 
-                // Auto-update baseline with this session (using real qualityScorePct, not hardcoded 80)
-                baselineEngine.updateBaselineWithSession(
-                    buildingHash = buildingHash,
-                    measurementProfileId = profileId,
-                    currentF0Hz = modalRes.fundamentalFrequencyHz,
-                    qualityScorePct = finalQualityScorePct
-                )
+                // Phase 0-B: Demo mode sessions must not update real baseline
+                if (!isDemoMode) {
+                    // Auto-update baseline with this session (using real qualityScorePct, not hardcoded 80)
+                    baselineEngine.updateBaselineWithSession(
+                        buildingHash = buildingHash,
+                        measurementProfileId = profileId,
+                        currentF0Hz = modalRes.fundamentalFrequencyHz,
+                        qualityScorePct = finalQualityScorePct
+                    )
+                }
 
                 // Update sidecar metadata with quality results so Session History can display it
                 if (sessionMeta != null && deviceReport != null && filePath != null) {
@@ -357,8 +384,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
+                // Phase 0-B: Determine final analysis status
+                val finalStatus = when {
+                    isDemoMode -> AnalysisStatus.DEMO_RESULT
+                    snrWarning != null -> AnalysisStatus.INSUFFICIENT_EXCITATION
+                    modalRes.fundamentalFrequencyHz <= 0.0 -> AnalysisStatus.INCONCLUSIVE
+                    else -> AnalysisStatus.VALID
+                }
+
                 _uiState.value = _uiState.value.copy(
                     isAnalyzing = false,
+                    analysisStatus = finalStatus,
                     fundamentalFrequencyHz = modalRes.fundamentalFrequencyHz,
                     dominantAxis = modalRes.dominantAxis,
                     classificationLabel = modalRes.classification.classification.name,
@@ -377,7 +413,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     sessionMeta = sessionMeta,
                     deviceReport = deviceReport,
                     efddResult = efddResult,
-                    rdtSsiResult = rdtSsiResult
+                    rdtSsiResult = rdtSsiResult,
+                    estimatedSampleRateHz = sampleRateHz
                 )
             } catch (e: Exception) { println("JSON ERROR: " + e.message); e.printStackTrace();
                 _uiState.value = _uiState.value.copy(
@@ -406,6 +443,20 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val z = (9.80665 + 0.03 * sin(2.0 * Math.PI * targetF0 * t)).toFloat()
             AccelerationSample((i * 10_000_000L), x, y, z)
         }
+    }
+
+    /**
+     * Phase 1-A: Estimate actual sample rate from hardware timestamps.
+     * Uses median interval to be robust against outlier gaps/jitter.
+     * Returns null if insufficient samples to estimate reliably.
+     */
+    private fun estimateSampleRateFromTimestamps(samples: List<AccelerationSample>): Float? {
+        if (samples.size < 20) return null
+        val intervals = (1 until samples.size).map {
+            (samples[it].timestampNs - samples[it - 1].timestampNs) / 1_000_000_000.0
+        }
+        val medianDt = intervals.sorted()[intervals.size / 2]
+        return if (medianDt > 0.0) (1.0 / medianDt).toFloat() else null
     }
 
     fun updateResults(f0: Double, axis: String, shift: Double, classification: String) {

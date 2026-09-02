@@ -44,26 +44,19 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         val dominantPeakProminence: Double
 
         if (candidatePeaks.isEmpty()) {
-            // Fallback: no peaks identified, find max PSD bin from magnitude spectrum directly
-            val maxBin = findMaxBin(spectrum.psdMagnitude, upperLimitHz)
-            if (maxBin != null) {
-                fundamentalFrequencyHz = maxBin.first
-                dominantPeakPower = maxBin.second
-                dominantPeakProminence = 0.1
-                dominantAxis = "MAGNITUDE"
-            } else {
-                return ModalAnalysisResult(
-                    fundamentalFrequencyHz = 0.0,
-                    dominantAxis = "UNKNOWN",
-                    confidence = 0.0,
-                    persistence = 0.0,
-                    adaptiveToleranceHz = 0.1,
-                    classification = evaluatePhysics(0.0, 0.0),
-                    dominantPeaksTable = emptyList(),
-                    prominenceRatio = Double.NaN,
-                    excitationSufficiency = ExcitationSufficiency.UNKNOWN
-                )
-            }
+            // Phase 0-C: No valid structural peaks found — do NOT fallback to max noise bin.
+            // Return an explicit no-peak result to prevent false positive structural identification.
+            return ModalAnalysisResult(
+                fundamentalFrequencyHz = 0.0,
+                dominantAxis = "NONE",
+                confidence = 0.0,
+                persistence = 0.0,
+                adaptiveToleranceHz = 0.1,
+                classification = evaluatePhysics(0.0, 0.0),
+                dominantPeaksTable = emptyList(),
+                prominenceRatio = Double.NaN,
+                excitationSufficiency = ExcitationSufficiency.INSUFFICIENT
+            )
         } else {
             // Select the candidate peak by weighting power magnitude with physics plausibility
             val bestCandidate = candidatePeaks.maxByOrNull { (_, peak) ->

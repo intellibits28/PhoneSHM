@@ -276,41 +276,53 @@ class DefaultBaselineManagerEngine(
             val nNew = existing.measurementCount + 1
 
             val delta = currentF0Hz - oldMean
-            val newMean = oldMean + delta / nNew
-            val delta2 = currentF0Hz - newMean
-            val newM2 = oldM2 + delta * delta2
-
-            val newStd = if (nNew > 1) sqrt(newM2 / nNew) else 0.0
 
             val pctShift = ((currentF0Hz - oldMean) / oldMean) * 100.0
             val isTwoSigma = existing.stdF0Hz > 0.0 &&
                     abs(currentF0Hz - oldMean) > 2.0 * existing.stdF0Hz
             val isAnomaly = abs(pctShift) > 5.0 || isTwoSigma
 
-            // Do not track/increment consecutive anomalies while the baseline is still calibrating (n < 10)
-            val newAnomalyCount = if (isAnomaly && nNew >= MIN_BASELINE_SAMPLES) {
-                existing.consecutiveAnomalyCount + 1
-            } else {
-                0
-            }
-
-            baselineDao.updateBaselineWithHistory(
-                BaselineProfileEntity(
-                    buildingHash = compositeKey,
-                    meanF0Hz = newMean,
-                    stdF0Hz = newStd,
-                    m2 = newM2,
-                    measurementCount = nNew,
-                    consecutiveAnomalyCount = newAnomalyCount,
-                    lastUpdatedAt = now
-                ),
-                BaselineHistoryEntity(
-                    buildingHash = compositeKey,
-                    timestampMs = now,
-                    f0Hz = currentF0Hz,
-                    qualityScorePct = qualityScorePct
+            if (isAnomaly && nNew >= MIN_BASELINE_SAMPLES) {
+                // Phase 2-A: Anomalous sample → record in history but DO NOT update baseline statistics.
+                // This prevents structural damage or environmental shifts from silently drifting the baseline.
+                val newAnomalyCount = existing.consecutiveAnomalyCount + 1
+                baselineDao.updateBaselineWithHistory(
+                    existing.copy(
+                        consecutiveAnomalyCount = newAnomalyCount,
+                        lastUpdatedAt = now
+                    ),
+                    BaselineHistoryEntity(
+                        buildingHash = compositeKey,
+                        timestampMs = now,
+                        f0Hz = currentF0Hz,
+                        qualityScorePct = qualityScorePct
+                    )
                 )
-            )
+            } else {
+                // Normal (non-anomalous) sample: update Welford running statistics
+                val newMean = oldMean + delta / nNew
+                val delta2 = currentF0Hz - newMean
+                val newM2 = oldM2 + delta * delta2
+                val newStd = if (nNew > 1) sqrt(newM2 / nNew) else 0.0
+
+                baselineDao.updateBaselineWithHistory(
+                    BaselineProfileEntity(
+                        buildingHash = compositeKey,
+                        meanF0Hz = newMean,
+                        stdF0Hz = newStd,
+                        m2 = newM2,
+                        measurementCount = nNew,
+                        consecutiveAnomalyCount = 0,
+                        lastUpdatedAt = now
+                    ),
+                    BaselineHistoryEntity(
+                        buildingHash = compositeKey,
+                        timestampMs = now,
+                        f0Hz = currentF0Hz,
+                        qualityScorePct = qualityScorePct
+                    )
+                )
+            }
         }
     }
 }
