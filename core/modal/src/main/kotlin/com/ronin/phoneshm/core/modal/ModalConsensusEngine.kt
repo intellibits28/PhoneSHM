@@ -39,10 +39,10 @@ class ModalConsensusEngine {
         } else null
 
         // EFDD: Use first peak if available
-        val efddF0 = efddResult?.peaks?.firstOrNull()?.frequencyHz?.toDouble()
+        val efddF0 = efddResult?.peakFrequencies?.firstOrNull()?.toDouble()
 
         // SSI: Use dominant stable pole
-        val ssiF0 = ssiResult?.stablePoles?.firstOrNull()?.frequencyHz?.toDouble()
+        val ssiF0 = ssiResult?.poles?.firstOrNull()?.frequencyHz?.toDouble()
 
         val methods = listOfNotNull(welchF0, efddF0, ssiF0)
         
