@@ -39,16 +39,54 @@ class DefaultRdtSsiEngine : RdtSsiEngine {
             x, y, z, sampleRateHz, minHz, maxHz, 40, 3.0f
         )
         
-        val poles = mutableListOf<RdtSsiPole>()
+        val allPoles = mutableListOf<RdtSsiPole>()
         var i = 0
         while (i + 2 < rawResult.size) {
             val freq = rawResult[i]
             val damp = rawResult[i + 1]
             val order = rawResult[i + 2].toInt()
-            poles.add(RdtSsiPole(freq, damp, order))
+            allPoles.add(RdtSsiPole(freq, damp, order))
             i += 3
         }
         
-        return RdtSsiResult(poles)
+        // Phase 3: SSI Advanced Validation - Stable Pole Clustering
+        allPoles.sortBy { it.frequencyHz }
+        
+        val clusters = mutableListOf<List<RdtSsiPole>>()
+        var currentCluster = mutableListOf<RdtSsiPole>()
+        
+        val freqTolerance = 0.015f // 1.5% frequency tolerance for clustering
+        
+        for (pole in allPoles) {
+            if (currentCluster.isEmpty()) {
+                currentCluster.add(pole)
+            } else {
+                val refFreq = currentCluster.map { it.frequencyHz }.average().toFloat()
+                if (kotlin.math.abs(pole.frequencyHz - refFreq) / refFreq < freqTolerance) {
+                    currentCluster.add(pole)
+                } else {
+                    clusters.add(currentCluster)
+                    currentCluster = mutableListOf(pole)
+                }
+            }
+        }
+        if (currentCluster.isNotEmpty()) {
+            clusters.add(currentCluster)
+        }
+        
+        // A pole is "stable" if it appears in at least 4 different model orders
+        val stablePoles = clusters
+            .filter { cluster -> cluster.map { it.modelOrder }.distinct().size >= 4 }
+            .map { cluster ->
+                RdtSsiPole(
+                    frequencyHz = cluster.map { it.frequencyHz }.average().toFloat(),
+                    dampingRatio = cluster.map { it.dampingRatio }.average().toFloat(),
+                    modelOrder = cluster.map { it.modelOrder }.distinct().size // Overload modelOrder as stability weight
+                )
+            }
+            // Sort by stability weight (most stable first)
+            .sortedByDescending { it.modelOrder }
+        
+        return RdtSsiResult(stablePoles)
     }
 }

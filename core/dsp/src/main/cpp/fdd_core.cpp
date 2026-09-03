@@ -120,6 +120,8 @@ FddResult calculateFdd(
 
     float normFactor = 1.0f / (sampleRateHz * windowPowerSum * segmentCount);
 
+    std::vector<Eigen::Vector3cd> modeShapes(freqBins);
+
     // SVD on each G(k)
     for (int k = 0; k < freqBins; ++k) {
         // Normalize
@@ -128,13 +130,13 @@ FddResult calculateFdd(
             G[k] *= 2.0; // One-sided spectrum compensation
         }
 
-        Eigen::JacobiSVD<Eigen::Matrix3cd> svd(G[k]);
+        Eigen::JacobiSVD<Eigen::Matrix3cd> svd(G[k], Eigen::ComputeFullU);
         auto singularValues = svd.singularValues(); // sorted in decreasing order
         result.firstSingularValues[k] = static_cast<float>(singularValues(0));
+        modeShapes[k] = svd.matrixU().col(0);
     }
 
     // Peak picking on the first singular value curve
-    
     auto peaks = findPeaks(result.frequencies, result.firstSingularValues);
     for (const auto& p : peaks) {
         EfddMode mode;
@@ -143,7 +145,7 @@ FddResult calculateFdd(
         mode.prominence = p.prominence;
         mode.dampingRatio = 0.0f;
 
-        // 1. Find SDOF bell limits
+        // 1. Find the peak bin index
         int k = -1;
         float minDiff = 1e9f;
         for (int i = 0; i < freqBins; ++i) {
@@ -155,9 +157,29 @@ FddResult calculateFdd(
         }
         
         if (k > 0) {
+            Eigen::Vector3cd refShape = modeShapes[k];
+            
+            auto computeMAC = [](const Eigen::Vector3cd& u1, const Eigen::Vector3cd& u2) {
+                return static_cast<float>(std::norm(u1.dot(u2)));
+            };
+
             int L = k, R = k;
-            while (L > 0 && result.firstSingularValues[L-1] < result.firstSingularValues[L]) L--;
-            while (R < freqBins - 1 && result.firstSingularValues[R+1] < result.firstSingularValues[R]) R++;
+            float macThreshold = 0.85f;
+            
+            // Phase 3: Advanced Modal Validation - MAC-based SDOF Bell Selection
+            while (L > 0) {
+                float mac = computeMAC(refShape, modeShapes[L-1]);
+                if (mac < macThreshold) break;
+                // Still enforce monotonic descent to prevent grabbing adjacent modes with similar shapes
+                if (result.firstSingularValues[L-1] > result.firstSingularValues[L]) break;
+                L--;
+            }
+            while (R < freqBins - 1) {
+                float mac = computeMAC(refShape, modeShapes[R+1]);
+                if (mac < macThreshold) break;
+                if (result.firstSingularValues[R+1] > result.firstSingularValues[R]) break;
+                R++;
+            }
             
             // 2. Build two-sided spectrum for IDFT
             std::vector<double> realX(fftSize, 0.0), imagX(fftSize, 0.0);
