@@ -133,9 +133,18 @@ class DefaultModalAnalyzer : ModalAnalyzer {
             Double.NaN
         }
 
+        // Phase 4: Peak Threshold Calibration
+        // Adaptive thresholding: If a peak is highly persistent over time, we can trust a smaller prominence (e.g. 2.5x or 4dB SNR).
+        // If it's transient (low persistence), we demand a high prominence (e.g. 6.0x or ~8dB SNR) to avoid noise spikes.
+        val requiredProminence = when {
+            persistence >= 0.8 -> 2.5 // Highly stable ambient peak
+            persistence >= 0.5 -> 4.0 // Moderate stability
+            else -> 6.0               // Transient / Impulsive peak
+        }
+
         val excitationSufficiency = when {
             prominenceRatio.isNaN() -> ExcitationSufficiency.UNKNOWN
-            prominenceRatio < 5.0 -> ExcitationSufficiency.INSUFFICIENT
+            prominenceRatio < requiredProminence -> ExcitationSufficiency.INSUFFICIENT
             else -> ExcitationSufficiency.SUFFICIENT
         }
 
