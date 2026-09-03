@@ -372,7 +372,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         buildingHash = buildingHash,
                         measurementProfileId = profileId,
                         currentF0Hz = modalRes.fundamentalFrequencyHz,
-                        qualityScorePct = finalQualityScorePct
+                        qualityScorePct = finalQualityScorePct,
+                        timeOfDay = sessionMeta?.timeOfDay,
+                        temperatureCelsius = sessionMeta?.batteryTemperatureCelsius
                     )
                 }
 

@@ -47,7 +47,9 @@ data class MeasurementSessionMetadata(
     val isImpulseValid: Boolean? = null,
     val isContinuityPassed: Boolean? = null,
     val qualityGatePassed: Boolean? = null,
-    val binaryChecksumCrc32: String? = null
+    val binaryChecksumCrc32: String? = null,
+    val timeOfDay: String? = null,
+    val batteryTemperatureCelsius: Float? = null
 )
 
 /**

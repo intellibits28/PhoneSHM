@@ -29,7 +29,14 @@ class BaselineManagerEngineTest {
             return BaselineComparisonResult(currentF0Hz, baseline, shift, isAnomaly, false, "Shift calculated: $shift%")
         }
 
-        override suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int, measurementProfileId: String) {
+        override suspend fun updateBaselineWithSession(
+            buildingHash: String, 
+            currentF0Hz: Double, 
+            qualityScorePct: Int, 
+            measurementProfileId: String,
+            timeOfDay: String?,
+            temperatureCelsius: Float?
+        ) {
             val existing = storage[buildingHash]
             if (existing == null) {
                 storage[buildingHash] = BaselineProfile(buildingHash, currentF0Hz, 0.1, 1, 0, System.currentTimeMillis())

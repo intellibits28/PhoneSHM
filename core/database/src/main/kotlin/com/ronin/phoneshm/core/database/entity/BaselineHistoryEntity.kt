@@ -20,5 +20,7 @@ data class BaselineHistoryEntity(
     val buildingHash: String, 
     val timestampMs: Long,
     val f0Hz: Double, 
-    val qualityScorePct: Int
+    val qualityScorePct: Int,
+    val timeOfDay: String? = null,
+    val temperatureCelsius: Float? = null
 )

@@ -186,6 +186,20 @@ class AndroidVibrationSensorEngine(
         }
         val checksumStr = String.format("%08X", crc32.value)
 
+        // Environmental Stratification: Capture Battery Temp (proxy for ambient) and Time of Day
+        val batteryIntent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val tempTenths = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+        val batteryTempC = if (tempTenths > 0) tempTenths / 10.0f else null
+
+        val cal = java.util.Calendar.getInstance()
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val timeOfDayStr = when (hour) {
+            in 5..11 -> "MORNING"
+            in 12..16 -> "AFTERNOON"
+            in 17..20 -> "EVENING"
+            else -> "NIGHT"
+        }
+
         val metadata = MeasurementSessionMetadata(
             sessionId = sessionId,
             measurementProfileId = profileId,
@@ -214,7 +228,9 @@ class AndroidVibrationSensorEngine(
             sessionNoiseFloorMg = sessionNoiseFloorMg,
             sessionAccelerometerBias = sessionAccelerometerBias,
             recordedAtEpochMs = recordedAtEpochMs,
-            binaryChecksumCrc32 = checksumStr
+            binaryChecksumCrc32 = checksumStr,
+            timeOfDay = timeOfDayStr,
+            batteryTemperatureCelsius = batteryTempC
         )
 
         // Task 1 & Item 2: Persist session metadata and device report to a sidecar JSON file using JSONObject

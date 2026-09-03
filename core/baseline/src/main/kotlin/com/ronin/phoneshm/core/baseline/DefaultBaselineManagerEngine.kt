@@ -243,7 +243,9 @@ class DefaultBaselineManagerEngine(
         buildingHash: String,
         currentF0Hz: Double,
         qualityScorePct: Int,
-        measurementProfileId: String
+        measurementProfileId: String,
+        timeOfDay: String?,
+        temperatureCelsius: Float?
     ) {
         if (qualityScorePct < 50) return
         ensureMigrated()
@@ -267,7 +269,9 @@ class DefaultBaselineManagerEngine(
                     buildingHash = compositeKey,
                     timestampMs = now,
                     f0Hz = currentF0Hz,
-                    qualityScorePct = qualityScorePct
+                    qualityScorePct = qualityScorePct,
+                    timeOfDay = timeOfDay,
+                    temperatureCelsius = temperatureCelsius
                 )
             )
         } else {
@@ -295,7 +299,9 @@ class DefaultBaselineManagerEngine(
                         buildingHash = compositeKey,
                         timestampMs = now,
                         f0Hz = currentF0Hz,
-                        qualityScorePct = qualityScorePct
+                        qualityScorePct = qualityScorePct,
+                        timeOfDay = timeOfDay,
+                        temperatureCelsius = temperatureCelsius
                     )
                 )
             } else {
@@ -319,7 +325,9 @@ class DefaultBaselineManagerEngine(
                         buildingHash = compositeKey,
                         timestampMs = now,
                         f0Hz = currentF0Hz,
-                        qualityScorePct = qualityScorePct
+                        qualityScorePct = qualityScorePct,
+                        timeOfDay = timeOfDay,
+                        temperatureCelsius = temperatureCelsius
                     )
                 )
             }

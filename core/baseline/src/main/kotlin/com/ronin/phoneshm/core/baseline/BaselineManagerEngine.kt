@@ -3,7 +3,9 @@ package com.ronin.phoneshm.core.baseline
 data class BaselineHistoryEntry(
     val timestampMs: Long,
     val f0Hz: Double,
-    val qualityScorePct: Int
+    val qualityScorePct: Int,
+    val timeOfDay: String? = null,
+    val temperatureCelsius: Float? = null
 )
 
 /**
@@ -70,7 +72,14 @@ interface BaselineManagerEngine {
      * Updates baseline statistics with a newly verified high-quality session.
      * Also updates consecutiveAnomalyCount based on whether the session is anomalous.
      */
-    suspend fun updateBaselineWithSession(buildingHash: String, currentF0Hz: Double, qualityScorePct: Int, measurementProfileId: String = "building_profile_active")
+    suspend fun updateBaselineWithSession(
+        buildingHash: String, 
+        currentF0Hz: Double, 
+        qualityScorePct: Int, 
+        measurementProfileId: String = "building_profile_active",
+        timeOfDay: String? = null,
+        temperatureCelsius: Float? = null
+    )
 
     /**
      * Resets/clears the baseline profile for the given building hash.

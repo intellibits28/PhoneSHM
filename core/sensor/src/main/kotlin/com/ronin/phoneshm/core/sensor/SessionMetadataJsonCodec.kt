@@ -38,6 +38,8 @@ object SessionMetadataJsonCodec {
             metadata.isContinuityPassed?.let { put("isContinuityPassed", it) }
             metadata.qualityGatePassed?.let { put("qualityGatePassed", it) }
             metadata.binaryChecksumCrc32?.let { put("binaryChecksumCrc32", it) }
+            metadata.timeOfDay?.let { put("timeOfDay", it) }
+            metadata.batteryTemperatureCelsius?.let { put("batteryTemperatureCelsius", it) }
         }
         
         val biasArr = JSONArray()
@@ -106,7 +108,9 @@ object SessionMetadataJsonCodec {
                 isImpulseValid = if (metaJson.has("isImpulseValid")) metaJson.getBoolean("isImpulseValid") else null,
                 isContinuityPassed = if (metaJson.has("isContinuityPassed")) metaJson.getBoolean("isContinuityPassed") else null,
                 qualityGatePassed = if (metaJson.has("qualityGatePassed")) metaJson.getBoolean("qualityGatePassed") else null,
-                binaryChecksumCrc32 = if (metaJson.has("binaryChecksumCrc32")) metaJson.getString("binaryChecksumCrc32") else null
+                binaryChecksumCrc32 = if (metaJson.has("binaryChecksumCrc32")) metaJson.getString("binaryChecksumCrc32") else null,
+                timeOfDay = if (metaJson.has("timeOfDay")) metaJson.getString("timeOfDay") else null,
+                batteryTemperatureCelsius = if (metaJson.has("batteryTemperatureCelsius")) metaJson.getDouble("batteryTemperatureCelsius").toFloat() else null
             )
 
             val devJson = json.getJSONObject("deviceReport")
