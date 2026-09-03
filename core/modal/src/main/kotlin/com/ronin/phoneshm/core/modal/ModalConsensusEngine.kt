@@ -38,11 +38,23 @@ class ModalConsensusEngine {
             modalRes.fundamentalFrequencyHz
         } else null
 
-        // EFDD: Use first peak if available
-        val efddF0 = efddResult?.peakFrequencies?.firstOrNull()?.toDouble()
+        val tolerancePct = 0.05
 
-        // SSI: Use dominant stable pole
-        val ssiF0 = ssiResult?.poles?.firstOrNull()?.frequencyHz?.toDouble()
+        // EFDD: Use the peak that aligns with Welch (within 5%), otherwise fallback to the strongest peak
+        val efddF0 = if (welchF0 != null && efddResult != null) {
+            val matchedFreq = efddResult.peakFrequencies.firstOrNull { abs(it - welchF0) / welchF0 <= tolerancePct }
+            (matchedFreq ?: efddResult.peakFrequencies.firstOrNull())?.toDouble()
+        } else {
+            efddResult?.peakFrequencies?.firstOrNull()?.toDouble()
+        }
+
+        // SSI: Use the stable pole that aligns with Welch (within 5%), otherwise fallback to the most stable pole
+        val ssiF0 = if (welchF0 != null && ssiResult != null) {
+            val matchedPole = ssiResult.poles.firstOrNull { abs(it.frequencyHz - welchF0) / welchF0 <= tolerancePct }
+            (matchedPole?.frequencyHz ?: ssiResult.poles.firstOrNull()?.frequencyHz)?.toDouble()
+        } else {
+            ssiResult?.poles?.firstOrNull()?.frequencyHz?.toDouble()
+        }
 
         val methods = listOfNotNull(welchF0, efddF0, ssiF0)
         
