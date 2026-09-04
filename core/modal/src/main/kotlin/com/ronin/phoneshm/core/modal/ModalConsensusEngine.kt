@@ -33,80 +33,61 @@ class ModalConsensusEngine {
         efddResult: NativeFddResult?,
         ssiResult: RdtSsiResult?
     ): ModalConsensusResult {
-        // Welch is the baseline unless it explicitly says INSUFFICIENT
-        val welchF0 = if (modalRes.excitationSufficiency != ExcitationSufficiency.INSUFFICIENT && modalRes.fundamentalFrequencyHz > 0.0) {
-            modalRes.fundamentalFrequencyHz
-        } else null
+        // Collect all candidates
+        val welchF0 = if (modalRes.fundamentalFrequencyHz > 0.0) modalRes.fundamentalFrequencyHz else null
+        val efddCandidates = efddResult?.peakFrequencies?.map { it.toDouble() } ?: emptyList()
+        val ssiCandidates = ssiResult?.poles?.map { it.frequencyHz.toDouble() } ?: emptyList()
 
         val tolerancePct = 0.05
 
-        // EFDD: Use the peak that aligns with Welch (within 5%), otherwise fallback to the strongest peak
-        val efddF0 = if (welchF0 != null && efddResult != null) {
-            val matchedFreq = efddResult.peakFrequencies.firstOrNull { abs(it - welchF0) / welchF0 <= tolerancePct }
-            (matchedFreq ?: efddResult.peakFrequencies.firstOrNull())?.toDouble()
-        } else {
-            efddResult?.peakFrequencies?.firstOrNull()?.toDouble()
+        // Extract possible cluster centers
+        val allCenters = mutableListOf<Double>()
+        if (welchF0 != null) allCenters.add(welchF0)
+        allCenters.addAll(efddCandidates.take(3))
+        allCenters.addAll(ssiCandidates.take(3))
+
+        var bestCluster = emptyList<Double>()
+        var bestWelch: Double? = null
+        var bestEfdd: Double? = null
+        var bestSsi: Double? = null
+
+        // Find the frequency that appears in the most methods (largest cluster)
+        for (center in allCenters) {
+            val wMatch = if (welchF0 != null && isWithinTolerance(center, welchF0, tolerancePct)) welchF0 else null
+            val eMatch = efddCandidates.firstOrNull { isWithinTolerance(center, it, tolerancePct) }
+            val sMatch = ssiCandidates.firstOrNull { isWithinTolerance(center, it, tolerancePct) }
+
+            val currentCluster = listOfNotNull(wMatch, eMatch, sMatch)
+            if (currentCluster.size > bestCluster.size) {
+                bestCluster = currentCluster
+                bestWelch = wMatch
+                bestEfdd = eMatch
+                bestSsi = sMatch
+            }
         }
 
-        // SSI: Use the stable pole that aligns with Welch (within 5%), otherwise fallback to the most stable pole
-        val ssiF0 = if (welchF0 != null && ssiResult != null) {
-            val matchedPole = ssiResult.poles.firstOrNull { abs(it.frequencyHz - welchF0) / welchF0 <= tolerancePct }
-            (matchedPole?.frequencyHz ?: ssiResult.poles.firstOrNull()?.frequencyHz)?.toDouble()
-        } else {
-            ssiResult?.poles?.firstOrNull()?.frequencyHz?.toDouble()
-        }
+        // If no agreement (cluster size <= 1), fallback to the primary peaks
+        val finalWelch = bestWelch ?: welchF0
+        val finalEfdd = bestEfdd ?: efddCandidates.firstOrNull()
+        val finalSsi = bestSsi ?: ssiCandidates.firstOrNull()
 
-        val methods = listOfNotNull(welchF0, efddF0, ssiF0)
-        
-        if (methods.isEmpty()) {
-            return ModalConsensusResult(
-                welchF0 = welchF0,
-                efddF0 = efddF0,
-                ssiF0 = ssiF0,
-                consensusF0 = null,
-                agreementScore = 0.0f,
-                status = ConsensusStatus.INSUFFICIENT
-            )
-        }
-        
-        if (methods.size == 1) {
-            return ModalConsensusResult(
-                welchF0 = welchF0,
-                efddF0 = efddF0,
-                ssiF0 = ssiF0,
-                consensusF0 = methods[0],
-                agreementScore = 0.33f,
-                status = ConsensusStatus.PARTIAL
-            )
-        }
-
-        // Check agreement (±5% tolerance)
-        val tolerance = 0.05
-        
-        val cluster = mutableListOf<Double>()
-        if (welchF0 != null) {
-            cluster.add(welchF0)
-            if (efddF0 != null && isWithinTolerance(welchF0, efddF0, tolerance)) cluster.add(efddF0)
-            if (ssiF0 != null && isWithinTolerance(welchF0, ssiF0, tolerance)) cluster.add(ssiF0)
-        } else if (efddF0 != null) {
-            cluster.add(efddF0)
-            if (ssiF0 != null && isWithinTolerance(efddF0, ssiF0, tolerance)) cluster.add(ssiF0)
-        } else if (ssiF0 != null) {
-            cluster.add(ssiF0)
-        }
-
-        val agreedRatio = cluster.size.toFloat() / 3f // Score out of all 3 possible methods
-        val finalStatus = when {
-            cluster.size == 3 -> ConsensusStatus.AGREED
-            cluster.size == 2 -> ConsensusStatus.PARTIAL
+        val agreedRatio = bestCluster.size.toFloat() / 3f
+        val finalStatus = when (bestCluster.size) {
+            3 -> ConsensusStatus.AGREED
+            2 -> ConsensusStatus.PARTIAL
             else -> ConsensusStatus.DISAGREED
         }
 
+        val methodsCount = listOfNotNull(finalWelch, finalEfdd, finalSsi).size
+        if (methodsCount == 0) {
+            return ModalConsensusResult(null, null, null, null, 0.0f, ConsensusStatus.INSUFFICIENT)
+        }
+
         return ModalConsensusResult(
-            welchF0 = welchF0,
-            efddF0 = efddF0,
-            ssiF0 = ssiF0,
-            consensusF0 = if (cluster.size > 1) cluster.average() else cluster.firstOrNull(),
+            welchF0 = finalWelch,
+            efddF0 = finalEfdd,
+            ssiF0 = finalSsi,
+            consensusF0 = if (bestCluster.size > 1) bestCluster.average() else null,
             agreementScore = agreedRatio,
             status = finalStatus
         )
