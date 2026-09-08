@@ -250,12 +250,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 val zArray = resampledSamples.map { it.z }.toFloatArray()
 
                 val efddResult = try {
-                    com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(
+                    val res = com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(
                         tsArray, xArray, yArray, zArray,
                         sampleRateHz, mainFftSize, 0.5f
                     )
+                    android.util.Log.i("Analysis", "EFDD computed: modes=${res.peakFrequencies.size}, freqs=${res.frequencies.size}")
+                    res
                 } catch (e: Throwable) {
-                    android.util.Log.e("Analysis", "Failed to compute EFDD: ${e.message}")
+                    android.util.Log.e("Analysis", "Failed to compute EFDD: ${e.message}", e)
                     null
                 }
 

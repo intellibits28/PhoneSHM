@@ -761,41 +761,55 @@ softWrap = false,
                                         Text(text = "Damping (ζ)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
-                                    efdd.peakFrequencies.forEachIndexed { index, freq ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    if (efdd.peakFrequencies.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "#${index + 1}",
-                                                color = if (index == 0) Color(0xFF10B981) else Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Text(
-                                                text = String.format("%.3f Hz", freq),
-                                                color = if (index == 0) Color(0xFF10B981) else Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace,
-                                                fontSize = 13.sp,
-                                                modifier = Modifier.weight(2f)
-                                            )
-                                            val damping = if (index < efdd.peakDampingRatios.size) efdd.peakDampingRatios[index] else 0f
-                                            Text(
-                                                text = String.format("%.2f %%", damping * 100f),
-                                                color = Color(0xFFFDE047),
-                                                fontFamily = FontFamily.Monospace,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                modifier = Modifier.weight(2f)
+                                                text = "No distinct structural modal peaks identified above noise floor.",
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 12.sp,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                             )
                                         }
-                                        if (index < efdd.peakFrequencies.lastIndex) {
-                                            HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                                    } else {
+                                        efdd.peakFrequencies.forEachIndexed { index, freq ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "#${index + 1}",
+                                                    color = if (index == 0) Color(0xFF10B981) else Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(
+                                                    text = String.format("%.3f Hz", freq),
+                                                    color = if (index == 0) Color(0xFF10B981) else Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 13.sp,
+                                                    modifier = Modifier.weight(2f)
+                                                )
+                                                val damping = if (index < efdd.peakDampingRatios.size) efdd.peakDampingRatios[index] else 0f
+                                                Text(
+                                                    text = String.format("%.2f %%", damping * 100f),
+                                                    color = Color(0xFFFDE047),
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    modifier = Modifier.weight(2f)
+                                                )
+                                            }
+                                            if (index < efdd.peakFrequencies.lastIndex) {
+                                                HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                                            }
                                         }
                                     }
                                 }
@@ -815,8 +829,38 @@ softWrap = false,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                                        Text("SV1 Curve Plot Placeholder", color = Color.Gray, fontSize = 12.sp)
+                                    val maxSv = efdd.firstSingularValues.maxOrNull() ?: 0f
+                                    val svCount = efdd.firstSingularValues.size
+                                    val maxFreq = efdd.frequencies.lastOrNull() ?: 0f
+                                    val df = if (svCount > 1) maxFreq / (svCount - 1) else 0f
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Peak SV₁ Magnitude", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                            Text(String.format("%.3e m²/s⁴", maxSv), color = Color(0xFF38BDF8), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Frequency Resolution (Δf)", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                            Text(String.format("%.4f Hz", df), color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("SVD Bins Computed", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                            Text("$svCount bins (0 - ${String.format("%.1f", maxFreq)} Hz)", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                        }
                                     }
                                 }
                             }

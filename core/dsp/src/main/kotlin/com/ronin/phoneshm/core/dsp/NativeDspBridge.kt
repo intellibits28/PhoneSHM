@@ -46,8 +46,14 @@ object NativeDspBridge {
         fftSize: Int,
         overlapPct: Float
     ): NativeFddResult {
-        val raw = nativeCalculateFddRaw(timestamps, x, y, z, sampleRateHz, fftSize, overlapPct)
+        val raw = try {
+            nativeCalculateFddRaw(timestamps, x, y, z, sampleRateHz, fftSize, overlapPct)
+        } catch (e: Throwable) {
+            android.util.Log.e("NativeDspBridge", "nativeCalculateFddRaw failed: ${e.message}", e)
+            FloatArray(0)
+        }
         if (raw.size < 2) {
+            android.util.Log.w("NativeDspBridge", "nativeCalculateFddRaw returned raw.size=${raw.size} (< 2)")
             return NativeFddResult(
                 frequencies = FloatArray(0),
                 firstSingularValues = FloatArray(0),

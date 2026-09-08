@@ -232,64 +232,75 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
     int n = psd.size();
     if (n < 3) return {};
 
-    std::vector<Peak> peaks;
     int localWindowHalf = 20;
     int guardBand = 2;
 
-    for (int k = 1; k < n - 1; ++k) {
-        if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1]) {
-            std::vector<float> localBins;
-            for (int j = std::max(0, k - localWindowHalf); j <= std::min(n - 1, k + localWindowHalf); ++j) {
-                if (std::abs(j - k) > guardBand) localBins.push_back(psd[j]);
-            }
-            if (localBins.empty()) continue;
-            std::sort(localBins.begin(), localBins.end());
-            float localMedian = localBins[localBins.size() / 2];
-            if (std::isnan(psd[k]) || std::isinf(psd[k]) || psd[k] <= 0.0f) continue;
-            
-            float safeNoise = std::max(localMedian, 1e-30f);
-            float peakDb = 10.0f * std::log10(psd[k]);
-            float noiseDb = 10.0f * std::log10(safeNoise);
-            float snrDb = peakDb - noiseDb;
-            
-            if (snrDb > 1.0f) {
-            float leftMin = psd[k];
-            for (int j = k - 1; j >= 0; --j) {
-                if (psd[j] < leftMin) leftMin = psd[j];
-                if (j < k - 1 && psd[j] > psd[j + 1]) break;
-            }
+    auto extractPeaks = [&](float minSnrDb) {
+        std::vector<Peak> resultPeaks;
+        for (int k = 1; k < n - 1; ++k) {
+            if (psd[k] > psd[k - 1] && psd[k] > psd[k + 1]) {
+                std::vector<float> localBins;
+                for (int j = std::max(0, k - localWindowHalf); j <= std::min(n - 1, k + localWindowHalf); ++j) {
+                    if (std::abs(j - k) > guardBand) localBins.push_back(psd[j]);
+                }
+                if (localBins.empty()) continue;
+                std::sort(localBins.begin(), localBins.end());
+                float localMedian = localBins[localBins.size() / 2];
+                if (std::isnan(psd[k]) || std::isinf(psd[k]) || psd[k] <= 0.0f) continue;
+                
+                float safeNoise = std::max(localMedian, 1e-30f);
+                float peakDb = 10.0f * std::log10(psd[k]);
+                float noiseDb = 10.0f * std::log10(safeNoise);
+                float snrDb = peakDb - noiseDb;
+                
+                if (snrDb > minSnrDb) {
+                    float leftMin = psd[k];
+                    for (int j = k - 1; j >= 0; --j) {
+                        if (psd[j] < leftMin) leftMin = psd[j];
+                        if (j < k - 1 && psd[j] > psd[j + 1]) break;
+                    }
 
-            float rightMin = psd[k];
-            for (int j = k + 1; j < n; ++j) {
-                if (psd[j] < rightMin) rightMin = psd[j];
-                if (j > k + 1 && psd[j] > psd[j - 1]) break;
-            }
+                    float rightMin = psd[k];
+                    for (int j = k + 1; j < n; ++j) {
+                        if (psd[j] < rightMin) rightMin = psd[j];
+                        if (j > k + 1 && psd[j] > psd[j - 1]) break;
+                    }
 
-            float referenceLevel = std::max((leftMin + rightMin) / 2.0f, 1e-30f);
-            float prominence = psd[k] / referenceLevel;
+                    float referenceLevel = std::max((leftMin + rightMin) / 2.0f, 1e-30f);
+                    float prominence = psd[k] / referenceLevel;
 
-            // Parabolic Interpolation (Log-magnitude for Hanning window)
-            float alpha = std::log(std::max(psd[k - 1], 1e-30f));
-            float beta = std::log(std::max(psd[k], 1e-30f));
-            float gamma = std::log(std::max(psd[k + 1], 1e-30f));
+                    // Parabolic Interpolation (Log-magnitude for Hanning window)
+                    float alpha = std::log(std::max(psd[k - 1], 1e-30f));
+                    float beta = std::log(std::max(psd[k], 1e-30f));
+                    float gamma = std::log(std::max(psd[k + 1], 1e-30f));
 
-            float denom = alpha - 2.0f * beta + gamma;
-            float interpFreq = frequencies[k];
-            float interpMag = psd[k];
+                    float denom = alpha - 2.0f * beta + gamma;
+                    float interpFreq = frequencies[k];
+                    float interpMag = psd[k];
 
-            if (std::abs(denom) > 1e-12f) {
-                float p = 0.5f * (alpha - gamma) / denom;
-                if (p >= -1.0f && p <= 1.0f) {
-                    float deltaF = frequencies[k + 1] - frequencies[k];
-                    interpFreq = frequencies[k] + p * deltaF;
-                    float interpLogMag = beta - 0.25f * (alpha - gamma) * p;
-                    interpMag = std::exp(interpLogMag);
+                    if (std::abs(denom) > 1e-12f) {
+                        float p = 0.5f * (alpha - gamma) / denom;
+                        if (p >= -1.0f && p <= 1.0f) {
+                            float deltaF = frequencies[k + 1] - frequencies[k];
+                            interpFreq = frequencies[k] + p * deltaF;
+                            float interpLogMag = beta - 0.25f * (alpha - gamma) * p;
+                            interpMag = std::exp(interpLogMag);
+                        }
+                    }
+
+                    resultPeaks.push_back({interpFreq, interpMag, prominence});
                 }
             }
+        }
+        return resultPeaks;
+    };
 
-            peaks.push_back({interpFreq, interpMag, prominence});
-        }
-        }
+    std::vector<Peak> peaks = extractPeaks(1.0f);
+    if (peaks.empty()) {
+        peaks = extractPeaks(0.1f);
+    }
+    if (peaks.empty()) {
+        peaks = extractPeaks(0.0f);
     }
 
     std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) {

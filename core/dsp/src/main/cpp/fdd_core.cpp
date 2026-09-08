@@ -19,16 +19,8 @@ FddResult calculateFdd(
     float overlapPct
 ) {
     int n = samples.size();
-    int freqBins = fftSize / 2 + 1;
     FddResult result;
-    result.frequencies.resize(freqBins);
-    result.firstSingularValues.resize(freqBins, 0.0f);
-
-    if (n < fftSize) return result;
-
-    for (int i = 0; i < freqBins; ++i) {
-        result.frequencies[i] = i * sampleRateHz / fftSize;
-    }
+    if (n < 256) return result;
 
     // Detrend and filter
     auto gravResult = removeGravityAndDetrend(samples);
@@ -41,19 +33,20 @@ FddResult calculateFdd(
     }
     if (usableN < 256) return result; // Minimum required
 
+    // Adjust fftSize to highest power of 2 <= usableN (minimum 256)
     if (usableN < fftSize) {
-        // Adjust fftSize to highest power of 2 <= usableN
         int newFftSize = 256;
         while (newFftSize * 2 <= usableN) {
             newFftSize *= 2;
         }
         fftSize = newFftSize;
-        freqBins = fftSize / 2 + 1;
-        result.frequencies.resize(freqBins);
-        result.firstSingularValues.resize(freqBins, 0.0f);
-        for (int i = 0; i < freqBins; ++i) {
-            result.frequencies[i] = i * sampleRateHz / fftSize;
-        }
+    }
+
+    int freqBins = fftSize / 2 + 1;
+    result.frequencies.resize(freqBins);
+    result.firstSingularValues.resize(freqBins, 0.0f);
+    for (int i = 0; i < freqBins; ++i) {
+        result.frequencies[i] = i * sampleRateHz / fftSize;
     }
 
     std::vector<float> rawX(usableN), rawY(usableN), rawZ(usableN);
