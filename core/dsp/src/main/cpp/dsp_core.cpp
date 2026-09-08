@@ -130,16 +130,19 @@ float streamingRmsLevel(const AccelerationSample& sample, float prevRms, float s
 std::vector<float> applyIir(
     const std::vector<float>& input,
     float b0, float b1, float b2,
-    float a1, float a2
+    float a1, float a2,
+    float zi1 = 0.0f, float zi2 = 0.0f
 ) {
     std::vector<float> output(input.size());
-    float w1 = 0.0f, w2 = 0.0f;
+    float z1 = zi1;
+    float z2 = zi2;
 
     for (size_t i = 0; i < input.size(); ++i) {
-        float w0 = input[i] - a1 * w1 - a2 * w2;
-        output[i] = b0 * w0 + b1 * w1 + b2 * w2;
-        w2 = w1;
-        w1 = w0;
+        float x = input[i];
+        float y = b0 * x + z1;
+        z1 = b1 * x - a1 * y + z2;
+        z2 = b2 * x - a2 * y;
+        output[i] = y;
     }
     return output;
 }
@@ -149,7 +152,7 @@ std::vector<float> highPassFilterFiltfilt(
     float sampleRateHz,
     float cutoffHz
 ) {
-    if (signal.size() < 3) return signal;
+    if (signal.size() < 9) return signal;
 
     double wc = std::tan(std::numbers::pi * cutoffHz / sampleRateHz);
     double wc2 = wc * wc;
@@ -162,12 +165,42 @@ std::vector<float> highPassFilterFiltfilt(
     float a1 = static_cast<float>(2.0 * (wc2 - 1.0) / k);
     float a2 = static_cast<float>((1.0 - sqrt2wc + wc2) / k);
 
-    std::vector<float> forward = applyIir(signal, b0, b1, b2, a1, a2);
+    // Initial conditions (lfilter_zi) for step response
+    double sumA = 1.0 + a1 + a2;
+    float zi1 = static_cast<float>((b1 + b2 - (a1 + a2) * b0) / sumA);
+    float zi2 = static_cast<float>(b2 - a2 * b0 - a2 * zi1);
+
+    // Reflection padding (odd extension)
+    int padlen = std::min(9, static_cast<int>(signal.size()) - 1);
+    std::vector<float> padded(signal.size() + 2 * padlen);
+    float x0 = signal[0];
+    for (int i = 0; i < padlen; ++i) {
+        padded[i] = 2.0f * x0 - signal[padlen - i];
+    }
+    std::copy(signal.begin(), signal.end(), padded.begin() + padlen);
+    float xN = signal.back();
+    for (int i = 0; i < padlen; ++i) {
+        padded[padlen + signal.size() + i] = 2.0f * xN - signal[signal.size() - 2 - i];
+    }
+
+    // Forward pass
+    float z1_fwd = zi1 * padded[0];
+    float z2_fwd = zi2 * padded[0];
+    std::vector<float> forward = applyIir(padded, b0, b1, b2, a1, a2, z1_fwd, z2_fwd);
+
+    // Reverse
     std::reverse(forward.begin(), forward.end());
-    std::vector<float> backward = applyIir(forward, b0, b1, b2, a1, a2);
+
+    // Backward pass
+    float z1_bwd = zi1 * forward[0];
+    float z2_bwd = zi2 * forward[0];
+    std::vector<float> backward = applyIir(forward, b0, b1, b2, a1, a2, z1_bwd, z2_bwd);
+
+    // Reverse back
     std::reverse(backward.begin(), backward.end());
 
-    return backward;
+    // Slice center
+    return std::vector<float>(backward.begin() + padlen, backward.begin() + padlen + signal.size());
 }
 
 void detrendInPlace(std::vector<double>& data) {
@@ -212,10 +245,11 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
             if (localBins.empty()) continue;
             std::sort(localBins.begin(), localBins.end());
             float localMedian = localBins[localBins.size() / 2];
-            if (localMedian <= 0.0f) continue;
+            if (std::isnan(psd[k]) || std::isinf(psd[k]) || psd[k] <= 0.0f) continue;
             
+            float safeNoise = std::max(localMedian, 1e-30f);
             float peakDb = 10.0f * std::log10(psd[k]);
-            float noiseDb = 10.0f * std::log10(localMedian);
+            float noiseDb = 10.0f * std::log10(safeNoise);
             float snrDb = peakDb - noiseDb;
             
             if (snrDb > 1.0f) {

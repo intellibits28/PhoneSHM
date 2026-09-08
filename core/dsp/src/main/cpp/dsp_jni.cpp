@@ -9,13 +9,16 @@ using namespace phoneshm::dsp;
 
 extern "C" {
 
-JNIEXPORT jobject JNICALL
-Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFdd(
+JNIEXPORT jfloatArray JNICALL
+Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFddRaw(
     JNIEnv* env, jobject /* this */,
     jlongArray timestamps, jfloatArray xArray, jfloatArray yArray, jfloatArray zArray,
     jfloat sampleRateHz, jint fftSize, jfloat overlapPct
 ) {
     jsize n = env->GetArrayLength(timestamps);
+    if (n == 0) {
+        return env->NewFloatArray(0);
+    }
     
     jlong* ts = env->GetLongArrayElements(timestamps, nullptr);
     jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
@@ -34,39 +37,39 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFdd(
 
     FddResult result = calculateFdd(samples, sampleRateHz, fftSize, overlapPct);
 
-    jclass resultClass = env->FindClass("com/ronin/phoneshm/core/dsp/NativeFddResult");
-    jmethodID ctor = env->GetMethodID(resultClass, "<init>", "([F[F[F[F[F[F)V");
-
     jsize freqLen = result.frequencies.size();
-    jfloatArray freqs = env->NewFloatArray(freqLen);
-    jfloatArray sv = env->NewFloatArray(freqLen);
-
-    if (freqLen > 0) {
-        env->SetFloatArrayRegion(freqs, 0, freqLen, result.frequencies.data());
-        env->SetFloatArrayRegion(sv, 0, freqLen, result.firstSingularValues.data());
-    }
-    
     jsize peaksLen = result.modes.size();
-    jfloatArray pFreqs = env->NewFloatArray(peaksLen);
-    jfloatArray pMags = env->NewFloatArray(peaksLen);
-    jfloatArray pProms = env->NewFloatArray(peaksLen);
-    jfloatArray pDamps = env->NewFloatArray(peaksLen);
-    
-    if (peaksLen > 0) {
-        std::vector<float> pF(peaksLen), pM(peaksLen), pP(peaksLen), pD(peaksLen);
-        for(size_t i = 0; i < peaksLen; i++) {
-            pF[i] = result.modes[i].frequencyHz;
-            pM[i] = result.modes[i].powerMagnitude;
-            pP[i] = result.modes[i].prominence;
-            pD[i] = result.modes[i].dampingRatio;
+
+    // Packing layout:
+    // [0]: freqLen
+    // [1]: peaksLen
+    // [2 .. 2+freqLen-1]: frequencies
+    // [2+freqLen .. 2+2*freqLen-1]: firstSingularValues
+    // [2+2*freqLen .. end]: 4 floats per peak (freq, powerMagnitude, prominence, dampingRatio)
+    jsize totalLen = 2 + 2 * freqLen + 4 * peaksLen;
+    jfloatArray resultArray = env->NewFloatArray(totalLen);
+    if (totalLen > 0) {
+        std::vector<jfloat> buffer(totalLen);
+        buffer[0] = static_cast<jfloat>(freqLen);
+        buffer[1] = static_cast<jfloat>(peaksLen);
+
+        if (freqLen > 0) {
+            std::copy(result.frequencies.begin(), result.frequencies.end(), buffer.begin() + 2);
+            std::copy(result.firstSingularValues.begin(), result.firstSingularValues.end(), buffer.begin() + 2 + freqLen);
         }
-        env->SetFloatArrayRegion(pFreqs, 0, peaksLen, pF.data());
-        env->SetFloatArrayRegion(pMags, 0, peaksLen, pM.data());
-        env->SetFloatArrayRegion(pProms, 0, peaksLen, pP.data());
-        env->SetFloatArrayRegion(pDamps, 0, peaksLen, pD.data());
+
+        size_t pOffset = 2 + 2 * freqLen;
+        for (size_t i = 0; i < peaksLen; ++i) {
+            buffer[pOffset + i * 4 + 0] = result.modes[i].frequencyHz;
+            buffer[pOffset + i * 4 + 1] = result.modes[i].powerMagnitude;
+            buffer[pOffset + i * 4 + 2] = result.modes[i].prominence;
+            buffer[pOffset + i * 4 + 3] = result.modes[i].dampingRatio;
+        }
+
+        env->SetFloatArrayRegion(resultArray, 0, totalLen, buffer.data());
     }
 
-    return env->NewObject(resultClass, ctor, freqs, sv, pFreqs, pMags, pProms, pDamps);
+    return resultArray;
 }
 
 JNIEXPORT jfloatArray JNICALL

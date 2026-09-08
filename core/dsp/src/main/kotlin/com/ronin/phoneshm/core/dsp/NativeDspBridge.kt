@@ -27,7 +27,7 @@ object NativeDspBridge {
         }
     }
 
-    external fun nativeCalculateFdd(
+    external fun nativeCalculateFddRaw(
         timestamps: LongArray,
         x: FloatArray,
         y: FloatArray,
@@ -35,7 +35,65 @@ object NativeDspBridge {
         sampleRateHz: Float,
         fftSize: Int,
         overlapPct: Float
-    ): NativeFddResult
+    ): FloatArray
+
+    fun nativeCalculateFdd(
+        timestamps: LongArray,
+        x: FloatArray,
+        y: FloatArray,
+        z: FloatArray,
+        sampleRateHz: Float,
+        fftSize: Int,
+        overlapPct: Float
+    ): NativeFddResult {
+        val raw = nativeCalculateFddRaw(timestamps, x, y, z, sampleRateHz, fftSize, overlapPct)
+        if (raw.size < 2) {
+            return NativeFddResult(
+                frequencies = FloatArray(0),
+                firstSingularValues = FloatArray(0),
+                peakFrequencies = FloatArray(0),
+                peakMagnitudes = FloatArray(0),
+                peakProminences = FloatArray(0),
+                peakDampingRatios = FloatArray(0)
+            )
+        }
+
+        val freqLen = raw[0].toInt()
+        val peaksLen = raw[1].toInt()
+
+        val frequencies = if (freqLen > 0 && 2 + freqLen <= raw.size) {
+            raw.copyOfRange(2, 2 + freqLen)
+        } else FloatArray(0)
+
+        val sv = if (freqLen > 0 && 2 + 2 * freqLen <= raw.size) {
+            raw.copyOfRange(2 + freqLen, 2 + 2 * freqLen)
+        } else FloatArray(0)
+
+        val pFreqs = FloatArray(peaksLen)
+        val pMags = FloatArray(peaksLen)
+        val pProms = FloatArray(peaksLen)
+        val pDamps = FloatArray(peaksLen)
+
+        var pOffset = 2 + 2 * freqLen
+        for (i in 0 until peaksLen) {
+            if (pOffset + 3 < raw.size) {
+                pFreqs[i] = raw[pOffset]
+                pMags[i] = raw[pOffset + 1]
+                pProms[i] = raw[pOffset + 2]
+                pDamps[i] = raw[pOffset + 3]
+            }
+            pOffset += 4
+        }
+
+        return NativeFddResult(
+            frequencies = frequencies,
+            firstSingularValues = sv,
+            peakFrequencies = pFreqs,
+            peakMagnitudes = pMags,
+            peakProminences = pProms,
+            peakDampingRatios = pDamps
+        )
+    }
 
     external fun nativeWelchPsdSingleAxis(
         signal: FloatArray,

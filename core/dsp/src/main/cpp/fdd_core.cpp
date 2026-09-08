@@ -9,6 +9,9 @@
 namespace phoneshm {
 namespace dsp {
 
+using Matrix3cdSafe = Eigen::Matrix<std::complex<double>, 3, 3, Eigen::DontAlign>;
+using Vector3cdSafe = Eigen::Matrix<std::complex<double>, 3, 1, Eigen::DontAlign>;
+
 FddResult calculateFdd(
     const std::vector<AccelerationSample>& samples,
     float sampleRateHz,
@@ -32,7 +35,12 @@ FddResult calculateFdd(
     auto settlingResult = detectSettlingWindow(gravResult, sampleRateHz);
     int settlingN = settlingResult.settlingDurationSamples;
     int usableN = n - settlingN;
+    if (usableN < 256 && n >= 256) {
+        settlingN = std::max(0, n - 256);
+        usableN = n - settlingN;
+    }
     if (usableN < 256) return result; // Minimum required
+
     if (usableN < fftSize) {
         // Adjust fftSize to highest power of 2 <= usableN
         int newFftSize = 256;
@@ -69,8 +77,8 @@ FddResult calculateFdd(
         windowPowerSum += window[i] * window[i];
     }
 
-    // CSD matrices for each frequency bin: 3x3 complex matrix
-    std::vector<Eigen::Matrix3cd> G(freqBins, Eigen::Matrix3cd::Zero());
+    // CSD matrices for each frequency bin: 3x3 complex matrix (safe alignment)
+    std::vector<Matrix3cdSafe> G(freqBins, Matrix3cdSafe::Zero());
     int segmentCount = 0;
     int offset = 0;
 
@@ -120,7 +128,7 @@ FddResult calculateFdd(
 
     float normFactor = 1.0f / (sampleRateHz * windowPowerSum * segmentCount);
 
-    std::vector<Eigen::Vector3cd> modeShapes(freqBins);
+    std::vector<Vector3cdSafe> modeShapes(freqBins);
 
     // SVD on each G(k)
     for (int k = 0; k < freqBins; ++k) {
@@ -130,9 +138,13 @@ FddResult calculateFdd(
             G[k] *= 2.0; // One-sided spectrum compensation
         }
 
-        Eigen::JacobiSVD<Eigen::Matrix3cd> svd(G[k], Eigen::ComputeFullU);
+        Eigen::JacobiSVD<Matrix3cdSafe> svd(G[k], Eigen::ComputeFullU);
         auto singularValues = svd.singularValues(); // sorted in decreasing order
-        result.firstSingularValues[k] = static_cast<float>(singularValues(0));
+        float sv1 = static_cast<float>(singularValues(0));
+        if (std::isnan(sv1) || std::isinf(sv1) || sv1 < 0.0f) {
+            sv1 = 0.0f;
+        }
+        result.firstSingularValues[k] = sv1;
         modeShapes[k] = svd.matrixU().col(0);
     }
 
@@ -157,9 +169,9 @@ FddResult calculateFdd(
         }
         
         if (k > 0) {
-            Eigen::Vector3cd refShape = modeShapes[k];
+            Vector3cdSafe refShape = modeShapes[k];
             
-            auto computeMAC = [](const Eigen::Vector3cd& u1, const Eigen::Vector3cd& u2) {
+            auto computeMAC = [](const Vector3cdSafe& u1, const Vector3cdSafe& u2) {
                 return static_cast<float>(std::norm(u1.dot(u2)));
             };
 
