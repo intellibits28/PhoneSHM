@@ -243,17 +243,7 @@ class AndroidVibrationSensorEngine(
         }
         
         // Also copy the meta file to public downloads if applicable
-        try {
-            val downloadsDir = File(
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
-                "PhoneSHM"
-            )
-            if (downloadsDir.exists() || downloadsDir.mkdirs()) {
-                metaFile.copyTo(File(downloadsDir, metaFile.name), overwrite = true)
-            }
-        } catch (e: Exception) {
-            // Ignore error
-        }
+        copyToPublicDownloads(context, metaFile)
 
         metadata
         } finally {
@@ -281,12 +271,14 @@ class AndroidVibrationSensorEngine(
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     val resolver = context.contentResolver
+                    val mimeType = when {
+                        sourceFile.name.endsWith(".gz") -> "application/gzip"
+                        sourceFile.name.endsWith(".json") -> "application/json"
+                        else -> "application/octet-stream"
+                    }
                     val contentValues = android.content.ContentValues().apply {
                         put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
-                        put(
-                            android.provider.MediaStore.MediaColumns.MIME_TYPE,
-                            if (sourceFile.name.endsWith(".gz")) "application/gzip" else "application/octet-stream"
-                        )
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
                         put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/PhoneSHM")
                     }
                     val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
@@ -299,7 +291,7 @@ class AndroidVibrationSensorEngine(
                     }
                 }
             } catch (ex: Exception) {
-                ex.printStackTrace()
+                android.util.Log.w("SensorEngine", "Could not mirror file to public downloads: ${sourceFile.name}", ex)
             }
         }
     }

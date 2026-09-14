@@ -22,8 +22,8 @@ import com.ronin.phoneshm.core.database.entity.MeasurementProfileEntity
         BaselineProfileEntity::class,
         BaselineHistoryEntity::class
     ],
-    version = 6,
-    exportSchema = false
+    version = 7,
+    exportSchema = true
 )
 abstract class PhoneShmDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
@@ -33,13 +33,21 @@ abstract class PhoneShmDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: PhoneShmDatabase? = null
 
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_measurement_profiles_buildingId ON measurement_profiles(buildingId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_baseline_history_buildingHash_timestampMs ON baseline_history(buildingHash, timestampMs)")
+            }
+        }
+
         fun getDatabase(context: Context): PhoneShmDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     PhoneShmDatabase::class.java,
                     "phone_shm_database"
-                ).fallbackToDestructiveMigration()
+                ).addMigrations(MIGRATION_6_7)
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

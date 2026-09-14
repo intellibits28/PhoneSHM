@@ -6,17 +6,16 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ronin.phoneshm.core.database.PhoneShmDatabase
 import com.ronin.phoneshm.core.database.dao.BaselineDao
 import com.ronin.phoneshm.core.database.dao.ProfileDao
-import com.ronin.phoneshm.core.database.entity.BaselineStatEntity
 import com.ronin.phoneshm.core.database.model.BuildingProfile
 import com.ronin.phoneshm.core.database.repository.ProfileRepositoryImpl
 import com.ronin.phoneshm.core.baseline.DefaultBaselineManagerEngine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -26,6 +25,7 @@ class BaselineIntegrationTest {
     private lateinit var baselineDao: BaselineDao
     private lateinit var profileRepo: ProfileRepositoryImpl
     private lateinit var baselineEngine: DefaultBaselineManagerEngine
+    private lateinit var tempDir: File
 
     @Before
     fun setup() {
@@ -33,18 +33,20 @@ class BaselineIntegrationTest {
         db = androidx.room.Room.inMemoryDatabaseBuilder(context, PhoneShmDatabase::class.java).build()
         profileDao = db.profileDao()
         baselineDao = db.baselineDao()
-        profileRepo = ProfileRepositoryImpl(profileDao)
-        baselineEngine = DefaultBaselineManagerEngine(context, baselineDao)
+        profileRepo = ProfileRepositoryImpl(profileDao, baselineDao, context)
+        tempDir = File(context.cacheDir, "baseline_test_${UUID.randomUUID()}").apply { mkdirs() }
+        baselineEngine = DefaultBaselineManagerEngine(baselineDao, tempDir)
     }
 
     @After
     fun teardown() {
         db.close()
+        tempDir.deleteRecursively()
     }
 
     @Test
     fun verifyMultiBuildingBaselines() = runBlocking {
-        // Scenario 1: Onboard building A, record, force-close
+        // Scenario 1: Onboard building A, record
         val hashA = UUID.randomUUID().toString()
         val buildingA = BuildingProfile(
             buildingHash = hashA,
@@ -56,11 +58,16 @@ class BaselineIntegrationTest {
         profileRepo.saveBuildingProfile(buildingA)
 
         // Record a mock session for Building A
-        baselineEngine.incorporateNewObservation(hashA, "profileA", 3.0f, 10.0f, 0.8f, 2.0f)
+        baselineEngine.updateBaselineWithSession(
+            buildingHash = hashA,
+            currentF0Hz = 10.0,
+            qualityScorePct = 80,
+            measurementProfileId = "profileA"
+        )
         
-        var statA = baselineDao.getBaselineForBuilding(hashA)
+        var statA = baselineEngine.getOrCreateBaseline(hashA, "profileA")
         assertNotNull(statA)
-        assertEquals(1, statA?.n)
+        assertEquals(1, statA?.measurementCount)
 
         // Scenario 2: Create building B, ensure separate baselines
         val hashB = UUID.randomUUID().toString()
@@ -74,25 +81,34 @@ class BaselineIntegrationTest {
         profileRepo.saveBuildingProfile(buildingB)
 
         // Record a mock session for Building B
-        baselineEngine.incorporateNewObservation(hashB, "profileB", 5.0f, 15.0f, 0.9f, 3.0f)
+        baselineEngine.updateBaselineWithSession(
+            buildingHash = hashB,
+            currentF0Hz = 15.0,
+            qualityScorePct = 80,
+            measurementProfileId = "profileB"
+        )
 
-        var statB = baselineDao.getBaselineForBuilding(hashB)
+        var statB = baselineEngine.getOrCreateBaseline(hashB, "profileB")
         assertNotNull(statB)
-        assertEquals(1, statB?.n)
+        assertEquals(1, statB?.measurementCount)
 
         // Confirm A and B are distinct
-        assertNotEquals(statA?.buildingId, statB?.buildingId)
-        assertNotEquals(statA?.meanF0, statB?.meanF0)
+        assertNotEquals(statA?.meanF0Hz, statB?.meanF0Hz)
 
         // Scenario 3: Switch back to A, record again, confirm it resumes A's baseline
-        baselineEngine.incorporateNewObservation(hashA, "profileA", 3.2f, 10.5f, 0.85f, 2.1f)
+        baselineEngine.updateBaselineWithSession(
+            buildingHash = hashA,
+            currentF0Hz = 10.5,
+            qualityScorePct = 80,
+            measurementProfileId = "profileA"
+        )
         
-        statA = baselineDao.getBaselineForBuilding(hashA)
+        statA = baselineEngine.getOrCreateBaseline(hashA, "profileA")
         assertNotNull(statA)
-        assertEquals(2, statA?.n) // n incremented!
+        assertEquals(2, statA?.measurementCount) // count incremented!
         
-        // B should still have n=1
-        statB = baselineDao.getBaselineForBuilding(hashB)
-        assertEquals(1, statB?.n)
+        // B should still have count=1
+        statB = baselineEngine.getOrCreateBaseline(hashB, "profileB")
+        assertEquals(1, statB?.measurementCount)
     }
 }

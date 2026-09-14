@@ -3,6 +3,8 @@ package com.ronin.phoneshm.core.database.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+import androidx.room.Index
+
 enum class SurfaceType {
     CONCRETE, CERAMIC_TILE, TIMBER, CARPET, UNKNOWN
 }
@@ -18,7 +20,10 @@ enum class PhonePlacement {
 /**
  * MeasurementProfileEntity persists session placement setup parameters.
  */
-@Entity(tableName = "measurement_profiles")
+@Entity(
+    tableName = "measurement_profiles",
+    indices = [Index(value = ["buildingId"])]
+)
 data class MeasurementProfileEntity(
     @PrimaryKey
     val id: String,

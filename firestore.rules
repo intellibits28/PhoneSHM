@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /sessions/{sessionId} {
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.firebaseAuthUid == request.auth.uid;
       allow read, update, delete: if false;
       
       match /chunks/{chunkId} {
@@ -12,7 +12,7 @@ service cloud.firestore {
     }
     
     match /deletionRequests/{requestId} {
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.firebaseAuthUid == request.auth.uid;
       allow read, update, delete: if false;
     }
   }

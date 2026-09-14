@@ -13,7 +13,10 @@ import androidx.room.Index
         childColumns = ["buildingHash"],
         onDelete = ForeignKey.CASCADE
     )],
-    indices = [Index(value = ["buildingHash"])]
+    indices = [
+        Index(value = ["buildingHash"]),
+        Index(value = ["buildingHash", "timestampMs"])
+    ]
 )
 data class BaselineHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

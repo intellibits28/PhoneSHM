@@ -2,7 +2,9 @@ package com.ronin.phoneshm
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -139,17 +141,31 @@ fun PhoneShmAppHost(
     initialMeasurementId: String = "",
     onSessionUpdated: (String, String) -> Unit = { _, _ -> }
 ) {
-    var currentScreen by remember { mutableStateOf(if (initialBuildingId.isNotEmpty()) "LOADING" else "ONBOARDING") }
-    var activeBuildingId by remember { mutableStateOf(initialBuildingId) }
-    var activeMeasurementId by remember { mutableStateOf(initialMeasurementId) }
+    var currentScreen by rememberSaveable { mutableStateOf(if (initialBuildingId.isNotEmpty()) "LOADING" else initialScreen) }
+    var activeBuildingId by rememberSaveable { mutableStateOf(initialBuildingId) }
+    var activeMeasurementId by rememberSaveable { mutableStateOf(initialMeasurementId) }
 
     val onboardingViewModel: OnboardingViewModel = viewModel(factory = onboardingFactory)
     val measurementViewModel: com.ronin.phoneshm.feature.measurement.MeasurementViewModel = viewModel(factory = measurementFactory)
     val analysisViewModel: AnalysisViewModel = viewModel()
     val reportViewModel: ReportViewModel = viewModel()
 
-    var showSwitcherDialog by remember { mutableStateOf(false) }
-    var showLocationDialog by remember { mutableStateOf(false) }
+    var showSwitcherDialog by rememberSaveable { mutableStateOf(false) }
+    var showLocationDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Intercept system back gestures to provide consistent in-app navigation
+    BackHandler(enabled = currentScreen == "REPORT") {
+        currentScreen = "ANALYSIS"
+    }
+    BackHandler(enabled = currentScreen == "ANALYSIS") {
+        currentScreen = "MEASUREMENT"
+    }
+    BackHandler(enabled = currentScreen == "HISTORY") {
+        currentScreen = "MEASUREMENT"
+    }
+    BackHandler(enabled = currentScreen == "ONBOARDING" && activeBuildingId.isNotEmpty()) {
+        currentScreen = "MEASUREMENT"
+    }
 
     androidx.compose.runtime.LaunchedEffect(activeBuildingId) {
         if (activeBuildingId.isNotEmpty()) {

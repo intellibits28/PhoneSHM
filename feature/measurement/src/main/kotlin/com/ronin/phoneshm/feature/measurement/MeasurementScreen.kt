@@ -76,12 +76,14 @@ fun MeasurementScreen(
     ) {
         // Status indicator
         val statusText = when {
+            uiState.errorMessage != null -> uiState.errorMessage!!
             uiState.isCalibrating -> uiState.calibrationStatus
             uiState.isRecording -> "RECORDING LIVE DATA"
             uiState.recordingFinished -> "RECORDING COMPLETED"
             else -> "IDLE (READY TO RECORD)"
         }
         val statusColor = when {
+            uiState.errorMessage != null -> MaterialTheme.colorScheme.error
             uiState.isCalibrating -> Color(0xFFF57F17) // Warning/Orange
             uiState.isRecording -> Color(0xFFE53935) // Vibrant Red
             uiState.recordingFinished -> Color(0xFF43A047) // Vibrant Green

@@ -339,15 +339,17 @@ std::vector<float> welchPsdSingleAxis(
 
     auto& backend = fft::getDefaultBackend();
 
+    std::vector<double> segment(fftSize);
+    std::vector<double> real(fftSize);
+    std::vector<double> imag(fftSize);
+
     while (offset + fftSize <= n) {
-        std::vector<double> segment(fftSize);
         for (int i = 0; i < fftSize; ++i) {
             segment[i] = signal[offset + i];
         }
         detrendInPlace(segment);
 
-        std::vector<double> real(fftSize);
-        std::vector<double> imag(fftSize, 0.0);
+        std::fill(imag.begin(), imag.end(), 0.0);
         for (int i = 0; i < fftSize; ++i) {
             real[i] = segment[i] * window[i];
         }

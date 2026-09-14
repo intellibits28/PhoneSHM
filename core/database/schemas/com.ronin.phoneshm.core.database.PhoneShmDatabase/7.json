@@ -1,0 +1,298 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "267b3e77b7ca3e29ffdf1226d1b355ae",
+    "entities": [
+      {
+        "tableName": "building_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingHash` TEXT NOT NULL, `displayName` TEXT NOT NULL, `buildingType` TEXT NOT NULL, `floors` INTEGER, `constructionYear` INTEGER, `material` TEXT, `latitude` REAL, `longitude` REAL, `createdAt` INTEGER NOT NULL, `lastUsedAt` INTEGER NOT NULL, PRIMARY KEY(`buildingHash`))",
+        "fields": [
+          {
+            "fieldPath": "buildingHash",
+            "columnName": "buildingHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingType",
+            "columnName": "buildingType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floors",
+            "columnName": "floors",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "constructionYear",
+            "columnName": "constructionYear",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "material",
+            "columnName": "material",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUsedAt",
+            "columnName": "lastUsedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingHash"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "measurement_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `buildingId` TEXT NOT NULL, `floorLevel` INTEGER, `surfaceType` TEXT NOT NULL, `locationType` TEXT NOT NULL, `placement` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingId",
+            "columnName": "buildingId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorLevel",
+            "columnName": "floorLevel",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "surfaceType",
+            "columnName": "surfaceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationType",
+            "columnName": "locationType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "placement",
+            "columnName": "placement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_measurement_profiles_buildingId",
+            "unique": false,
+            "columnNames": [
+              "buildingId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_measurement_profiles_buildingId` ON `${TABLE_NAME}` (`buildingId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "baseline_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`buildingHash` TEXT NOT NULL, `meanF0Hz` REAL NOT NULL, `stdF0Hz` REAL NOT NULL, `m2` REAL NOT NULL, `measurementCount` INTEGER NOT NULL, `consecutiveAnomalyCount` INTEGER NOT NULL, `lastUpdatedAt` INTEGER NOT NULL, PRIMARY KEY(`buildingHash`))",
+        "fields": [
+          {
+            "fieldPath": "buildingHash",
+            "columnName": "buildingHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meanF0Hz",
+            "columnName": "meanF0Hz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stdF0Hz",
+            "columnName": "stdF0Hz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "m2",
+            "columnName": "m2",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "measurementCount",
+            "columnName": "measurementCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consecutiveAnomalyCount",
+            "columnName": "consecutiveAnomalyCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdatedAt",
+            "columnName": "lastUpdatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "buildingHash"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "baseline_history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `buildingHash` TEXT NOT NULL, `timestampMs` INTEGER NOT NULL, `f0Hz` REAL NOT NULL, `qualityScorePct` INTEGER NOT NULL, `timeOfDay` TEXT, `temperatureCelsius` REAL, FOREIGN KEY(`buildingHash`) REFERENCES `baseline_profiles`(`buildingHash`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingHash",
+            "columnName": "buildingHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestampMs",
+            "columnName": "timestampMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "f0Hz",
+            "columnName": "f0Hz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qualityScorePct",
+            "columnName": "qualityScorePct",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeOfDay",
+            "columnName": "timeOfDay",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "temperatureCelsius",
+            "columnName": "temperatureCelsius",
+            "affinity": "REAL",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_baseline_history_buildingHash",
+            "unique": false,
+            "columnNames": [
+              "buildingHash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_baseline_history_buildingHash` ON `${TABLE_NAME}` (`buildingHash`)"
+          },
+          {
+            "name": "index_baseline_history_buildingHash_timestampMs",
+            "unique": false,
+            "columnNames": [
+              "buildingHash",
+              "timestampMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_baseline_history_buildingHash_timestampMs` ON `${TABLE_NAME}` (`buildingHash`, `timestampMs`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "baseline_profiles",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "buildingHash"
+            ],
+            "referencedColumns": [
+              "buildingHash"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '267b3e77b7ca3e29ffdf1226d1b355ae')"
+    ]
+  }
+}

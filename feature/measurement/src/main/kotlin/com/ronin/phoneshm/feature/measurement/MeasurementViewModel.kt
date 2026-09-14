@@ -26,7 +26,8 @@ data class MeasurementUiState(
     val currentZ: Float = 0f,
     val totalSamplesCollected: Int = 0,
     val recordingFinished: Boolean = false,
-    val hasPastSessions: Boolean = false
+    val hasPastSessions: Boolean = false,
+    val errorMessage: String? = null
 )
 
 /**
@@ -149,8 +150,11 @@ class MeasurementViewModel(
                 streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
                     isRecording = false,
-                    rawStorageFileUri = "Error: ${e.message}"
+                    recordingFinished = false,
+                    rawStorageFileUri = null,
+                    errorMessage = "Recording failed: ${e.message ?: "Unknown error"}"
                 )
+                android.util.Log.e("MeasurementVM", "Recording failed", e)
             }
             }
         }
