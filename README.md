@@ -204,7 +204,7 @@ Run the test suite across all modules:
 
 ## 📄 Data Formats & Interoperability
 
-PhoneSHM streams acceleration samples into 20-byte little-endian binary frames (`timestamp_ns`, `x`, `y`, `z`) accompanied by `.meta.json` sidecar files containing sensor noise floors, device capabilities, and environmental conditions.
+PhoneSHM streams acceleration data into a compact binary format starting with a 4-byte magic header (`"SHM1"`), followed by 20-byte little-endian frames (`timestamp_ns`, `x`, `y`, `z`). Each session is accompanied by an atomic `.meta.json` sidecar containing full provenance, sensor noise floor, environmental conditions, and an overall 4-byte CRC-32 checksum (`binaryChecksumCrc32`).
 
 Complete specification and parsing examples in Python are available in [docs/DATA_FORMATS.md](docs/DATA_FORMATS.md).
 
