@@ -1,5 +1,14 @@
 # PhoneSHM: Citizen-Scale Android Structural Health Monitoring (SHM) Platform
-## Master Implementation Plan & Production Blueprint (v1.2 Citizen-Scale Platform)
+## Master Implementation Plan & Production Blueprint (v1.2 Citizen-Scale Platform - ARCHIVED)
+
+> [!CAUTION]
+> **ARCHIVED / HISTORICAL DOCUMENTATION (v1.2)**
+> This document represents the initial implementation plan and historical milestone roadmap.
+> For the current architecture, technical specifications, and user guide aligned with the latest codebase (including C++ EFDD, RDT-SSI, Tri-Engine Consensus, Room v7, and Environmental Stratification), please refer to:
+> - [`docs/ARCHITECTURE.md`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/docs/ARCHITECTURE.md)
+> - [`docs/DSP_AND_MODAL_ANALYSIS.md`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/docs/DSP_AND_MODAL_ANALYSIS.md)
+> - [`docs/BASELINE_AND_PHYSICS.md`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/docs/BASELINE_AND_PHYSICS.md)
+> - [`README.md`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/README.md)
 
 > [!NOTE]
 > **Project Goal:** Build `PhoneSHM`, a sovereign, citizen-scale Android native structural monitoring platform (`/data/data/com.termux/files/home/play-ground/ronin_shm`). The app records building vibrations at 100Hz via native accelerometer with precision clock jitter and drift tracking (`sampleJitterStdMs`, `clockDriftPpm`), processes raw signals through a multi-stage DSP pipeline computing separate 3-axis + magnitude **Welch's Method PSD** ($1024$ FFT size / $10.24\text{s}$ physical window, $50\%$ overlap), enforces structural plausibility (`GLOBAL_MODE` vs `LOCAL_MODE` vs `SENSOR_ARTIFACT` in `core/physics`), tracks historical structural degradation against reference baselines (`core/baseline`), tracks adaptive peak persistence across windows, captures pre/post vibration acoustic context via a privacy-preserving circular RAM buffer (`-2s` to `+3s` feature extraction, zero raw audio storage), and scores measurement quality across 4 weighted factors.
