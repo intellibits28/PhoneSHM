@@ -11,7 +11,7 @@
 [![Room DB](https://img.shields.io/badge/Database-Room%20v7%20(Schema%20Exported)-009688.svg?style=flat)](https://developer.android.com/training/data-storage/room)
 [![Build Status](https://img.shields.io/badge/Tests-335%20Passed-brightgreen.svg?style=flat)](#testing--verification)
 
-[Architecture](docs/ARCHITECTURE.md) • [DSP & OMA Specification](docs/DSP_AND_MODAL_ANALYSIS.md) • [Baseline & Physics](docs/BASELINE_AND_PHYSICS.md) • [Data Formats](docs/DATA_FORMATS.md) • [Legacy Archive](docs/archive/phoneshm_implementation_plan_v1.2.md)
+[App User Guide](docs/APP_USER_GUIDE.md) • [Architecture](docs/ARCHITECTURE.md) • [DSP & OMA Specification](docs/DSP_AND_MODAL_ANALYSIS.md) • [Baseline & Physics](docs/BASELINE_AND_PHYSICS.md) • [Data Formats](docs/DATA_FORMATS.md) • [🇲🇲 မြန်မာဘာသာ](docs/my/README_MY.md)
 
 </div>
 
