@@ -119,7 +119,7 @@ class AnalysisViewModelQualityTest {
 
         val mockStorageEngine = mockk<RawSampleStorageEngine>()
         val ts = LongArray(105) { it * 10_000_000L }
-        val xyz = FloatArray(105) { 0f }
+        val xyz = FloatArray(105) { if (it % 2 == 0) 0.5f else -0.5f }
         coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
         coEvery { mockStorageEngine.finalizeSessionFile(any()) } returns Pair(1234L, 105)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
@@ -185,7 +185,7 @@ class AnalysisViewModelQualityTest {
 
         val mockStorageEngine = mockk<RawSampleStorageEngine>()
         val ts = LongArray(105) { it * 10_000_000L }
-        val xyz = FloatArray(105) { 0f }
+        val xyz = FloatArray(105) { if (it % 2 == 0) 0.5f else -0.5f }
         coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
         coEvery { mockStorageEngine.finalizeSessionFile(any()) } returns Pair(1234L, 105)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
