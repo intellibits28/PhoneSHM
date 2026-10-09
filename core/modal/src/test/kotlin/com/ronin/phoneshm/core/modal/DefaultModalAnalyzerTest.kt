@@ -22,7 +22,7 @@ class DefaultModalAnalyzerTest {
         magPeak: Peak? = null
     ): MultiAxisSpectrumResult {
         val freqs = floatArrayOf(0.0f, 1.0f, 2.0f, 3.0f, 8.17f, 12.0f, 25.0f)
-        val psd = floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f, 10.0f, 1.0f, 0.5f)
+        val psd = floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f, 10.0f, 1.0f, 10.0f)
 
         val xAxis = AxisPsdResult(freqs, psd, xPeak?.let { listOf(it) } ?: emptyList())
         val yAxis = AxisPsdResult(freqs, psd, yPeak?.let { listOf(it) } ?: emptyList())
@@ -35,13 +35,13 @@ class DefaultModalAnalyzerTest {
     @Test
     fun testDominantAxisAndFundamentalFrequencySelection() {
         val spec = createDummySpectrum(
-            xPeak = Peak(3.2f, 5.0f, 0.6f),
-            yPeak = Peak(8.17f, 15.2f, 0.9f), // Highest power magnitude across axes
-            zPeak = Peak(12.0f, 8.0f, 0.7f),
-            magPeak = Peak(8.17f, 14.0f, 0.85f)
+            xPeak = Peak(3.2f, 5.0f, 10.0f),
+            yPeak = Peak(8.17f, 15.2f, 50.0f), // Highest power magnitude across axes
+            zPeak = Peak(12.0f, 8.0f, 20.0f),
+            magPeak = Peak(8.17f, 14.0f, 40.0f)
         )
         val classification = PlausibilityClassificationResult(
-            classification = FrequencyClassification.GLOBAL_MODE,
+            classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
             confidence = 0.9,
             explanation = "Valid global fundamental mode"
         )
@@ -57,17 +57,17 @@ class DefaultModalAnalyzerTest {
 
     @Test
     fun testAdaptivePersistenceAcrossSlidingWindows() {
-        val mainSpec = createDummySpectrum(xPeak = Peak(8.17f, 10.0f, 0.8f))
+        val mainSpec = createDummySpectrum(xPeak = Peak(8.17f, 10.0f, 30.0f))
         
         // Window 1: exact peak at 8.17 Hz -> match
-        val win1 = createDummySpectrum(xPeak = Peak(8.17f, 9.5f, 0.8f))
+        val win1 = createDummySpectrum(xPeak = Peak(8.17f, 9.5f, 30.0f))
         // Window 2: peak at 8.25 Hz -> within adaptive tolerance (deltaF = 1.0 Hz in dummy -> tolerance = max(0.0817, 2.0) = 2.0 Hz) -> match
-        val win2 = createDummySpectrum(yPeak = Peak(8.25f, 9.0f, 0.75f))
+        val win2 = createDummySpectrum(yPeak = Peak(8.25f, 9.0f, 30.0f))
         // Window 3: peak far away at 25.0 Hz -> no match
-        val win3 = createDummySpectrum(zPeak = Peak(25.0f, 5.0f, 0.5f))
+        val win3 = createDummySpectrum(zPeak = Peak(25.0f, 5.0f, 10.0f))
 
         val classification = PlausibilityClassificationResult(
-            classification = FrequencyClassification.GLOBAL_MODE,
+            classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
             confidence = 0.9,
             explanation = "Valid"
         )
@@ -97,7 +97,7 @@ class DefaultModalAnalyzerTest {
 
     @Test
     fun testLambdaReceivesExactF0() {
-        val spec = createDummySpectrum(xPeak = Peak(3.2f, 5.0f, 0.6f))
+        val spec = createDummySpectrum(xPeak = Peak(3.2f, 5.0f, 10.0f))
         var capturedF0 = -1.0
         
         val result = analyzer.analyzeMultiAxisSpectrum(spec, emptyList(), "UNKNOWN") { f0Hz, _ ->
@@ -112,14 +112,14 @@ class DefaultModalAnalyzerTest {
 
     @Test
     fun testAdaptivePersistenceLambdaInput() {
-        val mainSpec = createDummySpectrum(xPeak = Peak(8.17f, 10.0f, 0.8f))
+        val mainSpec = createDummySpectrum(xPeak = Peak(8.17f, 10.0f, 30.0f))
         
         // Window 1: exact peak at 8.17 Hz -> match
-        val win1 = createDummySpectrum(xPeak = Peak(8.17f, 9.5f, 0.8f))
+        val win1 = createDummySpectrum(xPeak = Peak(8.17f, 9.5f, 30.0f))
         // Window 2: peak at 8.25 Hz -> within adaptive tolerance -> match
-        val win2 = createDummySpectrum(yPeak = Peak(8.25f, 9.0f, 0.75f))
+        val win2 = createDummySpectrum(yPeak = Peak(8.25f, 9.0f, 30.0f))
         // Window 3: far peak -> no match
-        val win3 = createDummySpectrum(zPeak = Peak(25.0f, 5.0f, 0.5f))
+        val win3 = createDummySpectrum(zPeak = Peak(25.0f, 5.0f, 10.0f))
         
         var capturedF0 = -1.0
         
@@ -137,7 +137,7 @@ class DefaultModalAnalyzerTest {
         val freqs = floatArrayOf(0.0f, 1.0f, 2.0f, 3.0f, 8.17f, 12.0f, 25.0f)
         // Median will be 1.0
         val psd = floatArrayOf(0.9f, 0.95f, 1.0f, 1.05f, 2.3f, 1.1f, 0.8f)
-        val xPeak = Peak(8.17f, 2.3f, 0.6f) // Peak is 2.3, Median is 1.0 => ratio 2.3 < 5.0
+        val xPeak = Peak(8.17f, 2.3f, 20.0f) // Peak is 2.3, Median is 1.0 => ratio 2.3 < 5.0
         
         val xAxis = AxisPsdResult(freqs, psd, listOf(xPeak))
         val spec = MultiAxisSpectrumResult(xAxis, xAxis, xAxis, xAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))
@@ -153,7 +153,7 @@ class DefaultModalAnalyzerTest {
         val freqs = floatArrayOf(0.0f, 1.0f, 2.0f, 3.0f, 8.17f, 12.0f, 25.0f)
         // Median will be 1.0
         val psd = floatArrayOf(0.9f, 0.95f, 1.0f, 1.05f, 8.0f, 1.1f, 0.8f)
-        val xPeak = Peak(8.17f, 8.0f, 0.9f) // Peak is 8.0, Median is 1.0 => ratio 8.0 > 5.0
+        val xPeak = Peak(8.17f, 8.0f, 50.0f) // Peak is 8.0, Median is 1.0 => ratio 8.0 > 5.0
         
         val xAxis = AxisPsdResult(freqs, psd, listOf(xPeak))
         val spec = MultiAxisSpectrumResult(xAxis, xAxis, xAxis, xAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))

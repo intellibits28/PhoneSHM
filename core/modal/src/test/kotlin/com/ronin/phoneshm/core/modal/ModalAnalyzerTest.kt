@@ -39,7 +39,7 @@ class ModalAnalyzerTest {
         val dummyAxis = AxisPsdResult(floatArrayOf(8.17f), floatArrayOf(12.5f), listOf(Peak(8.17f, 12.5f, 0.8f)))
         val dummySpec = MultiAxisSpectrumResult(dummyAxis, dummyAxis, dummyAxis, dummyAxis, WelchPsdOutput(WelchPsdParameters(), 1, 0.0977f, null))
         val classification = PlausibilityClassificationResult(
-            classification = FrequencyClassification.GLOBAL_MODE,
+            classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
             confidence = 0.9,
             explanation = "Valid"
         )

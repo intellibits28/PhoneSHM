@@ -20,6 +20,14 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFddRaw(
         return env->NewFloatArray(0);
     }
     
+    if (env->GetArrayLength(xArray) != n || 
+        env->GetArrayLength(yArray) != n || 
+        env->GetArrayLength(zArray) != n) {
+        jclass exc = env->FindClass("java/lang/IllegalArgumentException");
+        env->ThrowNew(exc, "Acceleration array lengths must match timestamps length");
+        return env->NewFloatArray(0);
+    }
+    
     jlong* ts = env->GetLongArrayElements(timestamps, nullptr);
     jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
     jfloat* y = env->GetFloatArrayElements(yArray, nullptr);
@@ -99,6 +107,14 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateMultiAxisWelchPs
     jfloat sampleRateHz, jint fftSize, jfloat overlapPct
 ) {
     jsize n = env->GetArrayLength(timestamps);
+    if (n == 0 || 
+        env->GetArrayLength(xArray) != n || 
+        env->GetArrayLength(yArray) != n || 
+        env->GetArrayLength(zArray) != n) {
+        jclass exc = env->FindClass("java/lang/IllegalArgumentException");
+        env->ThrowNew(exc, "Acceleration array lengths must match timestamps length");
+        return nullptr;
+    }
     
     jlong* ts = env->GetLongArrayElements(timestamps, nullptr);
     jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
@@ -165,6 +181,13 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateRdtSsi(
     jfloat fs, jfloat minHz, jfloat maxHz, jint maxOrder, jfloat rdsDurationSec
 ) {
     jsize len = env->GetArrayLength(xArray);
+    if (len == 0 || 
+        env->GetArrayLength(yArray) != len || 
+        env->GetArrayLength(zArray) != len) {
+        jclass exc = env->FindClass("java/lang/IllegalArgumentException");
+        env->ThrowNew(exc, "Acceleration array lengths must match and be greater than 0");
+        return env->NewFloatArray(0);
+    }
     
     jfloat* x = env->GetFloatArrayElements(xArray, nullptr);
     jfloat* y = env->GetFloatArrayElements(yArray, nullptr);

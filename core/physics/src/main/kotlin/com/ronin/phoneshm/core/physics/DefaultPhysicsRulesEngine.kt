@@ -12,7 +12,7 @@ import kotlin.math.min
  *   instead of hardcoded thresholds. Structured coefficients + enum dispatch — no
  *   runtime expression parsing, injection-safe.
  * - (A3) BELOW_EXPECTED_RANGE classification for sub-band frequencies (orientation drift,
- *   gravity artifact) — distinct from LOCAL_MODE (high-frequency slab vibration).
+ *   gravity artifact) — distinct from PLAUSIBLE_LOCAL_MODE_CANDIDATE (high-frequency slab vibration).
  * - (B3) 0.3Hz SENSOR_ARTIFACT boundary documented as classifier-level safety net
  *   for HPF edge leakage. Practically unreachable for most buildings since HPF cutoff
  *   is at 0.5Hz; meaningful only for >30-floor buildings where minExpectedHz < 0.5Hz.
@@ -69,11 +69,12 @@ class DefaultPhysicsRulesEngine(
 
         return when {
             f0Hz in minGlobalHz..maxGlobalHz -> {
-                // GLOBAL_MODE: within expected structural resonance band
+                // PLAUSIBLE_GLOBAL_MODE_CANDIDATE: within expected structural resonance band
+                val logProminence = kotlin.math.max(0.0, kotlin.math.log10(kotlin.math.max(1.0, prominence.toDouble())))
                 val proximityBonus = max(0.0, 0.15 * (1.0 - abs(f0Hz - expectedF0) / expectedF0))
-                val conf = min(0.98, 0.70 + (prominence.toDouble() * 0.25) + proximityBonus)
+                val conf = min(0.98, 0.70 + (logProminence * 0.15) + proximityBonus)
                 PlausibilityClassificationResult(
-                    classification = FrequencyClassification.GLOBAL_MODE,
+                    classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
                     confidence = conf,
                     explanation = String.format(
                         "Frequency %.2f Hz falls within the expected global fundamental resonance band (%.1f-%.1f Hz) for %s (%d floors, config v%d).",
@@ -83,7 +84,8 @@ class DefaultPhysicsRulesEngine(
             }
             f0Hz < minGlobalHz -> {
                 // A3: BELOW_EXPECTED_RANGE — sub-band frequency (orientation drift, gravity artifact)
-                val conf = min(0.90, 0.60 + (prominence.toDouble() * 0.20))
+                val logProminence = kotlin.math.max(0.0, kotlin.math.log10(kotlin.math.max(1.0, prominence.toDouble())))
+                val conf = min(0.90, 0.60 + (logProminence * 0.15))
                 PlausibilityClassificationResult(
                     classification = FrequencyClassification.BELOW_EXPECTED_RANGE,
                     confidence = conf,
@@ -94,10 +96,11 @@ class DefaultPhysicsRulesEngine(
                 )
             }
             else -> {
-                // LOCAL_MODE: above expected global band — genuine high-frequency slab/element vibration
-                val conf = min(0.92, 0.65 + (prominence.toDouble() * 0.25))
+                // PLAUSIBLE_LOCAL_MODE_CANDIDATE: above expected global band — genuine high-frequency slab/element vibration
+                val logProminence = kotlin.math.max(0.0, kotlin.math.log10(kotlin.math.max(1.0, prominence.toDouble())))
+                val conf = min(0.92, 0.65 + (logProminence * 0.15))
                 PlausibilityClassificationResult(
-                    classification = FrequencyClassification.LOCAL_MODE,
+                    classification = FrequencyClassification.PLAUSIBLE_LOCAL_MODE_CANDIDATE,
                     confidence = conf,
                     explanation = String.format(
                         "Frequency %.2f Hz exceeds the primary global mode band (%.1f-%.1f Hz) and represents local slab/element resonance.",

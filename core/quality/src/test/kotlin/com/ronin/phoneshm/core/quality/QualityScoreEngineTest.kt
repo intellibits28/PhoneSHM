@@ -54,7 +54,7 @@ class QualityScoreEngineTest {
         val aud = AudioContextResult("quiet", 0.95, 0.05f, 200f, 0.4f)
         val mod = ModalAnalysisResult(
             8.2, "X", 0.95, 0.95, 0.19,
-            PlausibilityClassificationResult(FrequencyClassification.GLOBAL_MODE, 0.9, ""),
+            PlausibilityClassificationResult(FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE, 0.9, ""),
             emptyList(),
             6.0,
             com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT

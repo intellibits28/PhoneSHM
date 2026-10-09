@@ -14,13 +14,13 @@ class PhysicsRulesEngineTest {
         ): PlausibilityClassificationResult {
             return if (f0Hz in 3.0..15.0) {
                 PlausibilityClassificationResult(
-                    classification = FrequencyClassification.GLOBAL_MODE,
+                    classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
                     confidence = 0.9,
                     explanation = "Valid global structural fundamental frequency."
                 )
             } else if (f0Hz > 15.0 && f0Hz < 45.0) {
                 PlausibilityClassificationResult(
-                    classification = FrequencyClassification.LOCAL_MODE,
+                    classification = FrequencyClassification.PLAUSIBLE_LOCAL_MODE_CANDIDATE,
                     confidence = 0.8,
                     explanation = "Higher frequency typical of local slab/element modes."
                 )
@@ -38,9 +38,9 @@ class PhysicsRulesEngineTest {
     fun testPhysicsClassification() {
         val engine = FakePhysicsRulesEngine()
         val globalRes = engine.classifyFrequency(8.2, 0.5f, "RESIDENTIAL_CONCRETE", 1)
-        assertEquals(FrequencyClassification.GLOBAL_MODE, globalRes.classification)
+        assertEquals(FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE, globalRes.classification)
 
         val localRes = engine.classifyFrequency(35.0, 0.4f, "RESIDENTIAL_CONCRETE", 1)
-        assertEquals(FrequencyClassification.LOCAL_MODE, localRes.classification)
+        assertEquals(FrequencyClassification.PLAUSIBLE_LOCAL_MODE_CANDIDATE, localRes.classification)
     }
 }

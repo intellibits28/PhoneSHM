@@ -43,7 +43,7 @@ class AnalysisViewModelTest {
         every { application.filesDir } returns File(tmpDir)
         
         val vm = AnalysisViewModel(application)
-        vm.updateResults(8.17, "X", -1.2, "GLOBAL_MODE")
+        vm.updateResults(8.17, "X", -1.2, "PLAUSIBLE_GLOBAL_MODE_CANDIDATE")
         assertEquals(8.17, vm.uiState.value.fundamentalFrequencyHz, 0.001)
         assertEquals("X", vm.uiState.value.dominantAxis)
         assertEquals(-1.2, vm.uiState.value.baselineShiftPct, 0.001)
@@ -87,7 +87,7 @@ class AnalysisViewModelTest {
             persistence = 0.0,
             adaptiveToleranceHz = 0.0,
             classification = PlausibilityClassificationResult(
-                classification = FrequencyClassification.GLOBAL_MODE,
+                classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
                 confidence = 1.0,
                 explanation = "Physics Check"
             ),
@@ -147,7 +147,7 @@ class AnalysisViewModelTest {
             persistence = 1.0,
             adaptiveToleranceHz = 0.5,
             classification = PlausibilityClassificationResult(
-                classification = FrequencyClassification.GLOBAL_MODE,
+                classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
                 confidence = 1.0,
                 explanation = "Physics Check"
             ),

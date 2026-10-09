@@ -100,11 +100,21 @@ class DefaultRawSampleStorageEngine(
                 raf.readFully(header)
                 if (String(header, Charsets.US_ASCII) == "SHM1") {
                     offset = 4L
+                } else {
+                    raf.close()
+                    throw IllegalStateException("Invalid binary format: missing SHM1 header")
                 }
+            } else {
+                raf.close()
+                throw IllegalStateException("Invalid binary format: file too small for header")
             }
             raf.close()
             
-            val sampleCount = ((file.length() - offset) / 20).toInt()
+            val remainingBytes = file.length() - offset
+            if (remainingBytes % 20L != 0L) {
+                throw IllegalStateException("Invalid binary format: remaining byte count is not divisible by 20 (got $remainingBytes)")
+            }
+            val sampleCount = (remainingBytes / 20L).toInt()
             val finalFile = File(file.parentFile, file.name.removeSuffix(".tmp"))
             file.renameTo(finalFile)
             Pair(finalFile.length(), sampleCount)
@@ -121,8 +131,15 @@ class DefaultRawSampleStorageEngine(
             var offset = 0
             if (bytes.size >= 4 && String(bytes.copyOfRange(0, 4), Charsets.US_ASCII) == "SHM1") {
                 offset = 4
+            } else {
+                throw java.lang.IllegalStateException("Invalid binary format: missing SHM1 header")
             }
-            val sampleCount = (bytes.size - offset) / 20
+            
+            val remainingBytes = bytes.size - offset
+            if (remainingBytes % 20 != 0) {
+                throw java.lang.IllegalStateException("Invalid binary format: remaining byte count is not divisible by 20 (got $remainingBytes)")
+            }
+            val sampleCount = remainingBytes / 20
             val timestamps = LongArray(sampleCount)
             val x = FloatArray(sampleCount)
             val y = FloatArray(sampleCount)

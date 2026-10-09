@@ -121,9 +121,21 @@ class AnalysisViewModelQualityTest {
         val ts = LongArray(105) { it * 10_000_000L }
         val xyz = FloatArray(105) { 0f }
         coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
+        coEvery { mockStorageEngine.finalizeSessionFile(any()) } returns Pair(1234L, 105)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
         storageField.isAccessible = true
         storageField.set(vm, mockStorageEngine)
+        val mockModalAnalyzer = mockk<com.ronin.phoneshm.core.modal.ModalAnalyzer>()
+        val mockModalRes = com.ronin.phoneshm.core.modal.ModalAnalysisResult(5.0, "Z", 0.9, 1.0, 1.0, com.ronin.phoneshm.core.physics.PlausibilityClassificationResult(com.ronin.phoneshm.core.physics.FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE, 0.9, ""), emptyList(), 15.0, com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT)
+        every { mockModalAnalyzer.analyzeMultiAxisSpectrum(any(), any(), any(), any()) } returns mockModalRes
+        val mockConsensus = mockk<com.ronin.phoneshm.core.modal.ModalConsensusEngine>()
+        every { mockConsensus.evaluateConsensus(any(), any(), any()) } returns com.ronin.phoneshm.core.modal.ModalConsensusResult(5.0, 5.0, 5.0, 5.0, 0.9f, com.ronin.phoneshm.core.modal.ConsensusStatus.AGREED)
+        val consensusField = AnalysisViewModel::class.java.getDeclaredField("modalConsensusEngine")
+        consensusField.isAccessible = true
+        consensusField.set(vm, mockConsensus)
+        val modalField = AnalysisViewModel::class.java.getDeclaredField("modalAnalyzer")
+        modalField.isAccessible = true
+        modalField.set(vm, mockModalAnalyzer)
 
         val binFile = File(tmpDir, "dummy_high_quality.dat")
         val metaFile = File(tmpDir, "dummy_high_quality.meta.json")
@@ -175,9 +187,21 @@ class AnalysisViewModelQualityTest {
         val ts = LongArray(105) { it * 10_000_000L }
         val xyz = FloatArray(105) { 0f }
         coEvery { mockStorageEngine.readSamplesFromFile(any()) } returns RawSampleSessionData(ts, xyz, xyz, xyz)
+        coEvery { mockStorageEngine.finalizeSessionFile(any()) } returns Pair(1234L, 105)
         val storageField = AnalysisViewModel::class.java.getDeclaredField("storageEngine")
         storageField.isAccessible = true
         storageField.set(vm, mockStorageEngine)
+        val mockModalAnalyzer = mockk<com.ronin.phoneshm.core.modal.ModalAnalyzer>()
+        val mockModalRes = com.ronin.phoneshm.core.modal.ModalAnalysisResult(5.0, "Z", 0.9, 1.0, 1.0, com.ronin.phoneshm.core.physics.PlausibilityClassificationResult(com.ronin.phoneshm.core.physics.FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE, 0.9, ""), emptyList(), 15.0, com.ronin.phoneshm.core.modal.ExcitationSufficiency.SUFFICIENT)
+        every { mockModalAnalyzer.analyzeMultiAxisSpectrum(any(), any(), any(), any()) } returns mockModalRes
+        val mockConsensus = mockk<com.ronin.phoneshm.core.modal.ModalConsensusEngine>()
+        every { mockConsensus.evaluateConsensus(any(), any(), any()) } returns com.ronin.phoneshm.core.modal.ModalConsensusResult(5.0, 5.0, 5.0, 5.0, 0.9f, com.ronin.phoneshm.core.modal.ConsensusStatus.AGREED)
+        val consensusField = AnalysisViewModel::class.java.getDeclaredField("modalConsensusEngine")
+        consensusField.isAccessible = true
+        consensusField.set(vm, mockConsensus)
+        val modalField = AnalysisViewModel::class.java.getDeclaredField("modalAnalyzer")
+        modalField.isAccessible = true
+        modalField.set(vm, mockModalAnalyzer)
 
         val binFile = File(tmpDir, "dummy_low_quality.dat")
         val metaFile = File(tmpDir, "dummy_low_quality.meta.json")

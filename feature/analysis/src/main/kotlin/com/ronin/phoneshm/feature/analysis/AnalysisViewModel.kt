@@ -363,17 +363,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         finalQualityScorePct = 49
                     }
 
-                    // Demo mode sessions must not update real baseline
-                    if (!isDemoMode) {
-                        baselineEngine.updateBaselineWithSession(
-                            buildingHash = buildingHash,
-                            measurementProfileId = profileId,
-                            currentF0Hz = modalRes.fundamentalFrequencyHz,
-                            qualityScorePct = finalQualityScorePct,
-                            timeOfDay = sessionMeta?.timeOfDay,
-                            temperatureCelsius = sessionMeta?.batteryTemperatureCelsius
-                        )
-                    }
+
 
                     // Phase 3-A: Evaluate Modal Consensus between Welch, EFDD, and SSI
                     val consensusResult = modalConsensusEngine.evaluateConsensus(
@@ -388,6 +378,24 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         consensusResult.status == com.ronin.phoneshm.core.modal.ConsensusStatus.DISAGREED -> AnalysisStatus.INCONCLUSIVE
                         modalRes.fundamentalFrequencyHz <= 0.0 -> AnalysisStatus.INCONCLUSIVE
                         else -> AnalysisStatus.VALID
+                    }
+                    
+                    // Demo mode sessions must not update real baseline
+                    // Also only update if we have a valid plausible global mode and decent quality
+                    val isValidForBaseline = !isDemoMode && 
+                        finalStatus == AnalysisStatus.VALID && 
+                        finalQualityScorePct >= 50 &&
+                        modalRes.classification.classification == com.ronin.phoneshm.core.physics.FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE
+                        
+                    if (isValidForBaseline) {
+                        baselineEngine.updateBaselineWithSession(
+                            buildingHash = buildingHash,
+                            measurementProfileId = profileId,
+                            currentF0Hz = modalRes.fundamentalFrequencyHz,
+                            qualityScorePct = finalQualityScorePct,
+                            timeOfDay = sessionMeta?.timeOfDay,
+                            temperatureCelsius = sessionMeta?.batteryTemperatureCelsius
+                        )
                     }
 
                     AnalysisComputation(

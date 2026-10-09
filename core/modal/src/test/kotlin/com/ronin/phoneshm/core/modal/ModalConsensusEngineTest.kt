@@ -28,7 +28,7 @@ class ModalConsensusEngineTest {
             persistence = 0.85,
             adaptiveToleranceHz = 0.2,
             classification = PlausibilityClassificationResult(
-                classification = FrequencyClassification.GLOBAL_MODE,
+                classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
                 confidence = 0.95,
                 explanation = "Plausible"
             ),

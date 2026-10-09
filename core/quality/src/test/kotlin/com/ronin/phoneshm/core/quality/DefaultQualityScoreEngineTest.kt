@@ -51,7 +51,7 @@ class DefaultQualityScoreEngineTest {
         persistence = persistence,
         adaptiveToleranceHz = 0.194,
         classification = PlausibilityClassificationResult(
-            classification = FrequencyClassification.GLOBAL_MODE,
+            classification = FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE,
             confidence = 0.9,
             explanation = "Valid"
         ),

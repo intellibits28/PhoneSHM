@@ -62,8 +62,8 @@ class DefaultModalAnalyzer : ModalAnalyzer {
             val bestCandidate = candidatePeaks.maxByOrNull { (_, peak) ->
                 val classification = evaluatePhysics(peak.frequencyHz.toDouble(), peak.prominence.toDouble()).classification
                 val multiplier = when (classification) {
-                    FrequencyClassification.GLOBAL_MODE -> 1.0
-                    FrequencyClassification.LOCAL_MODE -> 0.8
+                    FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE -> 1.0
+                    FrequencyClassification.PLAUSIBLE_LOCAL_MODE_CANDIDATE -> 0.8
                     FrequencyClassification.BELOW_EXPECTED_RANGE -> 0.1
                     FrequencyClassification.SENSOR_ARTIFACT -> 0.01
                     FrequencyClassification.UNKNOWN -> 0.5
@@ -105,8 +105,9 @@ class DefaultModalAnalyzer : ModalAnalyzer {
         // Evaluate physics plausibility using the final resolved f0 and prominence
         val plausibilityClassification = evaluatePhysics(fundamentalFrequencyHz, dominantPeakProminence)
 
-        // Calculate combined confidence (0.0 to 1.0)
-        val peakConf = min(1.0, dominantPeakProminence * 1.5)
+        // Calculate combined confidence (0.0 to 1.0) using logarithmic SNR scale
+        // Prominence is a linear ratio. SNR in bels = log10(prominence). Max expected SNR ~ 15dB (1.5 Bels)
+        val peakConf = min(1.0, max(0.0, kotlin.math.log10(max(1.0, dominantPeakProminence)) / 1.5))
         val classConf = plausibilityClassification.confidence
         val rawConfidence = min(1.0, (peakConf * 0.45) + (persistence * 0.35) + (classConf * 0.20))
         // TASK 2: Multiplicative persistence gate. If persistence is below 25%, apply a severe penalty

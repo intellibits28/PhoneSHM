@@ -461,8 +461,8 @@ softWrap = false,
                                 Color(0xFF334155) // Neutral unconfident styling
                             } else {
                                 when (modal.classification.classification.name) {
-                                    "GLOBAL_MODE" -> Color(0xFF064E3B)
-                                    "LOCAL_MODE" -> Color(0xFF78350F)
+                                    "PLAUSIBLE_GLOBAL_MODE_CANDIDATE" -> Color(0xFF064E3B)
+                                    "PLAUSIBLE_LOCAL_MODE_CANDIDATE" -> Color(0xFF78350F)
                                     else -> Color(0xFF450A0A)
                                 }
                             }

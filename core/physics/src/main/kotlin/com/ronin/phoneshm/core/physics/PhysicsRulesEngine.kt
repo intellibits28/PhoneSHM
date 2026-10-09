@@ -4,8 +4,8 @@ package com.ronin.phoneshm.core.physics
  * FrequencyClassification categorizes resonant candidate peaks by structural domain rules.
  */
 enum class FrequencyClassification {
-    GLOBAL_MODE,          // Primary structural resonance (e.g. 3Hz - 15Hz on RC building)
-    LOCAL_MODE,           // Local slab/floor/element vibration — HIGHER than expected global band
+    PLAUSIBLE_GLOBAL_MODE_CANDIDATE,          // Primary structural resonance candidate
+    PLAUSIBLE_LOCAL_MODE_CANDIDATE,           // Local slab/floor/element vibration candidate
     BELOW_EXPECTED_RANGE, // Sub-band frequency: orientation drift, DC leakage, gravity artifact
     SENSOR_ARTIFACT,      // Electrical/clock harmonic or zero-velocity spike (>45Hz or <0.3Hz)
     UNKNOWN
