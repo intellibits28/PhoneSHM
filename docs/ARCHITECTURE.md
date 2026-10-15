@@ -157,6 +157,11 @@ To prevent Android Application Not Responding (ANR) dialogs and 60/120 FPS UI dr
      - Room database SQLite queries and transactions.
      - Scoped storage mirroring via `MediaStore` API.
 
+4. **Dedicated Hardware Sensor Threading (`HandlerThread`) & Backpressure Buffering**:
+   - `AndroidVibrationSensorEngine` registers `SensorEventListener` on a dedicated background `HandlerThread("PhoneSHM-SensorThread")` to unburden the Android Main UI Thread from high-frequency sensor interrupts.
+   - Hardware sensor streams in `callbackFlow` enforce `.buffer(4096)` capacity to eliminate sample drops during storage disk write spikes.
+   - UI observation in `MeasurementViewModel` is throttled to ~10 Hz (100ms interval) via `onSampleReceived` callback in `recordSession`, eliminating duplicate sensor listener registrations and preventing Main Thread GC thrashing.
+
 ---
 
 ## 5. Persistence & Schema Governance

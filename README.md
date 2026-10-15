@@ -29,8 +29,8 @@ Ambient environmental vibrations (wind excitation, micro-tremors, traffic loadin
 
 ### 1. Tri-Engine Operational Modal Analysis (OMA)
 To reliably identify fundamental resonant frequencies ($f_0$) and mode shapes without artificial actuators, PhoneSHM runs three complementary algorithms in parallel:
-- **Welch Power Spectral Density (PSD)**: Averaged modified periodogram with $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic sub-bin interpolation, and zero-allocation C++ scratch buffers.
-- **Enhanced Frequency Domain Decomposition (EFDD)**: High-performance C++ JNI bridge using Eigen 3.4 SVD. Constructs the $3 \times 3$ cross-spectral density matrix $\mathbf{G}_{yy}(f)$ and tracks the first singular value line spectrum ($s_1$) and damping ratios ($\zeta$).
+- **Welch Power Spectral Density (PSD)**: Averaged modified periodogram with $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic sub-bin interpolation, Median + 3*MAD non-stationary segment gating, and zero-allocation C++ scratch buffers.
+- **Enhanced Frequency Domain Decomposition (EFDD)**: High-performance C++ JNI bridge using Eigen 3.4 SVD. Decouples horizontal sway into a $2 \times 2$ cross-spectral density matrix $\mathbf{G}_{xy}(f)$ (eliminating vertical slab mode interference), extracts the azimuth-invariant first singular value line spectrum ($\sigma_1$), and estimates damping ratios ($\zeta$) via logarithmic decrement.
 - **Multi-Channel RDT-SSI (Time Domain)**: Multi-channel Random Decrement Technique (10 positive-slope trigger levels) extracting free decay signatures, followed by Block Hankel SVD Stochastic Subspace Identification to extract state-space continuous poles.
 - **Tri-Engine Consensus Engine**: Autonomous clustering across Welch, EFDD, and SSI candidates using a $5\%$ structural tolerance window, yielding explicit consensus states (`AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT`).
 
@@ -47,7 +47,7 @@ Detected frequencies are checked against empirical structural dynamics formulas 
 - **Thermal Stratification**: Records battery temperature (ambient proxy) and diurnal time windows (`MORNING`, `AFTERNOON`, `EVENING`, `NIGHT`) to eliminate false alarms caused by seasonal and diurnal thermal expansion cycles.
 
 ### 4. Zero ANR Concurrency & Hardware Precision
-- **Threading Separation**: DSP calculations and JNI matrix decompositions run exclusively on `Dispatchers.Default`, file and database operations on `Dispatchers.IO`, and Compose UI on `Dispatchers.Main`.
+- **Threading Separation & Dedicated Sensor Thread**: DSP calculations and JNI matrix decompositions run exclusively on `Dispatchers.Default`, file and database operations on `Dispatchers.IO`, and Compose UI on `Dispatchers.Main`. Hardware sensor acquisition runs on a dedicated background `HandlerThread("PhoneSHM-SensorThread")` with a 4096-sample buffer and 100ms throttled UI streaming.
 - **Clock Jitter & Drift Tracking**: Measures hardware timestamp delta standard deviation (`sampleJitterStdMs`) and hardware oscillator drift (`clockDriftPpm`).
 - **Research Interoperability**: Every completed session automatically mirrors raw binary data (`.bin`) and metadata (`.meta.json`) to `/sdcard/Download/PhoneSHM/` for root-free analysis via Termux, Python, or MATLAB.
 

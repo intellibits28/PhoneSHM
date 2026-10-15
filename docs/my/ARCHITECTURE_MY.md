@@ -110,6 +110,11 @@ UI ထစ်ငေါ့ခြင်းနှင့် ANR (App Not Responding) 
      - Binary `.bin` ဖိုင် ရေးသားခြင်းနှင့် Sidecar `.meta.json` ထုတ်ယူခြင်း။
      - Room Database SQLite queries များနှင့် Scoped Storage သို့ ဒေတာကူးယူခြင်း။
 
+4. **Dedicated Hardware Sensor Threading (`HandlerThread`) နှင့် Backpressure စီမံခန့်ခွဲမှု**:
+   - `AndroidVibrationSensorEngine` သည် Main UI Thread အား interrupts မဖြစ်စေရန် `SensorEventListener` ကို သီးသန့် background `HandlerThread("PhoneSHM-SensorThread")` ပေါ်တွင် register ပြုလုပ်ထားသည်။
+   - Storage သို့ disk ရေးသားမှုနှောင့်နှေးချိန်တွင် sensor samples များ drop မဖြစ်စေရန် `callbackFlow` တွင် `.buffer(4096)` buffer capacity ထည့်သွင်းထားသည်။
+   - `MeasurementViewModel` သည် duplicate sensor listener မသုံးတော့ဘဲ `recordSession` callback မှတစ်ဆင့် ~10 Hz (100ms interval) ဖြင့် UI state ကို throttle ပြုလုပ်ပေးသဖြင့် Main Thread GC allocation ဖိအားကို လုံးဝ ပပျောက်စေသည်။
+
 ---
 
 ## ၄။ ဒေတာဘေ့စ် ဖွဲ့စည်းပုံ (Room Database Version 7)

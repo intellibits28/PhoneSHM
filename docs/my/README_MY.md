@@ -29,8 +29,8 @@
 
 ### ၁။ Tri-Engine Operational Modal Analysis (OMA)
 အဆောက်အအုံများ၏ သဘာဝတုန်ခါမှုနှုန်း ($f_0$) ကို တိကျစွာ ဖော်ထုတ်နိုင်ရန် အယ်လဂိုရီသမ် ၃ မျိုးကို ပူးတွဲအသုံးပြုထားပါသည်-
-- **Welch PSD**: $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic interpolation နှင့် zero-allocation preallocated scratch buffers များ ပါဝင်သည်။
-- **Enhanced Frequency Domain Decomposition (EFDD)**: Cross-spectral density matrix ကို C++ Eigen SVD ဖြင့် တွက်ချက်ကာ First singular value ($s_1$) နှင့် Damping ratio ($\zeta$) များကို ထုတ်ယူသည်။
+- **Welch PSD**: $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic interpolation၊ Median + 3*MAD segment gating နှင့် zero-allocation preallocated scratch buffers များ ပါဝင်သည်။
+- **Enhanced Frequency Domain Decomposition (EFDD)**: Horizontal sway ကို $2 \times 2$ cross-spectral density matrix $\mathbf{G}_{xy}(f)$ အဖြစ် သီးခြားခွဲထုတ်ကာ (ဒေါင်လိုက်ကြမ်းခင်းတုန်ခါမှု mode များ မနှောင့်ယှက်နိုင်ဘဲ) C++ Eigen SVD ဖြင့် First singular value ($\sigma_1$) နှင့် logarithmic decrement damping ratio ($\zeta$) များကို တိကျစွာ ထုတ်ယူသည်။
 - **Multi-Channel RDT-SSI (Time Domain)**: Random Decrement Technique ဖြင့် free decay လှိုင်းများကို ထုတ်ယူပြီး Block Hankel SVD ဖြင့် state-space poles များကို ရှာဖွေသည်။
 - **Tri-Engine Consensus စနစ်**: Method ၃ ခုစလုံးမှ ရရှိသော အကြိမ်နှုန်းများကို 5% tolerance ဖြင့် တိုက်ဆိုင်စစ်ဆေးကာ `AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT` status များဖြင့် ခွဲခြားပေးသည်။
 
@@ -43,7 +43,7 @@
 - **ပတ်ဝန်းကျင် အပူချိန်နှင့် နေ့/ည စနစ်**: အပူချိန်ကြောင့် အဆောက်အအုံ ကျုံ့/ပွမှုကို ထည့်သွင်းစဉ်းစားရန် Battery temperature နှင့် Time-of-day (`MORNING`, `AFTERNOON`, `EVENING`, `NIGHT`) တို့ကို အတူတွဲဖက် မှတ်တမ်းတင်သည်။
 
 ### ၄။ Zero ANR နှင့် Hardware တိကျမှု
-- **Threading ခွဲဝေမှု**: တွက်ချက်မှုများကို `Dispatchers.Default` တွင် လည်းကောင်း၊ ဖိုင်သိမ်းဆည်းမှုကို `Dispatchers.IO` တွင် လည်းကောင်း သီးခြား run စေပြီး UI မထစ်ငေါ့စေရန် အာမခံသည်။
+- **Threading ခွဲဝေမှုနှင့် သီးခြား Sensor Thread**: တွက်ချက်မှုများကို `Dispatchers.Default`၊ ဖိုင်သိမ်းဆည်းမှုကို `Dispatchers.IO`၊ UI ကို `Dispatchers.Main` တွင် သီးခြား run စေပြီး Hardware sensor ကို သီးသန့် background `HandlerThread("PhoneSHM-SensorThread")` ပေါ်တွင် 4096-sample buffer နှင့် 100ms UI throttling ဖြင့် run သဖြင့် UI မထစ်ငေါ့စေရန် အာမခံသည်။
 - **Hardware Precision**: Monotonic timestamp စစ်ဆေးခြင်း၊ Clock Jitter (ms) နှင့် Clock Drift (PPM) များကို တိကျစွာ တိုင်းတာသည်။
 - **Termux နှင့် အပြန်အလှန်ချိတ်ဆက်နိုင်မှု**: Binary ဒေတာ (`.bin`) နှင့် Metadata (`.meta.json`) များကို `/sdcard/Download/PhoneSHM/` သို့ အလိုအလျောက် ကူးယူပေးထားသဖြင့် Termux သို့မဟုတ် Python ဖြင့် တိုက်ရိုက် စစ်ဆေးနိုင်သည်။
 
