@@ -34,7 +34,8 @@ class VibrationSensorEngineTest {
             phonePlacement: String?,
             durationSec: Int,
             sessionNoiseFloorMg: Float?,
-            sessionAccelerometerBias: FloatArray?
+            sessionAccelerometerBias: FloatArray?,
+            onSampleReceived: ((sample: AccelerationSample, totalCount: Int) -> Unit)?
         ): MeasurementSessionMetadata {
             return MeasurementSessionMetadata(
                 sessionId = sessionId,

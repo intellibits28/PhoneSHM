@@ -50,7 +50,8 @@ class MeasurementViewModelTest {
             phonePlacement: String?,
             durationSec: Int,
             sessionNoiseFloorMg: Float?,
-            sessionAccelerometerBias: FloatArray?
+            sessionAccelerometerBias: FloatArray?,
+            onSampleReceived: ((sample: AccelerationSample, totalCount: Int) -> Unit)?
         ): MeasurementSessionMetadata {
             recordSessionCalledCount++
             return MeasurementSessionMetadata(

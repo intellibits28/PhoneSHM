@@ -76,29 +76,7 @@ class MeasurementViewModel(
             val bias = calibratedReport?.accelerometerBias
             _uiState.value = MeasurementUiState(isRecording = true)
 
-            // 1. Live stream updates (to update raw accelerometer visualizers and sample counts)
-        streamingJob = viewModelScope.launch {
-            var count = 0
-            val startTime = System.currentTimeMillis()
-            try {
-                sensorEngine.startStreaming(100).collect { sample ->
-                    count++
-                    val elapsed = (System.currentTimeMillis() - startTime) / 1000f
-                    val rate = if (elapsed > 0f) count / elapsed else 100f
-                    _uiState.value = _uiState.value.copy(
-                        currentX = sample.x,
-                        currentY = sample.y,
-                        currentZ = sample.z,
-                        totalSamplesCollected = count,
-                        currentSampleRateHz = rate
-                    )
-                }
-            } catch (e: Exception) {
-                // Handle stream errors
-            }
-        }
-
-        // Timer for elapsed seconds
+            // Timer for elapsed seconds
         viewModelScope.launch {
             while (_uiState.value.isRecording && _uiState.value.elapsedSeconds < durationSec) {
                 delay(1000L)
@@ -110,12 +88,15 @@ class MeasurementViewModel(
             }
         }
 
-        // 2. Continuous record session
+        // 2. Continuous record session with throttled UI feedback (eliminates duplicate sensor listener)
         recordingJob = launch {
             try {
                 val buildingProfile = profileRepository?.getBuildingProfile(buildingHash)
                 val measurementProfile = profileRepository?.getMeasurementProfile(measurementId)
                 val displayName = buildingProfile?.displayName
+
+                val startTime = System.currentTimeMillis()
+                var lastUiUpdateTimeMs = 0L
 
                 val metadata = sensorEngine.recordSession(
                     sessionId = sessionId, 
@@ -134,9 +115,24 @@ class MeasurementViewModel(
                     phonePlacement = measurementProfile?.placement,
                     durationSec = durationSec,
                     sessionNoiseFloorMg = noiseFloorMg,
-                    sessionAccelerometerBias = bias
+                    sessionAccelerometerBias = bias,
+                    onSampleReceived = { sample, count ->
+                        val now = System.currentTimeMillis()
+                        // Throttle UI state updates to ~10 Hz (100ms interval) to stop Main Thread GC pressure
+                        if (now - lastUiUpdateTimeMs >= 100L) {
+                            lastUiUpdateTimeMs = now
+                            val elapsed = (now - startTime) / 1000f
+                            val rate = if (elapsed > 0f) count / elapsed else 100f
+                            _uiState.value = _uiState.value.copy(
+                                currentX = sample.x,
+                                currentY = sample.y,
+                                currentZ = sample.z,
+                                totalSamplesCollected = count,
+                                currentSampleRateHz = rate
+                            )
+                        }
+                    }
                 )
-                streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
                     isRecording = false,
                     recordingFinished = true,
@@ -147,7 +143,6 @@ class MeasurementViewModel(
                 )
                 onSessionRecorded?.invoke(metadata.sessionId, metadata.rawStorageFileUri)
             } catch (e: Exception) {
-                streamingJob?.cancel()
                 _uiState.value = _uiState.value.copy(
                     isRecording = false,
                     recordingFinished = false,
@@ -156,9 +151,9 @@ class MeasurementViewModel(
                 )
                 android.util.Log.e("MeasurementVM", "Recording failed", e)
             }
-            }
         }
     }
+}
 
     fun stopRecordingEarly() {
         recordingJob?.cancel()

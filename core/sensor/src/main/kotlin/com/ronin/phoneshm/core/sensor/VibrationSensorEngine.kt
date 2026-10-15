@@ -82,6 +82,7 @@ interface VibrationSensorEngine {
         phonePlacement: String? = null,
         durationSec: Int = 30,
         sessionNoiseFloorMg: Float? = null,
-        sessionAccelerometerBias: FloatArray? = null
+        sessionAccelerometerBias: FloatArray? = null,
+        onSampleReceived: ((sample: AccelerationSample, totalCount: Int) -> Unit)? = null
     ): MeasurementSessionMetadata
 }

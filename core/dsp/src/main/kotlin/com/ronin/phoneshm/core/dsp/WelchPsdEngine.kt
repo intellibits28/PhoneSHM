@@ -43,12 +43,12 @@ class WelchPsdEngine : DspEngine {
         val targetCount = (durationSec * targetSampleRateHz).toInt() + 1
         if (targetCount < 2) return sorted
 
-        val dtNs = (1e9 / targetSampleRateHz).toLong()
+        val dtNsDouble = 1e9 / targetSampleRateHz.toDouble()
         val resampled = ArrayList<AccelerationSample>(targetCount)
         var srcIdx = 0
 
         for (i in 0 until targetCount) {
-            val tTarget = startNs + i * dtNs
+            val tTarget = startNs + (i * dtNsDouble).roundToLong()
 
             // Handle boundary cases
             if (tTarget <= startNs) {
@@ -158,24 +158,24 @@ class WelchPsdEngine : DspEngine {
     override fun highPassFilter(signal: FloatArray, sampleRateHz: Float, cutoffHz: Float): FloatArray {
         if (signal.size < 9) return signal.copyOf()
 
-        val wc = tan(PI * cutoffHz / sampleRateHz)
+        val wc = tan(PI * cutoffHz.toDouble() / sampleRateHz.toDouble())
         val wc2 = wc * wc
         val sqrt2wc = sqrt(2.0) * wc
         val k = 1.0 + sqrt2wc + wc2
 
-        val b0 = (1.0 / k).toFloat()
-        val b1 = (-2.0 / k).toFloat()
-        val b2 = (1.0 / k).toFloat()
-        val a1 = (2.0 * (wc2 - 1.0) / k).toFloat()
-        val a2 = ((1.0 - sqrt2wc + wc2) / k).toFloat()
+        val b0 = 1.0 / k
+        val b1 = -2.0 / k
+        val b2 = 1.0 / k
+        val a1 = 2.0 * (wc2 - 1.0) / k
+        val a2 = (1.0 - sqrt2wc + wc2) / k
 
         // Step response initial states (lfilter_zi) for Direct Form II Transposed
-        val sumA = 1.0f + a1 + a2
+        val sumA = 1.0 + a1 + a2
         val zi1 = (b1 + b2 - (a1 + a2) * b0) / sumA
         val zi2 = b2 - a2 * b0 - a2 * zi1
 
         // Reflection padding (odd extension)
-        val padlen = minOf(9, signal.size - 1)
+        val padlen = minOf(15, signal.size - 1)
         val padded = FloatArray(signal.size + 2 * padlen)
         
         // Left pad: odd reflection around signal[0]
@@ -194,16 +194,16 @@ class WelchPsdEngine : DspEngine {
         }
 
         // Forward pass
-        val z1_fwd = zi1 * padded[0]
-        val z2_fwd = zi2 * padded[0]
+        val z1_fwd = zi1 * padded[0].toDouble()
+        val z2_fwd = zi2 * padded[0].toDouble()
         val forward = applyIir(padded, b0, b1, b2, a1, a2, z1_fwd, z2_fwd)
 
         // Reverse for backward pass
         forward.reverse()
 
         // Backward pass
-        val z1_bwd = zi1 * forward[0]
-        val z2_bwd = zi2 * forward[0]
+        val z1_bwd = zi1 * forward[0].toDouble()
+        val z2_bwd = zi2 * forward[0].toDouble()
         val backward = applyIir(forward, b0, b1, b2, a1, a2, z1_bwd, z2_bwd)
 
         // Reverse again to original order
@@ -215,19 +215,19 @@ class WelchPsdEngine : DspEngine {
 
     private fun applyIir(
         input: FloatArray,
-        b0: Float, b1: Float, b2: Float,
-        a1: Float, a2: Float,
-        zi1: Float = 0f, zi2: Float = 0f
+        b0: Double, b1: Double, b2: Double,
+        a1: Double, a2: Double,
+        zi1: Double = 0.0, zi2: Double = 0.0
     ): FloatArray {
         val output = FloatArray(input.size)
         var z1 = zi1
         var z2 = zi2
         for (i in input.indices) {
-            val x = input[i]
+            val x = input[i].toDouble()
             val y = b0 * x + z1
             z1 = b1 * x - a1 * y + z2
             z2 = b2 * x - a2 * y
-            output[i] = y
+            output[i] = y.toFloat()
         }
         return output
     }
@@ -494,30 +494,78 @@ class WelchPsdEngine : DspEngine {
             windowPowerSum += w * w
         }
 
+        // Pass 1: Compute RMS energy for all candidate segments to establish baseline
+        val segmentRmsList = mutableListOf<Double>()
+        var scanOffset = 0
+        while (scanOffset + fftSize <= n) {
+            var sumSq = 0.0
+            for (i in 0 until fftSize) {
+                val v = signal[scanOffset + i].toDouble()
+                sumSq += v * v
+            }
+            segmentRmsList.add(sqrt(sumSq / fftSize))
+            scanOffset += stepSize
+        }
+
+        if (segmentRmsList.isEmpty()) return FloatArray(freqBins)
+
+        // Robust Median and MAD of Segment RMS
+        val sortedRms = segmentRmsList.sorted()
+        val medianRms = sortedRms[sortedRms.size / 2]
+        val deviations = sortedRms.map { abs(it - medianRms) }.sorted()
+        val madRms = deviations[deviations.size / 2]
+        // Threshold: Reject segments with RMS > Median + 3.0 * (1.4826 * MAD)
+        val rmsThreshold = maxOf(medianRms + 3.0 * (1.4826 * madRms), medianRms * 2.5)
+
         var segmentCount = 0
         var offset = 0
+        var segIdx = 0
 
         while (offset + fftSize <= n) {
-            // A2: Per-segment detrend (double precision)
-            val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
-            detrendDoubleInPlace(segmentDouble)
+            val currentSegRms = segmentRmsList[segIdx++]
+            // If fewer than 3 segments, gating is skipped; otherwise reject transient artifacts
+            if (segmentRmsList.size < 3 || currentSegRms <= rmsThreshold) {
+                // A2: Per-segment detrend (double precision)
+                val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
+                detrendDoubleInPlace(segmentDouble)
 
-            // Window and prepare for FFT
-            val real = DoubleArray(fftSize)
-            val imag = DoubleArray(fftSize)
-            for (i in 0 until fftSize) {
-                real[i] = segmentDouble[i] * window[i].toDouble()
+                // Window and prepare for FFT
+                val real = DoubleArray(fftSize)
+                val imag = DoubleArray(fftSize)
+                for (i in 0 until fftSize) {
+                    real[i] = segmentDouble[i] * window[i].toDouble()
+                }
+
+                fft(real, imag)
+
+                // Accumulate |X(k)|² (double precision — C1)
+                for (k in 0 until freqBins) {
+                    psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
+                }
+
+                segmentCount++
             }
-
-            fft(real, imag)
-
-            // Accumulate |X(k)|² (double precision — C1)
-            for (k in 0 until freqBins) {
-                psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
-            }
-
-            segmentCount++
             offset += stepSize
+        }
+
+        // Safety fallback: if all segments were gated, accumulate without gating
+        if (segmentCount == 0) {
+            offset = 0
+            while (offset + fftSize <= n) {
+                val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
+                detrendDoubleInPlace(segmentDouble)
+                val real = DoubleArray(fftSize)
+                val imag = DoubleArray(fftSize)
+                for (i in 0 until fftSize) {
+                    real[i] = segmentDouble[i] * window[i].toDouble()
+                }
+                fft(real, imag)
+                for (k in 0 until freqBins) {
+                    psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
+                }
+                segmentCount++
+                offset += stepSize
+            }
         }
 
         if (segmentCount == 0) return FloatArray(freqBins)

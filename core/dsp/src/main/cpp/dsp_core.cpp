@@ -129,20 +129,20 @@ float streamingRmsLevel(const AccelerationSample& sample, float prevRms, float s
 
 std::vector<float> applyIir(
     const std::vector<float>& input,
-    float b0, float b1, float b2,
-    float a1, float a2,
-    float zi1 = 0.0f, float zi2 = 0.0f
+    double b0, double b1, double b2,
+    double a1, double a2,
+    double zi1 = 0.0, double zi2 = 0.0
 ) {
     std::vector<float> output(input.size());
-    float z1 = zi1;
-    float z2 = zi2;
+    double z1 = zi1;
+    double z2 = zi2;
 
     for (size_t i = 0; i < input.size(); ++i) {
-        float x = input[i];
-        float y = b0 * x + z1;
+        double x = static_cast<double>(input[i]);
+        double y = b0 * x + z1;
         z1 = b1 * x - a1 * y + z2;
         z2 = b2 * x - a2 * y;
-        output[i] = y;
+        output[i] = static_cast<float>(y);
     }
     return output;
 }
@@ -154,24 +154,24 @@ std::vector<float> highPassFilterFiltfilt(
 ) {
     if (signal.size() < 9) return signal;
 
-    double wc = std::tan(std::numbers::pi * cutoffHz / sampleRateHz);
+    double wc = std::tan(std::numbers::pi * static_cast<double>(cutoffHz) / static_cast<double>(sampleRateHz));
     double wc2 = wc * wc;
     double sqrt2wc = std::sqrt(2.0) * wc;
     double k = 1.0 + sqrt2wc + wc2;
 
-    float b0 = static_cast<float>(1.0 / k);
-    float b1 = static_cast<float>(-2.0 / k);
-    float b2 = static_cast<float>(1.0 / k);
-    float a1 = static_cast<float>(2.0 * (wc2 - 1.0) / k);
-    float a2 = static_cast<float>((1.0 - sqrt2wc + wc2) / k);
+    double b0 = 1.0 / k;
+    double b1 = -2.0 / k;
+    double b2 = 1.0 / k;
+    double a1 = 2.0 * (wc2 - 1.0) / k;
+    double a2 = (1.0 - sqrt2wc + wc2) / k;
 
     // Initial conditions (lfilter_zi) for step response
     double sumA = 1.0 + a1 + a2;
-    float zi1 = static_cast<float>((b1 + b2 - (a1 + a2) * b0) / sumA);
-    float zi2 = static_cast<float>(b2 - a2 * b0 - a2 * zi1);
+    double zi1 = (b1 + b2 - (a1 + a2) * b0) / sumA;
+    double zi2 = b2 - a2 * b0 - a2 * zi1;
 
     // Reflection padding (odd extension)
-    int padlen = std::min(9, static_cast<int>(signal.size()) - 1);
+    int padlen = std::min(15, static_cast<int>(signal.size()) - 1);
     std::vector<float> padded(signal.size() + 2 * padlen);
     float x0 = signal[0];
     for (int i = 0; i < padlen; ++i) {
@@ -184,16 +184,16 @@ std::vector<float> highPassFilterFiltfilt(
     }
 
     // Forward pass
-    float z1_fwd = zi1 * padded[0];
-    float z2_fwd = zi2 * padded[0];
+    double z1_fwd = zi1 * static_cast<double>(padded[0]);
+    double z2_fwd = zi2 * static_cast<double>(padded[0]);
     std::vector<float> forward = applyIir(padded, b0, b1, b2, a1, a2, z1_fwd, z2_fwd);
 
     // Reverse
     std::reverse(forward.begin(), forward.end());
 
     // Backward pass
-    float z1_bwd = zi1 * forward[0];
-    float z2_bwd = zi2 * forward[0];
+    double z1_bwd = zi1 * static_cast<double>(forward[0]);
+    double z2_bwd = zi2 * static_cast<double>(forward[0]);
     std::vector<float> backward = applyIir(forward, b0, b1, b2, a1, a2, z1_bwd, z2_bwd);
 
     // Reverse back
@@ -334,8 +334,39 @@ std::vector<float> welchPsdSingleAxis(
         windowPowerSum += w * w;
     }
 
+    // Pass 1: Compute RMS energy for all candidate segments to establish baseline
+    std::vector<double> segmentRms;
+    int scanOffset = 0;
+    while (scanOffset + fftSize <= n) {
+        double sumSq = 0.0;
+        for (int i = 0; i < fftSize; ++i) {
+            double v = signal[scanOffset + i];
+            sumSq += v * v;
+        }
+        segmentRms.push_back(std::sqrt(sumSq / fftSize));
+        scanOffset += stepSize;
+    }
+
+    if (segmentRms.empty()) return std::vector<float>(freqBins, 0.0f);
+
+    // Robust Median and MAD of Segment RMS
+    std::vector<double> sortedRms = segmentRms;
+    std::sort(sortedRms.begin(), sortedRms.end());
+    double medianRms = sortedRms[sortedRms.size() / 2];
+
+    std::vector<double> deviations(sortedRms.size());
+    for (size_t i = 0; i < sortedRms.size(); ++i) {
+        deviations[i] = std::abs(sortedRms[i] - medianRms);
+    }
+    std::sort(deviations.begin(), deviations.end());
+    double madRms = deviations[deviations.size() / 2];
+
+    // Threshold: Reject segments with RMS > Median + 3.0 * (1.4826 * MAD)
+    double rmsThreshold = std::max(medianRms + 3.0 * (1.4826 * madRms), medianRms * 2.5);
+
     int segmentCount = 0;
     int offset = 0;
+    size_t segIdx = 0;
 
     auto& backend = fft::getDefaultBackend();
 
@@ -344,24 +375,48 @@ std::vector<float> welchPsdSingleAxis(
     std::vector<double> imag(fftSize);
 
     while (offset + fftSize <= n) {
-        for (int i = 0; i < fftSize; ++i) {
-            segment[i] = signal[offset + i];
+        double currentRms = segmentRms[segIdx++];
+        if (segmentRms.size() < 3 || currentRms <= rmsThreshold) {
+            for (int i = 0; i < fftSize; ++i) {
+                segment[i] = signal[offset + i];
+            }
+            detrendInPlace(segment);
+
+            std::fill(imag.begin(), imag.end(), 0.0);
+            for (int i = 0; i < fftSize; ++i) {
+                real[i] = segment[i] * window[i];
+            }
+
+            backend.fft(real.data(), imag.data(), fftSize);
+
+            for (int k = 0; k < freqBins; ++k) {
+                psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k];
+            }
+
+            segmentCount++;
         }
-        detrendInPlace(segment);
-
-        std::fill(imag.begin(), imag.end(), 0.0);
-        for (int i = 0; i < fftSize; ++i) {
-            real[i] = segment[i] * window[i];
-        }
-
-        backend.fft(real.data(), imag.data(), fftSize);
-
-        for (int k = 0; k < freqBins; ++k) {
-            psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k];
-        }
-
-        segmentCount++;
         offset += stepSize;
+    }
+
+    // Safety fallback: if all segments were gated, accumulate without gating
+    if (segmentCount == 0) {
+        offset = 0;
+        while (offset + fftSize <= n) {
+            for (int i = 0; i < fftSize; ++i) {
+                segment[i] = signal[offset + i];
+            }
+            detrendInPlace(segment);
+            std::fill(imag.begin(), imag.end(), 0.0);
+            for (int i = 0; i < fftSize; ++i) {
+                real[i] = segment[i] * window[i];
+            }
+            backend.fft(real.data(), imag.data(), fftSize);
+            for (int k = 0; k < freqBins; ++k) {
+                psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k];
+            }
+            segmentCount++;
+            offset += stepSize;
+        }
     }
 
     std::vector<float> psd(freqBins, 0.0f);

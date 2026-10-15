@@ -10,6 +10,8 @@ import com.ronin.phoneshm.core.storage.RawSampleStorageEngine
 import com.ronin.phoneshm.core.storage.StorageFormat
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.PowerManager
 import java.io.File
 import kotlin.math.sqrt
@@ -17,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +38,9 @@ class AndroidVibrationSensorEngine(
             close(IllegalStateException("No accelerometer found on this device"))
             return@callbackFlow
         }
+
+        val handlerThread = HandlerThread("PhoneSHM-SensorThread").apply { start() }
+        val handler = Handler(handlerThread.looper)
 
         // Target sampling period in microseconds
         val samplingPeriodUs = 1_000_000 / targetHz
@@ -57,12 +63,13 @@ class AndroidVibrationSensorEngine(
         // Request zero batching / immediate delivery from HAL (maxReportLatencyUs = 0)
         // Disables OS sensor FIFO batching during extended background/foreground sessions
         val maxReportLatencyUs = 0
-        sensorManager.registerListener(listener, accelerometer, samplingPeriodUs, maxReportLatencyUs)
+        sensorManager.registerListener(listener, accelerometer, samplingPeriodUs, maxReportLatencyUs, handler)
 
         awaitClose {
             sensorManager.unregisterListener(listener)
+            handlerThread.quitSafely()
         }
-    }
+    }.buffer(4096)
 
     override suspend fun recordSession(
         sessionId: String,
@@ -81,7 +88,8 @@ class AndroidVibrationSensorEngine(
         phonePlacement: String?,
         durationSec: Int,
         sessionNoiseFloorMg: Float?,
-        sessionAccelerometerBias: FloatArray?
+        sessionAccelerometerBias: FloatArray?,
+        onSampleReceived: ((sample: AccelerationSample, totalCount: Int) -> Unit)?
     ): MeasurementSessionMetadata = withContext(Dispatchers.Default) {
         val capabilityReport = deviceCapabilityEngine.inspectDeviceCapabilities()
         val recordedAtEpochMs = System.currentTimeMillis()
@@ -104,19 +112,22 @@ class AndroidVibrationSensorEngine(
 
         try {
             val samples = mutableListOf<AccelerationSample>()
-        val hardwareTimestamps = mutableListOf<Long>()
-        val systemArrivalTimesNs = mutableListOf<Long>()
+            val hardwareTimestamps = mutableListOf<Long>()
+            val systemArrivalTimesNs = mutableListOf<Long>()
+            var sampleCounter = 0
 
-        val flow = startStreaming(100)
+            val flow = startStreaming(100)
 
-        val streamingJob = launch {
-            flow.collect { sample ->
-                val sysTime = System.nanoTime()
-                synchronized(samples) {
-                    samples.add(sample)
-                    hardwareTimestamps.add(sample.timestampNs)
-                    systemArrivalTimesNs.add(sysTime)
-                }
+            val streamingJob = launch {
+                flow.collect { sample ->
+                    val sysTime = System.nanoTime()
+                    sampleCounter++
+                    onSampleReceived?.invoke(sample, sampleCounter)
+                    synchronized(samples) {
+                        samples.add(sample)
+                        hardwareTimestamps.add(sample.timestampNs)
+                        systemArrivalTimesNs.add(sysTime)
+                    }
 
                 // Batch write to storage file
                 var batchToWrite: List<AccelerationSample>? = null

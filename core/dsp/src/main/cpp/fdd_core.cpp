@@ -9,8 +9,8 @@
 namespace phoneshm {
 namespace dsp {
 
-using Matrix3cdSafe = Eigen::Matrix<std::complex<double>, 3, 3, Eigen::DontAlign>;
-using Vector3cdSafe = Eigen::Matrix<std::complex<double>, 3, 1, Eigen::DontAlign>;
+using Matrix2cdSafe = Eigen::Matrix<std::complex<double>, 2, 2, Eigen::DontAlign>;
+using Vector2cdSafe = Eigen::Matrix<std::complex<double>, 2, 1, Eigen::DontAlign>;
 
 FddResult calculateFdd(
     const std::vector<AccelerationSample>& samples,
@@ -49,15 +49,14 @@ FddResult calculateFdd(
         result.frequencies[i] = i * sampleRateHz / fftSize;
     }
 
-    std::vector<float> rawX(usableN), rawY(usableN), rawZ(usableN);
+    std::vector<float> rawX(usableN), rawY(usableN);
     for (int i = 0; i < usableN; ++i) {
         const auto& s = gravResult.gravityFreeSamples[i + settlingN];
-        rawX[i] = s.x; rawY[i] = s.y; rawZ[i] = s.z;
+        rawX[i] = s.x; rawY[i] = s.y;
     }
 
     auto filtX = highPassFilterFiltfilt(rawX, sampleRateHz, 0.5f);
     auto filtY = highPassFilterFiltfilt(rawY, sampleRateHz, 0.5f);
-    auto filtZ = highPassFilterFiltfilt(rawZ, sampleRateHz, 0.5f);
 
     int stepSize = static_cast<int>(fftSize * (1.0f - overlapPct));
     if (stepSize < 1) stepSize = 1;
@@ -70,60 +69,111 @@ FddResult calculateFdd(
         windowPowerSum += window[i] * window[i];
     }
 
-    // CSD matrices for each frequency bin: 3x3 complex matrix (safe alignment)
-    std::vector<Matrix3cdSafe> G(freqBins, Matrix3cdSafe::Zero());
+    // Pass 1: Compute RMS energy for all candidate segments to establish baseline
+    std::vector<double> segmentRms;
+    int scanOffset = 0;
+    while (scanOffset + fftSize <= usableN) {
+        double sumSq = 0.0;
+        for (int i = 0; i < fftSize; ++i) {
+            double vx = filtX[scanOffset + i];
+            double vy = filtY[scanOffset + i];
+            sumSq += vx * vx + vy * vy;
+        }
+        segmentRms.push_back(std::sqrt(sumSq / (2.0 * fftSize)));
+        scanOffset += stepSize;
+    }
+
+    if (segmentRms.empty()) return result;
+
+    std::vector<double> sortedRms = segmentRms;
+    std::sort(sortedRms.begin(), sortedRms.end());
+    double medianRms = sortedRms[sortedRms.size() / 2];
+
+    std::vector<double> deviations(sortedRms.size());
+    for (size_t i = 0; i < sortedRms.size(); ++i) {
+        deviations[i] = std::abs(sortedRms[i] - medianRms);
+    }
+    std::sort(deviations.begin(), deviations.end());
+    double madRms = deviations[deviations.size() / 2];
+
+    // Threshold: Reject segments with RMS > Median + 3.0 * (1.4826 * MAD)
+    double rmsThreshold = std::max(medianRms + 3.0 * (1.4826 * madRms), medianRms * 2.5);
+
+    // CSD matrices for each frequency bin: 2x2 complex matrix for horizontal sway
+    std::vector<Matrix2cdSafe> G(freqBins, Matrix2cdSafe::Zero());
     int segmentCount = 0;
     int offset = 0;
+    size_t segIdx = 0;
 
     std::vector<double> realX(fftSize), imagX(fftSize);
     std::vector<double> realY(fftSize), imagY(fftSize);
-    std::vector<double> realZ(fftSize), imagZ(fftSize);
 
     while (offset + fftSize <= usableN) {
-        for (int i = 0; i < fftSize; ++i) {
-            realX[i] = filtX[offset + i] * window[i]; imagX[i] = 0.0;
-            realY[i] = filtY[offset + i] * window[i]; imagY[i] = 0.0;
-            realZ[i] = filtZ[offset + i] * window[i]; imagZ[i] = 0.0;
+        double currentRms = segmentRms[segIdx++];
+        if (segmentRms.size() < 3 || currentRms <= rmsThreshold) {
+            for (int i = 0; i < fftSize; ++i) {
+                realX[i] = filtX[offset + i] * window[i]; imagX[i] = 0.0;
+                realY[i] = filtY[offset + i] * window[i]; imagY[i] = 0.0;
+            }
+
+            detrendInPlace(realX);
+            detrendInPlace(realY);
+
+            phoneshm::fft::getDefaultBackend().fft(realX.data(), imagX.data(), fftSize);
+            phoneshm::fft::getDefaultBackend().fft(realY.data(), imagY.data(), fftSize);
+
+            for (int k = 0; k < freqBins; ++k) {
+                std::complex<double> X(realX[k], imagX[k]);
+                std::complex<double> Y(realY[k], imagY[k]);
+
+                // Build 2x2 G(f) outer product: [X Y]^T * conj([X Y])
+                G[k](0, 0) += X * std::conj(X);
+                G[k](0, 1) += X * std::conj(Y);
+                G[k](1, 0) += Y * std::conj(X);
+                G[k](1, 1) += Y * std::conj(Y);
+            }
+
+            segmentCount++;
         }
-
-        detrendInPlace(realX);
-        detrendInPlace(realY);
-        detrendInPlace(realZ);
-
-        phoneshm::fft::getDefaultBackend().fft(realX.data(), imagX.data(), fftSize);
-        phoneshm::fft::getDefaultBackend().fft(realY.data(), imagY.data(), fftSize);
-        phoneshm::fft::getDefaultBackend().fft(realZ.data(), imagZ.data(), fftSize);
-
-        for (int k = 0; k < freqBins; ++k) {
-            std::complex<double> X(realX[k], imagX[k]);
-            std::complex<double> Y(realY[k], imagY[k]);
-            std::complex<double> Z(realZ[k], imagZ[k]);
-
-            // Build G(f) outer product: [X Y Z]^T * conj([X Y Z])
-            G[k](0, 0) += X * std::conj(X);
-            G[k](0, 1) += X * std::conj(Y);
-            G[k](0, 2) += X * std::conj(Z);
-            
-            G[k](1, 0) += Y * std::conj(X);
-            G[k](1, 1) += Y * std::conj(Y);
-            G[k](1, 2) += Y * std::conj(Z);
-
-            G[k](2, 0) += Z * std::conj(X);
-            G[k](2, 1) += Z * std::conj(Y);
-            G[k](2, 2) += Z * std::conj(Z);
-        }
-
-        segmentCount++;
         offset += stepSize;
+    }
+
+    // Safety fallback: if all segments were gated, accumulate without gating
+    if (segmentCount == 0) {
+        offset = 0;
+        while (offset + fftSize <= usableN) {
+            for (int i = 0; i < fftSize; ++i) {
+                realX[i] = filtX[offset + i] * window[i]; imagX[i] = 0.0;
+                realY[i] = filtY[offset + i] * window[i]; imagY[i] = 0.0;
+            }
+            detrendInPlace(realX);
+            detrendInPlace(realY);
+
+            phoneshm::fft::getDefaultBackend().fft(realX.data(), imagX.data(), fftSize);
+            phoneshm::fft::getDefaultBackend().fft(realY.data(), imagY.data(), fftSize);
+
+            for (int k = 0; k < freqBins; ++k) {
+                std::complex<double> X(realX[k], imagX[k]);
+                std::complex<double> Y(realY[k], imagY[k]);
+
+                G[k](0, 0) += X * std::conj(X);
+                G[k](0, 1) += X * std::conj(Y);
+                G[k](1, 0) += Y * std::conj(X);
+                G[k](1, 1) += Y * std::conj(Y);
+            }
+
+            segmentCount++;
+            offset += stepSize;
+        }
     }
 
     if (segmentCount == 0) return result;
 
     float normFactor = 1.0f / (sampleRateHz * windowPowerSum * segmentCount);
 
-    std::vector<Vector3cdSafe> modeShapes(freqBins);
+    std::vector<Vector2cdSafe> modeShapes(freqBins);
 
-    // SVD on each G(k)
+    // SVD on each 2x2 G(k)
     for (int k = 0; k < freqBins; ++k) {
         // Normalize
         G[k] *= normFactor;
@@ -131,7 +181,7 @@ FddResult calculateFdd(
             G[k] *= 2.0; // One-sided spectrum compensation
         }
 
-        Eigen::JacobiSVD<Matrix3cdSafe> svd(G[k], Eigen::ComputeFullU);
+        Eigen::JacobiSVD<Matrix2cdSafe> svd(G[k], Eigen::ComputeFullU);
         auto singularValues = svd.singularValues(); // sorted in decreasing order
         float sv1 = static_cast<float>(singularValues(0));
         if (std::isnan(sv1) || std::isinf(sv1) || sv1 < 0.0f) {
@@ -162,9 +212,9 @@ FddResult calculateFdd(
         }
         
         if (k > 0) {
-            Vector3cdSafe refShape = modeShapes[k];
+            Vector2cdSafe refShape = modeShapes[k];
             
-            auto computeMAC = [](const Vector3cdSafe& u1, const Vector3cdSafe& u2) {
+            auto computeMAC = [](const Vector2cdSafe& u1, const Vector2cdSafe& u2) {
                 return static_cast<float>(std::norm(u1.dot(u2)));
             };
 
@@ -203,15 +253,23 @@ FddResult calculateFdd(
             
             // 4. Extract Free Decay Envelope Peaks
             std::vector<double> peakTimes, peakVals;
-            peakTimes.push_back(0.0);
-            peakVals.push_back(realX[0]);
+            double firstPeakVal = -1.0;
             
             for (int i = 1; i < fftSize / 2 - 1; ++i) {
                 if (realX[i] > realX[i-1] && realX[i] > realX[i+1] && realX[i] > 0) {
-                    peakTimes.push_back(i / sampleRateHz);
+                    if (firstPeakVal < 0.0) {
+                        firstPeakVal = realX[i];
+                    }
+                    peakTimes.push_back(static_cast<double>(i) / sampleRateHz);
                     peakVals.push_back(realX[i]);
-                    if (realX[i] < 0.1 * realX[0] || peakVals.size() > 15) break;
+                    // Compare against 0.15 * firstPeakVal instead of realX[0] to avoid premature cutoff
+                    if (firstPeakVal > 0.0 && realX[i] < 0.15 * firstPeakVal) break;
+                    if (peakVals.size() >= 15) break;
                 }
+            }
+            if (peakVals.size() < 3 && firstPeakVal > 0.0) {
+                peakTimes.insert(peakTimes.begin(), 0.0);
+                peakVals.insert(peakVals.begin(), std::max(firstPeakVal, realX[0]));
             }
             
             // 5. Log-decrement linear regression
@@ -229,13 +287,13 @@ FddResult calculateFdd(
                     double slope = (n_peaks * sumXY - sumX * sumY) / denom;
                     double omega_n = 2.0 * std::numbers::pi * p.frequencyHz;
                     mode.dampingRatio = static_cast<float>(-slope / omega_n);
-                    if (mode.dampingRatio < 0) mode.dampingRatio = 0.01f;
+                    if (mode.dampingRatio < 0.001f) mode.dampingRatio = 0.01f;
+                    if (mode.dampingRatio > 0.20f) mode.dampingRatio = 0.20f;
                 }
             }
         }
         result.modes.push_back(mode);
     }
-
 
     return result;
 }
