@@ -8,7 +8,7 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?style=flat&logo=c%2B%2B)](https://isocpp.org)
 [![Eigen](https://img.shields.io/badge/Eigen-3.4.0-red.svg?style=flat)](https://eigen.tuxfamily.org)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20%7C%20Material%203-4285F4.svg?style=flat&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Room DB](https://img.shields.io/badge/Database-Room%20v7%20(Schema%20Exported)-009688.svg?style=flat)](https://developer.android.com/training/data-storage/room)
+[![Room DB](https://img.shields.io/badge/Database-Room%20v8%20(Schema%20Exported)-009688.svg?style=flat)](https://developer.android.com/training/data-storage/room)
 [![Build Status](https://img.shields.io/badge/Tests-335%20Passed-brightgreen.svg?style=flat)](#testing--verification)
 
 [App User Guide](docs/APP_USER_GUIDE.md) • [Architecture](docs/ARCHITECTURE.md) • [DSP & OMA Specification](docs/DSP_AND_MODAL_ANALYSIS.md) • [Baseline & Physics](docs/BASELINE_AND_PHYSICS.md) • [Data Formats](docs/DATA_FORMATS.md) • [🇲🇲 မြန်မာဘာသာ](docs/my/README_MY.md)
@@ -27,12 +27,14 @@ Ambient environmental vibrations (wind excitation, micro-tremors, traffic loadin
 
 ## ⚡ Key Capabilities
 
-### 1. Tri-Engine Operational Modal Analysis (OMA)
-To reliably identify fundamental resonant frequencies ($f_0$) and mode shapes without artificial actuators, PhoneSHM runs three complementary algorithms in parallel:
-- **Welch Power Spectral Density (PSD)**: Averaged modified periodogram with $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic sub-bin interpolation, Median + 3*MAD non-stationary segment gating, and zero-allocation C++ scratch buffers.
-- **Enhanced Frequency Domain Decomposition (EFDD)**: High-performance C++ JNI bridge using Eigen 3.4 SVD. Decouples horizontal sway into a $2 \times 2$ cross-spectral density matrix $\mathbf{G}_{xy}(f)$ (eliminating vertical slab mode interference), extracts the azimuth-invariant first singular value line spectrum ($\sigma_1$), and estimates damping ratios ($\zeta$) via logarithmic decrement.
+### 1. Tri-Engine Operational Modal Analysis (OMA) & Single-Node Roving Mode Shapes
+To reliably identify fundamental resonant frequencies ($f_0, f_1$), damping ratios ($\zeta_0$), and multi-floor mode shapes without artificial actuators, PhoneSHM runs three complementary algorithms in parallel alongside single-node spatial extensions:
+- **Jitter-Compensated Resampling & Gap-Mask Gating**: Resamples non-uniform hardware timestamps onto a uniform $100.0\text{ Hz}$ grid using Fritsch-Carlson Monotone Cubic Hermite (`PCHIP_CUBIC`) interpolation for gaps $\le 50\text{ ms}$, linear bridging with explicit `gapMask` tagging for gaps $> 50\text{ ms}$, and strict rejection of any FFT window containing bridged dropout samples.
+- **Welch Power Spectral Density (PSD) & Transient Time-Frequency Analysis**: Averaged modified periodogram with $1024$-point FFT, $50\%$ Hanning overlap, logarithmic parabolic sub-bin interpolation, and Median + 3*MAD non-stationary segment gating. High-energy gated segments are analyzed via a $256$-point STFT spectrogram ($75\%$ overlap) and a Depth $J=4$ ($16$-subband, $0\text{–}50\text{ Hz}$) Daubechies `db4` Wavelet Packet Transform (WPT) with normalized Shannon Wavelet Entropy ($S_{\text{wpt}}$) to classify structural shocks vs. ambient noise.
+- **Enhanced Frequency Domain Decomposition (EFDD) & Tri-Axial Coherence**: High-performance C++ JNI bridge using Eigen 3.4 SVD. Accumulates the full $3 \times 3$ Hermitian Cross-Spectral Density matrix $\mathbf{G}_{3\times 3}(f_k)$ alongside the $2 \times 2$ horizontal sway SVD ($\sigma_1(f_k), \mathbf{u}_1(f_k)$). Computes division-by-zero guarded coherences ($\gamma_{xy}^2, \gamma_{xz}^2, \gamma_{yz}^2$), Horizontal-to-Vertical ratio ($\sigma_1 / S_{zz}$), SVD sway azimuth ($\theta_{\text{sway}}$), and an **Axis-Aligned Sway Gate** ($\sigma_1 / S_{zz} > 3.0$, $\gamma_{xz}^2 \le 0.35$, $\gamma_{yz}^2 \le 0.35$) that preserves 1D axis-aligned sway while rejecting vertical slab bounce.
+- **Single-Node Roving Mode Shape Synthesis**: Synthesizes normalized multi-floor building mode shapes ($\phi(\text{Roof}) = 1.0$) and inter-story drift ratios across sequential single-phone floor sessions (`RovingModeShapeEngine`) using stationary broadband RMS variance as an ambient excitation proxy and SVD azimuth cosine phase alignment.
 - **Multi-Channel RDT-SSI (Time Domain)**: Multi-channel Random Decrement Technique (10 positive-slope trigger levels) extracting free decay signatures, followed by Block Hankel SVD Stochastic Subspace Identification to extract state-space continuous poles.
-- **Tri-Engine Consensus Engine**: Autonomous clustering across Welch, EFDD, and SSI candidates using a $5\%$ structural tolerance window, yielding explicit consensus states (`AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT`).
+- **Tri-Engine Consensus Engine with Uncertainty**: Autonomous clustering across Welch, EFDD, and SSI candidates using a $5\%$ structural tolerance window, yielding explicit consensus states (`AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT`) along with inter-engine consensus variance ($\sigma_{\text{consensus}}^2$) and uncertainty ratio ($\%$).
 
 ### 2. Physics-Based Structural Validation
 Detected frequencies are checked against empirical structural dynamics formulas for building archetypes (Reinforced Concrete, Steel Frame, Timber/Wood, and Masonry Shear Walls) to categorize modes into:
@@ -40,11 +42,10 @@ Detected frequencies are checked against empirical structural dynamics formulas 
 - `LOCAL_MODE`: Floor diaphragm bending or localized component vibration.
 - `SENSOR_ARTIFACT`: Electrical mains hum ($50\text{Hz}/60\text{Hz}$), high-frequency motor noise, or DC drift.
 
-### 3. Longitudinal Baseline & Environmental Stratification
-- **Online Welford Statistics**: Maintains running mean ($\mu$) and standard deviation ($\sigma$) with zero unbounded memory growth.
-- **Baseline Lifecycle**: 10-session calibration baseline followed by active operational monitoring.
-- **Anomaly Protection**: Automatically flags structural frequency shifts $|\Delta f_0\%| > 5.0\%$ and excludes anomalous sessions from contaminating healthy baseline statistics.
-- **Thermal Stratification**: Records battery temperature (ambient proxy) and diurnal time windows (`MORNING`, `AFTERNOON`, `EVENING`, `NIGHT`) to eliminate false alarms caused by seasonal and diurnal thermal expansion cycles.
+### 3. Longitudinal Multi-Mode Baseline & Welford Thermal Drift Compensation
+- **Online Multi-Mode Welford Statistics**: Maintains running means and variances for $f_0$, $f_1$, $\zeta_0$, and orthogonal horizontal axes ($f_{0,x}, f_{0,y}$) with zero unbounded memory growth.
+- **Baseline Lifecycle & Anomaly-First Verification**: 10-session calibration baseline followed by active operational monitoring. Evaluates thermal-compensated frequency shifts ($|\Delta \hat{f}_0\%| > 5.0\%$) *before* updating baseline statistics so anomalous sessions never contaminate healthy baseline or thermal states.
+- **Numerically Stable Welford Co-Moment Thermal Regression**: Tracks running temperature mean ($\mu_T$), variance ($M_{2,T}$), and temperature-frequency co-moment ($C_{T, f_0}$) free of catastrophic floating-point cancellation, estimating thermal sensitivity $k_T = C_{T, f_0} / M_{2,T}$ ($\text{Hz}/^\circ\text{C}$) once $n_T \ge 10$ and $M_{2,T} > 10^{-4}$ alongside diurnal time windows (`MORNING`, `AFTERNOON`, `EVENING`, `NIGHT`).
 
 ### 4. Zero ANR Concurrency & Hardware Precision
 - **Threading Separation & Dedicated Sensor Thread**: DSP calculations and JNI matrix decompositions run exclusively on `Dispatchers.Default`, file and database operations on `Dispatchers.IO`, and Compose UI on `Dispatchers.Main`. Hardware sensor acquisition runs on a dedicated background `HandlerThread("PhoneSHM-SensorThread")` with a 4096-sample buffer and 100ms throttled UI streaming.
@@ -82,7 +83,7 @@ graph TD
         Location[":core:location"]
         Audio[":core:audio"]
         Storage[":core:storage"]
-        Database[":core:database (Room v7)"]
+        Database[":core:database (Room v8)"]
     end
 
     App --> FeatureModules
@@ -112,12 +113,12 @@ ronin_shm/
 ├── app/                  # Application host, MainActivity, Compose NavHost
 ├── core/
 │   ├── audio/            # Circular RAM buffer for acoustic context
-│   ├── baseline/         # Longitudinal Welford baseline manager & anomaly engine
-│   ├── database/         # Room Database (v7) with schema export & migrations
+│   ├── baseline/         # Longitudinal Welford baseline, thermal drift & anomaly engine
+│   ├── database/         # Room Database (v8) with schema export & migrations
 │   ├── device/           # Zero-velocity calibration & capability classification
-│   ├── dsp/              # C++20 native DSP (Eigen SVD, Welch, EFDD, RDT-SSI, JNI)
+│   ├── dsp/              # C++20 native DSP (Eigen SVD, Welch, EFDD, RDT-SSI, WPT/STFT, JNI)
 │   ├── location/         # Privacy-tier LocationResolver & building_hash generator
-│   ├── modal/            # Peak finder, sub-bin interpolation & ModalConsensusEngine
+│   ├── modal/            # Peak finder, ModalConsensusEngine & RovingModeShapeEngine
 │   ├── physics/          # Civil engineering period heuristics & plausibility rules
 │   ├── quality/          # 4-factor measurement quality score fusion
 │   ├── sensor/           # 100Hz hardware sensor engine, jitter & clock drift
@@ -145,8 +146,8 @@ ronin_shm/
 | :--- | :--- | :--- |
 | **Language** | Kotlin 1.9.24 / C++20 | Modern idiomatic Kotlin with coroutines & native C++ math routines. |
 | **UI Framework** | Jetpack Compose | Material 3, Navigation state preservation (`rememberSaveable`, `BackHandler`). |
-| **DSP / Math** | Eigen 3.4.0 / KissFFT | Native SVD (`BDCSVD`), thin decomposition, and zero-allocation scratch buffers. |
-| **Database** | Room v7 (SQLite) | B-tree indexed queries, foreign keys, schema JSON export, non-destructive migrations. |
+| **DSP / Math** | Eigen 3.4.0 / KissFFT | Native SVD (`BDCSVD`, `JacobiSVD`), Daubechies `db4` WPT, STFT, and zero-allocation scratch buffers. |
+| **Database** | Room v8 (SQLite) | B-tree indexed queries, foreign keys, schema JSON export, non-destructive migrations (`MIGRATION_7_8`). |
 | **Cloud Sync** | Firebase Firestore / Storage | UID-authenticated session sync and deletion requests. |
 | **Minimum SDK** | Android 8.0 (API 26) | Target SDK 34 (Android 14). |
 
@@ -190,10 +191,12 @@ cmake --version
 ## 🧪 Testing & Verification
 
 PhoneSHM enforces strict unit and integration test coverage across all 14 modules:
-- **Modal Consensus Suite**: [`ModalConsensusEngineTest.kt`](core/modal/src/test/kotlin/com/ronin/phoneshm/core/modal/ModalConsensusEngineTest.kt) validates `AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT`, and multi-mode cluster selection.
-- **Baseline Lifecycle Suite**: Validates Welford running variance, 10-session calibration transitions, and $\pm 5\%$ anomaly alerts.
-- **Physics Rule Suite**: Validates structural period envelopes across Concrete, Steel, Wood, and Masonry models.
-- **Hardware Metrics Suite**: Validates monotonic timestamp enforcement, jitter std deviation, and clock drift PPM.
+- **DSP Resampling & Gap-Mask Gating Suite**: [`ResamplingContinuityTest.kt`](core/dsp/src/test/kotlin/com/ronin/phoneshm/core/dsp/ResamplingContinuityTest.kt), [`ParsevalTest.kt`](core/dsp/src/test/kotlin/com/ronin/phoneshm/core/dsp/ParsevalTest.kt), and [`XiaomiGapDiagnosticTest.kt`](core/dsp/src/test/kotlin/com/ronin/phoneshm/core/dsp/XiaomiGapDiagnosticTest.kt) validate PCHIP cubic resampling, $50\text{ ms}$ gap detection, and `gapMask` FFT window rejection.
+- **Transient Time-Frequency Suite**: [`TransientTimeFrequencyTest.kt`](core/dsp/src/test/kotlin/com/ronin/phoneshm/core/dsp/TransientTimeFrequencyTest.kt) validates Daubechies `db4` WPT subband energy, Shannon entropy $\ln(0)$ guards, STFT spectrograms, and safe float sample-index timestamp reconstruction.
+- **Tri-Axial Coherence & Roving Mode Shape Suite**: [`TriAxialCoherenceTest.kt`](core/dsp/src/test/kotlin/com/ronin/phoneshm/core/dsp/TriAxialCoherenceTest.kt) and [`RovingModeShapeEngineTest.kt`](core/modal/src/test/kotlin/com/ronin/phoneshm/core/modal/RovingModeShapeEngineTest.kt) validate $3 \times 3$ CSD coherence, Axis-Aligned Sway Gate, SVD azimuth extraction, and ambient-variance-normalized multi-floor mode shapes.
+- **Modal Consensus & Uncertainty Suite**: [`ModalConsensusEngineTest.kt`](core/modal/src/test/kotlin/com/ronin/phoneshm/core/modal/ModalConsensusEngineTest.kt) validates `AGREED`, `PARTIAL`, `DISAGREED`, `INSUFFICIENT`, consensus variance, and uncertainty ratios.
+- **Thermal Baseline & Lifecycle Suite**: [`ThermalBaselineManagerEngineTest.kt`](core/baseline/src/test/kotlin/com/ronin/phoneshm/core/baseline/ThermalBaselineManagerEngineTest.kt) and [`BaselineManagerEngineTest.kt`](core/baseline/src/test/kotlin/com/ronin/phoneshm/core/baseline/BaselineManagerEngineTest.kt) validate Welford co-moment thermal sensitivity ($k_T$), zero-variance guards, and anomaly-first verification.
+- **Physics Rule & Hardware Metrics Suites**: Validate structural period envelopes across Concrete, Steel, Wood, and Masonry models, monotonic timestamp enforcement, jitter std deviation, and clock drift PPM.
 
 Run the test suite across all modules:
 ```bash

@@ -44,7 +44,7 @@ graph TD
         Location[":core:location"]
         Audio[":core:audio"]
         Storage[":core:storage"]
-        Database[":core:database (Room v7)"]
+        Database[":core:database (Room v8)"]
     end
 
     App --> UI
@@ -76,15 +76,15 @@ graph TD
 | `:feature:measurement` | $100\text{ Hz}$ တိုက်ရိုက်တုန်ခါမှု တိုင်းတာခြင်း HUD၊ Live RMS Level နှင့် သီးခြား Sensor Calibration။ |
 | `:feature:analysis` | Tri-Engine Modal Execution (Welch + EFDD + RDT-SSI)၊ Consensus ရလဒ်နှင့် Baseline Anomaly စစ်ဆေးမှု UI။ |
 | `:feature:report` | ပြည်သူလူထုသုံး အနှစ်ချုပ်နှင့် အင်ဂျင်နီယာသုံး အသေးစိတ် Spectrum/SVD အစီရင်ခံစာ။ |
-| `:core:dsp` | C++20 / JNI / Eigen 3.4 SVD Math Engine၊ Welch PSD၊ EFDD နှင့် Multi-Channel RDT-SSI။ |
-| `:core:modal` | Peak extraction၊ Parabolic interpolation၊ Adaptive persistence နှင့် Modal Consensus Engine။ |
+| `:core:dsp` | C++20 / JNI / Eigen 3.4 SVD Math Engine၊ PCHIP resampling နှင့် gap-mask gating၊ Welch PSD၊ $3 \times 3$ CSD EFDD + Axis-Aligned Sway Gate၊ Daubechies `db4` WPT + STFT transient analysis နှင့် Multi-Channel RDT-SSI။ |
+| `:core:modal` | Peak extraction၊ Parabolic interpolation၊ Modal Consensus Engine (variance/uncertainty) နှင့် `RovingModeShapeEngine` အထပ်လိုက် Mode Shape တွက်ချက်မှု။ |
 | `:core:physics` | Eurocode / ASCE အဆောက်အအုံ အမြင့်နှင့် ကြိမ်နှုန်းဆိုင်ရာ ညီမျှခြင်းများ ($T = C_t H^{3/4}$)။ |
-| `:core:baseline` | Welford Online Algorithm ($\mu, \sigma$)၊ ၁၀ ကြိမ်မြောက် Baseline တည်ဆောက်မှုနှင့် $\pm 5\%$ Anomaly စစ်ဆေးမှု။ |
+| `:core:baseline` | Multi-mode Welford Online Algorithm ($f_0, f_1, \zeta_0, f_{0,x}, f_{0,y}$)၊ Anomaly-first စစ်ဆေးမှု ($\pm 5\%$) နှင့် Welford co-moment thermal drift ထိန်းညှိမှု ($k_T$)။ |
 | `:core:quality` | အချက် ၄ ချက်ပါ တိုင်းတာမှုအရည်အသွေး (Sensor, Noise, Coupling, Peak prominence) ပေါင်းစပ်တွက်ချက်မှု။ |
 | `:core:sensor` | Hardware sensor မှ တုန်ခါမှုဒေတာဖမ်းယူခြင်း၊ Monotonic timestamp စစ်ဆေးခြင်းနှင့် Clock drift PPM တွက်ချက်ခြင်း။ |
 | `:core:device` | ၃ စက္ကန့် Static calibration၊ Noise floor (mg) တွက်ချက်ခြင်းနှင့် Quality tier သတ်မှတ်ခြင်း။ |
 | `:core:storage` | Compact Binary format (`.bin`) သို့ 20-byte sample frames များ စဉ်ဆက်မပြတ် ရေးသားသိမ်းဆည်းခြင်း။ |
-| `:core:database` | Room Database (Version 7)၊ B-tree indices များ နှင့် ဒေတာမဆုံးရှုံးစေသော `MIGRATION_6_7`။ |
+| `:core:database` | Room Database (Version 8)၊ B-tree indices များ နှင့် ဒေတာမဆုံးရှုံးစေသော `MIGRATION_6_7`, `MIGRATION_7_8`။ |
 | `:core:location` | Privacy-preserving GPS resolver နှင့် အဆောက်အအုံဆိုင်ရာ immutable SHA-256 `building_hash`။ |
 | `:core:audio` | အသံဖိုင်အစိမ်း မသိမ်းဆည်းဘဲ တုန်ခါချိန်ပတ်ဝန်းကျင် အသံအခြေအနေကို RAM Buffer ထဲတွင်သာ စစ်ဆေးခြင်း။ |
 
@@ -117,7 +117,7 @@ UI ထစ်ငေါ့ခြင်းနှင့် ANR (App Not Responding) 
 
 ---
 
-## ၄။ ဒေတာဘေ့စ် ဖွဲ့စည်းပုံ (Room Database Version 7)
+## ၄။ ဒေတာဘေ့စ် ဖွဲ့စည်းပုံ (Room Database Version 8)
 
 ```mermaid
 erDiagram
@@ -147,6 +147,9 @@ erDiagram
         string buildingHash FK "COMPOSITE INDEX"
         long timestampMs "COMPOSITE INDEX"
         double fundamentalFrequencyHz
+        double secondModeFrequencyHz
+        double dampingRatioZeta0
+        double consensusVariance
         boolean isAnomaly
         string timeOfDay
         float batteryTemperature
@@ -154,3 +157,4 @@ erDiagram
 ```
 
 - **Version 7 အဆင့်မြှင့်တင်မှု**: `MeasurementProfileEntity(buildingId)` ပေါ်တွင် B-tree index နှင့် `BaselineHistoryEntity(buildingHash, timestampMs)` ပေါ်တွင် composite index ထည့်သွင်းထားပြီး ဒေတာများ မပျက်စီးစေဘဲ `MIGRATION_6_7` ဖြင့် အောင်မြင်စွာ ရွှေ့ပြောင်းနိုင်ပါသည်။
+- **Version 8 အဆင့်မြှင့်တင်မှု**: `MIGRATION_7_8` ဖြင့် `BaselineProfileEntity` နှင့် `BaselineHistoryEntity` တို့တွင် multi-mode Welford states ($f_1, \zeta_0, f_{0,x}, f_{0,y}$)၊ consensus variance ($\sigma_{\text{consensus}}^2$) နှင့် တည်ငြိမ်သော Welford co-moment thermal states (`meanTempC`, `m2Temp`, `coMomentTempF0`, `tempSampleCount`, `thermalSensitivityHzPerC`) တို့ကို တိုးချဲ့ထည့်သွင်းထားပါသည်။

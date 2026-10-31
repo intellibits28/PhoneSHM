@@ -8,6 +8,7 @@ import com.ronin.phoneshm.core.baseline.BaselineComparisonResult
 import com.ronin.phoneshm.core.baseline.BaselineManagerEngine
 import com.ronin.phoneshm.core.baseline.DefaultBaselineManagerEngine
 import com.ronin.phoneshm.core.dsp.DspEngine
+import com.ronin.phoneshm.core.dsp.InterpolationMethod
 import com.ronin.phoneshm.core.dsp.MultiAxisSpectrumResult
 import com.ronin.phoneshm.core.dsp.WelchPsdEngine
 import com.ronin.phoneshm.core.dsp.WelchPsdParameters
@@ -190,8 +191,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         ?: estimateSampleRateFromTimestamps(samples)
                         ?: 100.0f
 
-                    // Phase 1-B: Uniform Grid Resampling
-                    val resampledSamples = dspEngine.resampleToUniformGrid(samples, sampleRateHz)
+                    // Phase 1-B: Uniform Grid Resampling with PCHIP and gap mask
+                    val resamplingOutput = dspEngine.resampleToUniformGrid(samples, sampleRateHz, InterpolationMethod.PCHIP_CUBIC)
+                    val resampledSamples = resamplingOutput.samples
 
                     // SNR / Quality gate
                     val gravityRemoved = dspEngine.removeGravityAndDetrend(resampledSamples)
@@ -238,7 +240,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         resampledSamples, 
                         sampleRateHz, 
                         mainParams, 
-                        com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
+                        com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb,
+                        gapMask = resamplingOutput.gapMask
                     )
 
                     // Run EFDD via JNI natively with zero-boxing primitive arrays
@@ -343,7 +346,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         buildingHash = buildingHash,
                         measurementProfileId = profileId,
                         currentF0Hz = modalRes.fundamentalFrequencyHz,
-                        confidence = effectiveConfidence
+                        confidence = effectiveConfidence,
+                        temperatureCelsius = sessionMeta?.batteryTemperatureCelsius
                     )
 
                     // Compute QualityScore
@@ -388,13 +392,27 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         modalRes.classification.classification == com.ronin.phoneshm.core.physics.FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE
                         
                     if (isValidForBaseline) {
+                        val f0XPeak = mainSpectrum.psdX.peaks.firstOrNull { it.frequencyHz >= 0.5f && it.frequencyHz <= 45.0f }?.frequencyHz?.toDouble()
+                        val f0YPeak = mainSpectrum.psdY.peaks.firstOrNull { it.frequencyHz >= 0.5f && it.frequencyHz <= 45.0f }?.frequencyHz?.toDouble()
+                        val mode2 = modalRes.dominantPeaksTable.getOrNull(1)?.first
+                        val mode3 = modalRes.dominantPeaksTable.getOrNull(2)?.first
+                        val dampEfdd = efddResult?.peakDampingRatios?.firstOrNull()?.toDouble()?.takeIf { it > 0.0 }
+                        val dampSsi = rdtSsiResult?.poles?.firstOrNull()?.dampingRatio?.toDouble()?.takeIf { it > 0.0 }
+
                         baselineEngine.updateBaselineWithSession(
                             buildingHash = buildingHash,
                             measurementProfileId = profileId,
                             currentF0Hz = modalRes.fundamentalFrequencyHz,
                             qualityScorePct = finalQualityScorePct,
                             timeOfDay = sessionMeta?.timeOfDay,
-                            temperatureCelsius = sessionMeta?.batteryTemperatureCelsius
+                            temperatureCelsius = sessionMeta?.batteryTemperatureCelsius,
+                            f0XHz = f0XPeak,
+                            f0YHz = f0YPeak,
+                            mode2Hz = mode2,
+                            mode3Hz = mode3,
+                            dampingEfdd = dampEfdd,
+                            dampingSsi = dampSsi,
+                            consensusVariance = consensusResult.consensusVariance
                         )
                     }
 

@@ -106,6 +106,7 @@ class XiaomiGapDiagnosticTest {
 
             val dspEngine = WelchPsdEngine()
             val continuityResult = dspEngine.verifySamplingContinuity(samples)
+            val resamplingOutput = dspEngine.resampleToUniformGrid(samples, 100f, InterpolationMethod.PCHIP_CUBIC)
 
             println("FIXTURE: ${target.filename} (${target.label})")
             println("  Total Duration    : ${String.format("%.2f", totalDurationSec)} s")
@@ -117,14 +118,18 @@ class XiaomiGapDiagnosticTest {
             println("  Average Gap (>50ms): ${String.format("%.2f", avgGapMs)} ms")
             println("  Max Single Gap    : ${String.format("%.2f", maxGapMs)} ms")
             println("  Continuity Gate   : ${if (continuityResult.isContinuityPassed) "PASSED (<= 5% missing time)" else "FAILED (> 5% missing time)"}")
+            println("  Resampling Result : Passed=${resamplingOutput.isContinuityPassed}, Ratio=${String.format("%.4f", resamplingOutput.missingTimeRatio)}, MaxGap=${String.format("%.1f", resamplingOutput.maxGapMs)}ms")
             println("  Gap Distribution  :")
             gapBins.forEach { (bin, count) ->
                 println(String.format("    %-20s : %d", bin, count))
             }
             println("----------------------------------------------------------------------------------------------------------")
 
+            org.junit.Assert.assertEquals(continuityResult.isContinuityPassed, resamplingOutput.isContinuityPassed)
+
             if (target.label.contains("Xiaomi")) {
                 org.junit.Assert.assertFalse("Xiaomi fixture should fail continuity gate", continuityResult.isContinuityPassed)
+                org.junit.Assert.assertTrue("Xiaomi fixture should have marked gaps in gapMask", resamplingOutput.gapMask.any { it })
             } else {
                 org.junit.Assert.assertTrue("Note8 fixture should pass continuity gate", continuityResult.isContinuityPassed)
             }

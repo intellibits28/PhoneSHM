@@ -45,33 +45,49 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateFddRaw(
 
     FddResult result = calculateFdd(samples, sampleRateHz, fftSize, overlapPct);
 
-    jsize freqLen = result.frequencies.size();
-    jsize peaksLen = result.modes.size();
+    jsize freqLen = static_cast<jsize>(result.frequencies.size());
+    jsize peaksLen = static_cast<jsize>(result.modes.size());
 
-    // Packing layout:
+    // Phase 4 Packing layout:
     // [0]: freqLen
     // [1]: peaksLen
     // [2 .. 2+freqLen-1]: frequencies
     // [2+freqLen .. 2+2*freqLen-1]: firstSingularValues
-    // [2+2*freqLen .. end]: 4 floats per peak (freq, powerMagnitude, prominence, dampingRatio)
-    jsize totalLen = 2 + 2 * freqLen + 4 * peaksLen;
+    // [2+2*freqLen .. 2+3*freqLen-1]: coherenceXY
+    // [2+3*freqLen .. 2+4*freqLen-1]: coherenceXZ
+    // [2+4*freqLen .. 2+5*freqLen-1]: coherenceYZ
+    // [2+5*freqLen .. 2+6*freqLen-1]: hvRatio
+    // [2+6*freqLen .. end]: 10 floats per peak (freq, powerMagnitude, prominence, dampingRatio,
+    //                       coherenceXY, coherenceXZ, coherenceYZ, hvRatio, azimuthDegrees, isValidHorizontalSway)
+    jsize totalLen = 2 + 6 * freqLen + 10 * peaksLen;
     jfloatArray resultArray = env->NewFloatArray(totalLen);
     if (totalLen > 0) {
-        std::vector<jfloat> buffer(totalLen);
+        std::vector<jfloat> buffer(totalLen, 0.0f);
         buffer[0] = static_cast<jfloat>(freqLen);
         buffer[1] = static_cast<jfloat>(peaksLen);
 
         if (freqLen > 0) {
             std::copy(result.frequencies.begin(), result.frequencies.end(), buffer.begin() + 2);
             std::copy(result.firstSingularValues.begin(), result.firstSingularValues.end(), buffer.begin() + 2 + freqLen);
+            std::copy(result.coherenceXY.begin(), result.coherenceXY.end(), buffer.begin() + 2 + 2 * freqLen);
+            std::copy(result.coherenceXZ.begin(), result.coherenceXZ.end(), buffer.begin() + 2 + 3 * freqLen);
+            std::copy(result.coherenceYZ.begin(), result.coherenceYZ.end(), buffer.begin() + 2 + 4 * freqLen);
+            std::copy(result.hvRatio.begin(), result.hvRatio.end(), buffer.begin() + 2 + 5 * freqLen);
         }
 
-        size_t pOffset = 2 + 2 * freqLen;
-        for (size_t i = 0; i < peaksLen; ++i) {
-            buffer[pOffset + i * 4 + 0] = result.modes[i].frequencyHz;
-            buffer[pOffset + i * 4 + 1] = result.modes[i].powerMagnitude;
-            buffer[pOffset + i * 4 + 2] = result.modes[i].prominence;
-            buffer[pOffset + i * 4 + 3] = result.modes[i].dampingRatio;
+        size_t pOffset = static_cast<size_t>(2 + 6 * freqLen);
+        for (jsize i = 0; i < peaksLen; ++i) {
+            size_t base = pOffset + static_cast<size_t>(i) * 10;
+            buffer[base + 0] = result.modes[i].frequencyHz;
+            buffer[base + 1] = result.modes[i].powerMagnitude;
+            buffer[base + 2] = result.modes[i].prominence;
+            buffer[base + 3] = result.modes[i].dampingRatio;
+            buffer[base + 4] = result.modes[i].coherenceXY;
+            buffer[base + 5] = result.modes[i].coherenceXZ;
+            buffer[base + 6] = result.modes[i].coherenceYZ;
+            buffer[base + 7] = result.modes[i].hvRatio;
+            buffer[base + 8] = result.modes[i].azimuthDegrees;
+            buffer[base + 9] = result.modes[i].isValidHorizontalSway ? 1.0f : 0.0f;
         }
 
         env->SetFloatArrayRegion(resultArray, 0, totalLen, buffer.data());
@@ -212,6 +228,81 @@ Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeCalculateRdtSsi(
         env->SetFloatArrayRegion(resultArray, 0, poles.size() * 3, flattened.data());
     }
     return resultArray;
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_ronin_phoneshm_core_dsp_NativeDspBridge_nativeAnalyzeGatedTransientsRaw(
+    JNIEnv* env, jobject /* this */,
+    jfloatArray signalArray, jfloat sampleRateHz, jint segmentSize, jfloat segmentOverlap, jbyteArray gapMaskArray
+) {
+    if (signalArray == nullptr) {
+        return env->NewFloatArray(0);
+    }
+    jsize n = env->GetArrayLength(signalArray);
+    if (n <= 0) {
+        return env->NewFloatArray(0);
+    }
+
+    jfloat* sigPtr = env->GetFloatArrayElements(signalArray, nullptr);
+    std::vector<float> signal(sigPtr, sigPtr + n);
+    env->ReleaseFloatArrayElements(signalArray, sigPtr, JNI_ABORT);
+
+    std::vector<uint8_t> gapMask;
+    if (gapMaskArray != nullptr) {
+        jsize mLen = env->GetArrayLength(gapMaskArray);
+        if (mLen > 0) {
+            jbyte* maskPtr = env->GetByteArrayElements(gapMaskArray, nullptr);
+            gapMask.resize(mLen);
+            for (jsize i = 0; i < mLen; ++i) {
+                gapMask[i] = static_cast<uint8_t>(maskPtr[i]);
+            }
+            env->ReleaseByteArrayElements(gapMaskArray, maskPtr, JNI_ABORT);
+        }
+    }
+
+    std::vector<TransientEventAnalysis> events = analyzeGatedTransients(
+        signal, sampleRateHz, segmentSize, segmentOverlap, gapMask
+    );
+
+    size_t kCount = std::min<size_t>(5, events.size());
+    size_t totalFloats = 1;
+    for (size_t k = 0; k < kCount; ++k) {
+        size_t specLen = static_cast<size_t>(events[k].stftTimeSteps) * static_cast<size_t>(events[k].stftFreqBins);
+        totalFloats += 24 + specLen;
+    }
+
+    std::vector<jfloat> packed(totalFloats, 0.0f);
+    packed[0] = static_cast<jfloat>(kCount);
+
+    size_t offset = 1;
+    for (size_t k = 0; k < kCount; ++k) {
+        const auto& ev = events[k];
+        packed[offset + 0] = static_cast<jfloat>(ev.onsetSampleIndex);
+        packed[offset + 1] = ev.peakAccelerationG;
+        packed[offset + 2] = ev.rmsG;
+        packed[offset + 3] = ev.durationMs;
+        packed[offset + 4] = ev.waveletEntropy;
+        packed[offset + 5] = ev.isStructuralShock ? 1.0f : 0.0f;
+        for (int b = 0; b < 16; ++b) {
+            packed[offset + 6 + b] = ev.wptSubbandEnergies[b];
+        }
+        packed[offset + 22] = static_cast<jfloat>(ev.stftTimeSteps);
+        packed[offset + 23] = static_cast<jfloat>(ev.stftFreqBins);
+
+        size_t specLen = static_cast<size_t>(ev.stftTimeSteps) * static_cast<size_t>(ev.stftFreqBins);
+        if (specLen > 0 && ev.stftSpectrogram.size() >= specLen) {
+            std::copy(
+                ev.stftSpectrogram.begin(),
+                ev.stftSpectrogram.begin() + specLen,
+                packed.begin() + offset + 24
+            );
+        }
+        offset += 24 + specLen;
+    }
+
+    jfloatArray outArray = env->NewFloatArray(static_cast<jsize>(totalFloats));
+    env->SetFloatArrayRegion(outArray, 0, static_cast<jsize>(totalFloats), packed.data());
+    return outArray;
 }
 
 } // extern "C"

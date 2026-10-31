@@ -4,13 +4,23 @@ data class EfddModeResult(
     val frequencyHz: Float,
     val powerMagnitude: Float,
     val prominence: Float,
-    val dampingRatio: Float
+    val dampingRatio: Float,
+    val coherenceXY: Float = 0.0f,
+    val coherenceXZ: Float = 0.0f,
+    val coherenceYZ: Float = 0.0f,
+    val hvRatio: Float = 0.0f,
+    val azimuthDegrees: Float = 0.0f,
+    val isValidHorizontalSway: Boolean = false
 )
 
 data class EfddSpectrumResult(
     val frequencies: FloatArray,
     val firstSingularValues: FloatArray,
-    val modes: List<EfddModeResult>
+    val modes: List<EfddModeResult>,
+    val coherenceXY: FloatArray = FloatArray(0),
+    val coherenceXZ: FloatArray = FloatArray(0),
+    val coherenceYZ: FloatArray = FloatArray(0),
+    val hvRatio: FloatArray = FloatArray(0)
 )
 
 interface EfddEngine {
@@ -55,7 +65,13 @@ class DefaultEfddEngine : EfddEngine {
                     frequencyHz = nativeResult.peakFrequencies[i],
                     powerMagnitude = nativeResult.peakMagnitudes[i],
                     prominence = nativeResult.peakProminences[i],
-                    dampingRatio = nativeResult.peakDampingRatios[i]
+                    dampingRatio = nativeResult.peakDampingRatios[i],
+                    coherenceXY = nativeResult.peakCoherenceXY.getOrElse(i) { 0.0f },
+                    coherenceXZ = nativeResult.peakCoherenceXZ.getOrElse(i) { 0.0f },
+                    coherenceYZ = nativeResult.peakCoherenceYZ.getOrElse(i) { 0.0f },
+                    hvRatio = nativeResult.peakHvRatios.getOrElse(i) { 0.0f },
+                    azimuthDegrees = nativeResult.peakAzimuthDegrees.getOrElse(i) { 0.0f },
+                    isValidHorizontalSway = nativeResult.peakIsValidHorizontalSway.getOrElse(i) { false }
                 )
             )
         }
@@ -63,7 +79,11 @@ class DefaultEfddEngine : EfddEngine {
         return EfddSpectrumResult(
             frequencies = nativeResult.frequencies,
             firstSingularValues = nativeResult.firstSingularValues,
-            modes = modes
+            modes = modes,
+            coherenceXY = nativeResult.coherenceXY,
+            coherenceXZ = nativeResult.coherenceXZ,
+            coherenceYZ = nativeResult.coherenceYZ,
+            hvRatio = nativeResult.hvRatio
         )
     }
 }

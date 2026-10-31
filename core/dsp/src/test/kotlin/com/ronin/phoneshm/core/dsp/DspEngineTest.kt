@@ -22,7 +22,8 @@ class DspEngineTest {
             samples: List<AccelerationSample>,
             sampleRateHz: Float,
             params: WelchPsdParameters,
-            ambientSnrThresholdDb: Float
+            ambientSnrThresholdDb: Float,
+            gapMask: BooleanArray?
         ): MultiAxisSpectrumResult {
             val emptyAxis = AxisPsdResult(floatArrayOf(8.2f), floatArrayOf(1.0f), listOf(Peak(8.2f, 1.0f, 0.8f)))
             return MultiAxisSpectrumResult(emptyAxis, emptyAxis, emptyAxis, emptyAxis,
@@ -51,6 +52,25 @@ class DspEngineTest {
             targetSampleRateHz: Float
         ): List<AccelerationSample> {
             return samples
+        }
+
+        override fun resampleToUniformGrid(
+            samples: List<AccelerationSample>,
+            targetSampleRateHz: Float,
+            method: InterpolationMethod,
+            gapThresholdMs: Double,
+            maxAllowedMissingRatio: Double
+        ): ResamplingOutput {
+            return ResamplingOutput(
+                samples = samples,
+                gapMask = BooleanArray(samples.size),
+                originalCount = samples.size,
+                resampledCount = samples.size,
+                maxGapMs = 0.0,
+                totalMissingTimeSec = 0.0,
+                missingTimeRatio = 0.0,
+                isContinuityPassed = true
+            )
         }
     }
 

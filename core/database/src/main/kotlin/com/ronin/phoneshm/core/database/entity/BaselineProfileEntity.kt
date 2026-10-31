@@ -11,5 +11,19 @@ data class BaselineProfileEntity(
     val m2: Double, 
     val measurementCount: Int,
     val consecutiveAnomalyCount: Int = 0,
-    val lastUpdatedAt: Long
+    val lastUpdatedAt: Long,
+    val meanF0XHz: Double? = null,
+    val stdF0XHz: Double? = null,
+    val m2F0X: Double? = null,
+    val meanF0YHz: Double? = null,
+    val stdF0YHz: Double? = null,
+    val m2F0Y: Double? = null,
+    val meanDampingEfdd: Double? = null,
+    val meanDampingSsi: Double? = null,
+    val thermalSensitivityHzPerC: Double? = null,
+    val referenceTemperatureC: Double = 25.0,
+    val meanTempC: Double? = null,
+    val m2Temp: Double? = null,
+    val coMomentTempF0: Double? = null,
+    val tempSampleCount: Int = 0
 )

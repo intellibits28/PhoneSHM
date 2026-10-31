@@ -149,5 +149,9 @@ class ModalConsensusEngineTest {
         assertEquals(8.04, result.efddF0!!, 0.01)
         assertNotNull(result.consensusF0)
         assertEquals(8.02, result.consensusF0!!, 0.02)
+        assertNotNull(result.consensusVariance)
+        assertNotNull(result.uncertaintyRatioPct)
+        // Variance of (8.0, 8.04, 8.02) around mean 8.02 is ((0.02)^2 + (0.02)^2 + 0)/3 = 0.0008 / 3 = 0.0002667
+        assertEquals(0.0002667, result.consensusVariance!!, 1e-5)
     }
 }

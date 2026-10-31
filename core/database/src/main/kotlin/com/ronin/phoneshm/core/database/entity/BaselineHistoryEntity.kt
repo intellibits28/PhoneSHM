@@ -25,5 +25,12 @@ data class BaselineHistoryEntity(
     val f0Hz: Double, 
     val qualityScorePct: Int,
     val timeOfDay: String? = null,
-    val temperatureCelsius: Float? = null
+    val temperatureCelsius: Float? = null,
+    val f0XHz: Double? = null,
+    val f0YHz: Double? = null,
+    val mode2Hz: Double? = null,
+    val mode3Hz: Double? = null,
+    val dampingEfdd: Double? = null,
+    val dampingSsi: Double? = null,
+    val consensusVariance: Double? = null
 )

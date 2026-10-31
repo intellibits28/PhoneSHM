@@ -5,7 +5,14 @@ data class BaselineHistoryEntry(
     val f0Hz: Double,
     val qualityScorePct: Int,
     val timeOfDay: String? = null,
-    val temperatureCelsius: Float? = null
+    val temperatureCelsius: Float? = null,
+    val f0XHz: Double? = null,
+    val f0YHz: Double? = null,
+    val mode2Hz: Double? = null,
+    val mode3Hz: Double? = null,
+    val dampingEfdd: Double? = null,
+    val dampingSsi: Double? = null,
+    val consensusVariance: Double? = null
 )
 
 /**
@@ -23,7 +30,17 @@ data class BaselineProfile(
     val measurementCount: Int,
     val consecutiveAnomalyCount: Int = 0,
     val lastUpdatedAt: Long,
-    val recentHistory: List<BaselineHistoryEntry> = emptyList()
+    val recentHistory: List<BaselineHistoryEntry> = emptyList(),
+    val meanF0XHz: Double? = null,
+    val stdF0XHz: Double? = null,
+    val meanF0YHz: Double? = null,
+    val stdF0YHz: Double? = null,
+    val meanDampingEfdd: Double? = null,
+    val meanDampingSsi: Double? = null,
+    val thermalSensitivityHzPerC: Double? = null,
+    val referenceTemperatureC: Double = 25.0,
+    val meanTempC: Double? = null,
+    val tempSampleCount: Int = 0
 )
 
 /**
@@ -65,7 +82,8 @@ interface BaselineManagerEngine {
         buildingHash: String,
         currentF0Hz: Double,
         confidence: Double,
-        measurementProfileId: String = "building_profile_active"
+        measurementProfileId: String = "building_profile_active",
+        temperatureCelsius: Float? = null
     ): BaselineComparisonResult
 
     /**
@@ -78,7 +96,14 @@ interface BaselineManagerEngine {
         qualityScorePct: Int, 
         measurementProfileId: String = "building_profile_active",
         timeOfDay: String? = null,
-        temperatureCelsius: Float? = null
+        temperatureCelsius: Float? = null,
+        f0XHz: Double? = null,
+        f0YHz: Double? = null,
+        mode2Hz: Double? = null,
+        mode3Hz: Double? = null,
+        dampingEfdd: Double? = null,
+        dampingSsi: Double? = null,
+        consensusVariance: Double? = null
     )
 
     /**

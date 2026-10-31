@@ -26,10 +26,15 @@ flowchart LR
     FiltFilt --> TriEngine["Tri-Engine OMA (Welch + EFDD + SSI)"]
 ```
 
-### က။ Resampling နှင့် Monotonicity စစ်ဆေးခြင်း
-Android OS သည် sensor events များကို အချိန်အခိုက်အတန့် မညီမညာ ပေးပို့လေ့ရှိသည်။ ထို့ကြောင့် Hardware timestamp များ တသမတ်တည်း တိုးတက်မှုရှိမရှိ စစ်ဆေးပြီး လှိုင်းများကို $100\text{ Hz}$ ($\Delta t = 10\text{ ms}$) သို့ linear/cubic interpolation ဖြင့် တစ်ပြေးညီ ပြန်လည်ချိန်ညှိပါသည်။
-အချိန်ကြာမြင့်စွာ တိုင်းတာချိန်တွင် integer truncation ကြောင့် စက္ကန့်ပိုင်းအတွင်း millisecond များ drift မဖြစ်စေရန် Target grid timestamps များကို 64-bit double precision ဖြင့် တိကျစွာ တွက်ချက်ပါသည်:
-$$t_{\text{target}, k} = t_{\text{start}} + \text{round}\left(k \cdot \frac{10^9}{f_s}\right)$$
+### က။ Fritsch-Carlson PCHIP Resampling နှင့် Gap-Mask Gating
+Android OS သည် sensor events များကို အချိန်အခိုက်အတန့် မညီမညာ ပေးပို့လေ့ရှိပြီး Xiaomi/MIUI ကဲ့သို့သော ဖုန်းများတွင် OS scheduling ကြောင့် ခေတ္တပြတ်တောက်မှု (gaps) များ ဖြစ်ပေါ်တတ်သည်။ ထို့ကြောင့် `resampleToUniformGrid` တွင် အောက်ပါအတိုင်း တိကျစွာ ချိန်ညှိပါသည်-
+1. **64-bit Target Grid**: အချိန်ကြာမြင့်စွာ တိုင်းတာချိန်တွင် integer truncation ကြောင့် drift မဖြစ်စေရန် Target grid timestamps များကို 64-bit double precision ဖြင့် တွက်ချက်သည်:
+   $$t_{\text{target}, k} = t_{\text{start}} + \text{round}\left(k \cdot \frac{10^9}{f_s}\right)$$
+2. **Fritsch-Carlson Monotone Cubic Hermite (`PCHIP_CUBIC`) နှင့် Linear Gap Fallback**:
+   - ပုံမှန်အချိန်ခြားနားချက် ($\Delta t_i \le 50.0\text{ ms}$) များအတွက် overshoot မဖြစ်စေသော monotone cubic Hermite နည်းဖြင့် တွက်ချက်သည် (`gapMask[k] = 0`)။
+   - $> 50.0\text{ ms}$ ကျော်လွန်သော gap များတွင် cubic polynomial ဖောင်းပွမှုမဖြစ်စေရန် linear bridge သို့ အလိုအလျောက် ပြောင်းလဲတွက်ချက်ပြီး `gapMask[k] = 1` အဖြစ် မှတ်သားသည်။
+3. **Gap-Mask Window Rejection**:
+   - Settling window (`settlingN`) ဖြတ်ထုတ်ချိန်တွင် `gapMask` ကိုပါ ကိုက်ညီစွာ ဖြတ်ထုတ်ပြီး `gapMask != 0` ပါဝင်သော မည်သည့် FFT window ကိုမဆို Median + $3 \times \text{MAD}$ gate နှင့်အတူ Welch PSD နှင့် EFDD CSD တွက်ချက်မှုမှ ချန်လှပ်ပစ်သည်။
 
 ### ခ။ ကမ္ဘာ့ဆွဲငင်အား ဖယ်ရှားခြင်း (Gravity Removal)
 ဖုန်း၏ အနေအထားကြောင့် ပါဝင်နေသော Static Gravity vector ကို Exponential Moving Average (EMA) ဖြင့် တွက်ချက်ဖယ်ရှားပါသည်:
@@ -67,28 +72,32 @@ Welch ၏ Averaged Modified Periodogram နည်းပညာဖြင့် X, 
 ### Parabolic Sub-Bin Interpolation
 Discrete frequency grid $\Delta f$ ထက် ပိုမိုတိကျသော peak frequency ရရှိစေရန် logarithmic parabolic interpolation ဖြင့် ဒသမကိန်း တိကျစွာ ရှာဖွေပေးပါသည်။
 
+### Gated Transient Time-Frequency Analysis (STFT နှင့် Daubechies `db4` WPT)
+Median + $3 \times \text{MAD}$ gate မှ ပယ်ချခံရသော စွမ်းအင်မြင့် transient segments များ (အမြင့်ဆုံး $K = 5$ ခု) ကို စွန့်ပစ်မည့်အစား [`analyzeGatedTransients`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/dsp_core.cpp) (`wavelet_packet_core.cpp`) ဖြင့် သီးသန့် ခွဲခြမ်းစိတ်ဖြာပါသည်-
+1. **Short-Time Fourier Transform (STFT)**: 256-point Hanning window ($75\%$ overlap / 64-sample hop) ဖြင့် time-frequency spectrogram ကို တွက်ချက်သည်။
+2. **Daubechies `db4` Wavelet Packet Transform (Depth $J = 4$)**: $100\text{ Hz}$ vibration လှိုင်းကို audio downsampling မလုပ်ဘဲ Depth $J = 4$ ($16$ subbands, $0\text{–}50\text{ Hz}$) ဖြင့် တိုက်ရိုက် ခွဲခြမ်းစိတ်ဖြာသည်။
+3. **Shannon Wavelet Entropy နှင့် NaN Guard**: Subband energy သုညဖြစ်နေချိန်တွင် $\ln(0)$ ကြောင့် NaN မဖြစ်စေရန် $p_j > 10^{-12}$ ဖြစ်သော subband များကိုသာ $S_{\text{wpt}} = -\sum p_j \ln(p_j)$ တွင် ပေါင်းထည့်တွက်ချက်ပြီး $S_{\text{wpt}} < 1.8$ နှင့် အနိမ့်ပိုင်းကြိမ်နှုန်းစွမ်းအင် $\ge 55\%$ ရှိပါက `isStructuralShock = true` အဖြစ် သတ်မှတ်သည်။
+4. **Safe JNI Timestamp Reconstruction**: 64-bit integer ကို `float` အဖြစ် bitcast လုပ်ပါက `sNaN` corruption ဖြစ်ပေါ်နိုင်သဖြင့် JNI မှ `onsetSampleIndex` (single float) ကိုသာ ပို့ဆောင်ပြီး Kotlin ဘက်တွင် `reconstructOnsetTimestampNs` ဖြင့် 64-bit nanosecond timestamp ကို ပြန်လည်တွက်ချက်သည်။
+
 ---
 
-## ၄။ Method 2: Enhanced Frequency Domain Decomposition (EFDD)
+## ၄။ Method 2: Enhanced Frequency Domain Decomposition (EFDD)၊ Tri-Axial Coherence နှင့် Roving Mode Shapes
 
 Frequency Domain Decomposition (FDD) သည် multi-degree-of-freedom တုန်ခါမှုလှိုင်းများကို Singular Value Decomposition (SVD) အသုံးပြု၍ single-degree-of-freedom (SDOF) စနစ်များအဖြစ် ခွဲထုတ်ပေးပါသည်။
 
-### Horizontal Sway ခွဲထုတ်ခြင်း ($2 \times 2$ CSD Matrix)
-အရပ်ဘက် အဆောက်အအုံများ၏ အဓိကသဘာဝတုန်ခါမှုသည် အလျားလိုက်ယိမ်းခါမှု (Horizontal sway) ဖြစ်သည်။ စမတ်ဖုန်း၏ ဒေါင်လိုက် ($Z$-axis) သည် ဒေသန္တရကြမ်းခင်းတုန်ခါမှုများ လွှမ်းမိုးနေတတ်သဖြင့် horizontal sway ကို မဖုံးကွယ်စေရန်အတွက် horizontal axes $X, Y$ ကိုသာ သီးခြား $2 \times 2$ Cross-Spectral Density (CSD) matrix အဖြစ် ခွဲထုတ်တွက်ချက်ပါသည်-
+### $3 \times 3$ CSD Matrix, Tri-Axial Coherence နှင့် Axis-Aligned Sway Gate
+အရပ်ဘက် အဆောက်အအုံများ၏ အဓိကသဘာဝတုန်ခါမှုသည် အလျားလိုက်ယိမ်းခါမှု (Horizontal sway) ဖြစ်ပြီး ဒေါင်လိုက် ($Z$-axis) ကြမ်းခင်းတုန်ခါမှုနှင့် ခွဲခြားနိုင်ရန် [`fdd_core.cpp`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/fdd_core.cpp) တွင် အောက်ပါအတိုင်း တွက်ချက်ပါသည်-
 
-1. **Horizontal CSD Matrix**: Frequency bin တစ်ခုစီတွင် $2 \times 2$ matrix $\mathbf{G}_{xy}(f_k)$ ကို တည်ဆောက်သည်:
-   $$\mathbf{G}_{xy}(f_k) = \begin{bmatrix} 
-   S_{xx}(f_k) & S_{xy}(f_k) \\
-   S_{yx}(f_k) & S_{yy}(f_k)
-   \end{bmatrix}$$
-   (CSD မတွက်မီ segments များကို Median + $3 \times \text{MAD}$ gate ဖြင့် စစ်ဆေးသည်)။
-2. **Singular Value Decomposition (SVD)**:
-   $$\mathbf{G}_{xy}(f_k) = \mathbf{U}_k \mathbf{\Sigma}_k \mathbf{U}_k^H = \sigma_{1}(f_k) \mathbf{u}_{1, k} \mathbf{u}_{1, k}^H + \sigma_{2}(f_k) \mathbf{u}_{2, k} \mathbf{u}_{2, k}^H$$
-   ပထမ singular value $\sigma_1(f_k)$ သည် ဖုန်း၏ ထားရှိရာ orientation ထောင့်အပေါ် မမူတည်ဘဲ (Azimuth invariant) အဆောက်အအုံ၏ အဓိက horizontal sway စွမ်းအင်ကို ဖော်ပြသည်။
-3. **First Singular Value Line Spectrum**: အလျားလိုက် သဘာဝတုန်ခါမှု mode များသည် $\sigma_1(f)$ spectrum ပေါ်တွင် ထင်ရှားသော peak များအဖြစ် ပေါ်ပေါက်လာသည်။
-4. **Damping Ratio ($\zeta$) တွက်ချက်ခြင်း**:
-   - Peak ပတ်ဝန်းကျင် SDOF bell ကို Inverse Discrete Fourier Transform (IDFT) ပြုလုပ်ပြီး auto-correlation free decay envelope ကို ရယူသည်။
-   - Autocorrelation peak များကို ရှာဖွေရာတွင် $r[i] \ge 0.15 \cdot r_{\text{first}}$ တန်ဖိုးဖြင့် စစ်ဆေးပြီး Logarithmic Decrement ($\delta$) မှတစ်ဆင့် damping ratio ($\zeta$) ကို တိကျစွာ ထုတ်ယူပေးသည်။
+1. **$3 \times 3$ CSD နှင့် $2 \times 2$ Horizontal SVD**:
+   - X, Y, Z ဝင်ရိုး ၃ ခုအတွက် $3 \times 3$ Cross-Spectral Density matrix $\mathbf{G}_{3\times 3}(f_k)$ ကို တည်ဆောက်ပြီး အလျားလိုက် $2 \times 2$ sub-block $\mathbf{G}_{xy}(f_k)$ ပေါ်တွင် SVD တွက်ချက်ကာ ပထမ singular value $\sigma_1(f_k)$ နှင့် singular vector $\mathbf{u}_1(f_k)$ ကို ရယူသည်။
+2. **Coherence Division-by-Zero Guard**:
+   - Auto-spectrum တန်ဖိုးများ သုညနီးပါးဖြစ်နေချိန်တွင် NaN/Inf မဖြစ်စေရန် ပိုင်းခြေ၌ `std::max(..., 1e-30)` ထားရှိပြီး $\gamma_{xy}^2, \gamma_{xz}^2, \gamma_{yz}^2 \in [0.0, 1.0]$ နှင့် Horizontal-to-Vertical ratio $\sigma_1(f_k) / S_{zz}(f_k)$ တို့ကို တွက်ချက်သည်။
+3. **Axis-Aligned Sway Gate နှင့် Azimuth SVD**:
+   - ဖုန်း၏ X သို့မဟုတ် Y ဝင်ရိုးတစ်ခုတည်းအတိုင်း 1D လွှဲနေသော mode များ ($\gamma_{xy}^2 \approx 0$) မပယ်ချခံရစေရန် $\gamma_{xy}^2$ ကန့်သတ်ချက်မထားဘဲ $\sigma_1(f_0)/S_{zz}(f_0) > 3.0$၊ $\gamma_{xz}^2(f_0) \le 0.35$ နှင့် $\gamma_{yz}^2(f_0) \le 0.35$ တို့ဖြင့် စစ်ဆေးသည်။
+   - အဓိကလွှဲနေသော ထောင့် $\theta_{\text{sway}} = \text{atan2}(\text{Re}(u_y), \text{Re}(u_x)) \in [-180^\circ, 180^\circ]$ ကို $\mathbf{u}_1(f_0)$ မှ ထုတ်ယူသည်။
+4. **Damping Ratio ($\zeta$) နှင့် Roving Mode Shape Synthesis**:
+   - Peak ပတ်ဝန်းကျင် SDOF bell ($\text{MAC} \ge 0.85$) ကို IDFT ပြုလုပ်ပြီး Logarithmic Decrement ($\delta$) မှ damping ratio ($\zeta$) ကို တွက်ချက်သည်။
+   - [`RovingModeShapeEngine.kt`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/modal/src/main/kotlin/com/ronin/phoneshm/core/modal/RovingModeShapeEngine.kt) ဖြင့် အထပ်အလိုက် တိုင်းတာချက်များကို $|\phi(L)| = \sqrt{\sigma_1^{(L)}(f_0) / \max(\sigma_{\text{amb}, L}^2, 10^{-12})}$ ဖြင့် excitation normalize လုပ်ကာ $\cos(\theta_L - \theta_{\text{ref}}) < 0$ ဖြစ်ပါက phase sign $-1.0$ သတ်မှတ်ပြီး အမြင့်ဆုံးအထပ် (Roof) ဖြင့် $\phi(\text{Roof}) = 1.0$ ဖြစ်အောင် တွက်ချက်ပေးသည်။
 
 ---
 
@@ -115,3 +124,5 @@ $$\frac{|f_1 - f_2|}{\frac{f_1 + f_2}{2}} \le 0.05$$
 - **`PARTIAL` (66.7% ယုံကြည်စိတ်ချရမှု)**: Method ၂ ခုသာ ကိုက်ညီသောအခါ။
 - **`DISAGREED` (33.3% ယုံကြည်စိတ်ချရမှု)**: Method များအားလုံး သီးခြားစီ ကွဲလွဲနေသောအခါ။
 - **`INSUFFICIENT` (0% ယုံကြည်စိတ်ချရမှု)**: တုန်ခါမှုအားနည်းလွန်းသဖြင့် မည်သည့် method တွင်မျှ peak မထွက်ပေါ်သောအခါ။
+
+သဘောတူညီသော အင်ဂျင်များအကြား (`AGREED` သို့မဟုတ် `PARTIAL`) sample variance $\sigma_{\text{consensus}}^2 = \frac{1}{k-1}\sum (f_i - f_{\text{consensus}})^2$ နှင့် `uncertaintyRatioPct` ($\%$) တို့ကိုပါ တွက်ချက်ပြီး `BaselineHistoryEntity` တွင် မှတ်တမ်းတင်ထားပါသည်။

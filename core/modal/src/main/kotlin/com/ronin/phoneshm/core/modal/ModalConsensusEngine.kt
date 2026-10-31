@@ -3,6 +3,7 @@ package com.ronin.phoneshm.core.modal
 import com.ronin.phoneshm.core.dsp.NativeFddResult
 import com.ronin.phoneshm.core.dsp.RdtSsiResult
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 enum class ConsensusStatus {
     AGREED,
@@ -17,7 +18,9 @@ data class ModalConsensusResult(
     val ssiF0: Double?,
     val consensusF0: Double?,
     val agreementScore: Float,
-    val status: ConsensusStatus
+    val status: ConsensusStatus,
+    val consensusVariance: Double? = null,
+    val uncertaintyRatioPct: Double? = null
 )
 
 /**
@@ -83,13 +86,23 @@ class ModalConsensusEngine {
             return ModalConsensusResult(null, null, null, null, 0.0f, ConsensusStatus.INSUFFICIENT)
         }
 
+        val consensusMean = if (bestCluster.size > 1) bestCluster.average() else null
+        val consensusVar = if (consensusMean != null && bestCluster.size > 1) {
+            bestCluster.sumOf { (it - consensusMean) * (it - consensusMean) } / bestCluster.size
+        } else null
+        val uncertaintyPct = if (consensusMean != null && consensusMean > 0.0 && consensusVar != null) {
+            (sqrt(consensusVar) / consensusMean) * 100.0
+        } else null
+
         return ModalConsensusResult(
             welchF0 = finalWelch,
             efddF0 = finalEfdd,
             ssiF0 = finalSsi,
-            consensusF0 = if (bestCluster.size > 1) bestCluster.average() else null,
+            consensusF0 = consensusMean,
             agreementScore = agreedRatio,
-            status = finalStatus
+            status = finalStatus,
+            consensusVariance = consensusVar,
+            uncertaintyRatioPct = uncertaintyPct
         )
     }
 

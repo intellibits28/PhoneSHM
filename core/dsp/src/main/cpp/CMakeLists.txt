@@ -11,6 +11,7 @@ add_library(phoneshm_dsp SHARED
     fft_backend.cpp
     fdd_core.cpp
     rdt_ssi_core.cpp
+    wavelet_packet_core.cpp
     dsp_jni.cpp
 )
 

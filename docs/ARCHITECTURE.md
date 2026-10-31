@@ -44,7 +44,7 @@ graph TD
         Location[":core:location"]
         Audio[":core:audio"]
         Storage[":core:storage"]
-        Database[":core:database (Room v7)"]
+        Database[":core:database (Room v8)"]
     end
 
     App --> UI
@@ -77,15 +77,15 @@ graph TD
 | `:feature:measurement` | Real-time 100Hz vibration acquisition HUD, live RMS vibration meter, per-session dynamic sensor calibration, and local session history. |
 | `:feature:analysis` | Tri-engine modal identification execution (Welch PSD + EFDD + RDT-SSI), consensus status visualization, singular value spectrum, and baseline anomaly comparison. |
 | `:feature:report` | Dual-mode presentation: Citizen Science executive summary vs. Senior Structural Engineer interactive diagnostics. |
-| `:core:dsp` | High-performance C++20 DSP engine with JNI bindings: Eigen 3.4 SVD, FFT, Welch PSD, Enhanced Frequency Domain Decomposition (EFDD), and Multi-Channel Stochastic Subspace Identification (RDT-SSI). |
-| `:core:modal` | Peak extraction, sub-sample parabolic interpolation, adaptive peak persistence tracking, and Tri-Engine Modal Consensus Engine. |
+| `:core:dsp` | High-performance C++20 DSP engine with JNI bindings: Fritsch-Carlson PCHIP resampling & gap-mask gating, Eigen 3.4 SVD, FFT, Welch PSD, $3 \times 3$ CSD EFDD with tri-axial coherence & Axis-Aligned Sway Gate, Daubechies `db4` WPT & STFT transient analysis, and Multi-Channel RDT-SSI. |
+| `:core:modal` | Peak extraction, sub-sample parabolic interpolation, adaptive peak persistence tracking, Tri-Engine Modal Consensus Engine with inter-engine variance/uncertainty, and `RovingModeShapeEngine` for excitation-normalized multi-floor mode shapes. |
 | `:core:physics` | Structural design period heuristics ($T = C_t H^{3/4}$), plausibility boundaries, and frequency categorization (`GLOBAL_MODE`, `LOCAL_MODE`, `SENSOR_ARTIFACT`). |
-| `:core:baseline` | Online Welford longitudinal baseline tracking ($\mu, \sigma^2$), 10-session baseline calibration, structural anomaly thresholding ($\pm 5\%$), and environmental stratification. |
+| `:core:baseline` | Online Welford multi-mode longitudinal baseline tracking ($f_0, f_1, \zeta_0, f_{0,x}, f_{0,y}$), 10-session baseline calibration, anomaly-first verification ($\pm 5\%$), Welford co-moment thermal drift compensation ($k_T$), and environmental stratification. |
 | `:core:quality` | 4-factor multi-metric measurement quality score fusion (Sensor capability, Noise floor, Surface coupling stability, Frequency peak prominence). |
 | `:core:sensor` | Hardware sensor acquisition, monotonic timestamp verification, clock jitter calculation (`sampleJitterStdMs`), clock drift tracking (`clockDriftPpm`), and background recording service. |
 | `:core:device` | Device capability classification (MEMS noise floor estimation, zero-velocity bias calibration, tier classification: `RESEARCH_GRADE`, `GOOD`, `FAIR`, `POOR`). |
 | `:core:storage` | High-throughput binary file streaming (`.bin` format with 20-byte sample frames) and atomic file finalization. |
-| `:core:database` | Room database (Version 7) with schema export, foreign keys, query indices, and non-destructive migrations (`MIGRATION_6_7`). |
+| `:core:database` | Room database (Version 8) with schema export (`schemas/.../8.json`), foreign keys, query indices, and non-destructive migrations (`MIGRATION_6_7`, `MIGRATION_7_8`). |
 | `:core:location` | Privacy-preserving GPS and network location resolver, generating immutable crowdsourced `building_hash` fingerprints. |
 | `:core:audio` | Privacy-preserving circular RAM audio context buffer ($-2\text{s}$ to $+3\text{s}$ surrounding vibration events), zero raw audio disk storage. |
 
@@ -166,8 +166,8 @@ To prevent Android Application Not Responding (ANR) dialogs and 60/120 FPS UI dr
 
 ## 5. Persistence & Schema Governance
 
-### Room Database Architecture (Version 7)
-PhoneSHM utilizes Android Jetpack Room with full schema export enabled (`schemas/.../7.json`) and non-destructive migrations:
+### Room Database Architecture (Version 8)
+PhoneSHM utilizes Android Jetpack Room with full schema export enabled (`schemas/.../8.json`) and non-destructive migrations:
 
 ```mermaid
 erDiagram
@@ -202,6 +202,9 @@ erDiagram
         string buildingHash FK "COMPOSITE INDEX (buildingHash, timestampMs)"
         long timestampMs "COMPOSITE INDEX"
         double fundamentalFrequencyHz
+        double secondModeFrequencyHz
+        double dampingRatioZeta0
+        double consensusVariance
         boolean isAnomaly
         string timeOfDay
         float batteryTemperature
@@ -212,6 +215,7 @@ erDiagram
 - **Version 1-5**: Initial schemas for building profiles, raw sessions, and basic baselines.
 - **Version 6**: Added multi-location measurement profile tables and environmental fields.
 - **Version 7**: Added explicit B-tree indices on `MeasurementProfileEntity.buildingId` and composite indices on `BaselineHistoryEntity(buildingHash, timestampMs)` via `MIGRATION_6_7`.
+- **Version 8**: Expanded `BaselineProfileEntity` and `BaselineHistoryEntity` via `MIGRATION_7_8` with multi-mode Welford states ($f_1, \zeta_0$), orthogonal horizontal axis states ($f_{0,x}, f_{0,y}, M_{2, f_{0,x}}, M_{2, f_{0,y}}$), consensus variance ($\sigma_{\text{consensus}}^2$), and numerically stable Welford thermal co-moment states (`meanTempC`, `m2Temp`, `coMomentTempF0`, `tempSampleCount`, `thermalSensitivityHzPerC`).
 
 ---
 

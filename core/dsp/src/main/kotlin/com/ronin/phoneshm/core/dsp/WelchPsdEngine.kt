@@ -26,7 +26,40 @@ class WelchPsdEngine : DspEngine {
     // ─────────────────────────────────────────────────────────────
 
     override fun resampleToUniformGrid(samples: List<AccelerationSample>, targetSampleRateHz: Float): List<AccelerationSample> {
-        if (samples.size < 2) return samples
+        return resampleToUniformGrid(samples, targetSampleRateHz, InterpolationMethod.PCHIP_CUBIC).samples
+    }
+
+    override fun resampleToUniformGrid(
+        samples: List<AccelerationSample>,
+        targetSampleRateHz: Float,
+        method: InterpolationMethod,
+        gapThresholdMs: Double,
+        maxAllowedMissingRatio: Double
+    ): ResamplingOutput {
+        if (samples.isEmpty()) {
+            return ResamplingOutput(
+                samples = emptyList(),
+                gapMask = BooleanArray(0),
+                originalCount = 0,
+                resampledCount = 0,
+                maxGapMs = 0.0,
+                totalMissingTimeSec = 0.0,
+                missingTimeRatio = 0.0,
+                isContinuityPassed = true
+            )
+        }
+        if (samples.size == 1) {
+            return ResamplingOutput(
+                samples = samples,
+                gapMask = BooleanArray(1) { false },
+                originalCount = 1,
+                resampledCount = 1,
+                maxGapMs = 0.0,
+                totalMissingTimeSec = 0.0,
+                missingTimeRatio = 0.0,
+                isContinuityPassed = true
+            )
+        }
 
         // Ensure samples are sorted by timestamp
         val sorted = if (samples.zipWithNext().all { it.first.timestampNs <= it.second.timestampNs }) {
@@ -35,50 +68,197 @@ class WelchPsdEngine : DspEngine {
             samples.sortedBy { it.timestampNs }
         }
 
-        val startNs = sorted.first().timestampNs
-        val endNs = sorted.last().timestampNs
+        // Deduplicate consecutive identical timestamps
+        val clean = ArrayList<AccelerationSample>(sorted.size)
+        for (s in sorted) {
+            if (clean.isEmpty() || s.timestampNs > clean.last().timestampNs) {
+                clean.add(s)
+            }
+        }
+
+        val n = clean.size
+        if (n < 2) {
+            return ResamplingOutput(
+                samples = clean,
+                gapMask = BooleanArray(n) { false },
+                originalCount = n,
+                resampledCount = n,
+                maxGapMs = 0.0,
+                totalMissingTimeSec = 0.0,
+                missingTimeRatio = 0.0,
+                isContinuityPassed = true
+            )
+        }
+
+        val startNs = clean.first().timestampNs
+        val endNs = clean.last().timestampNs
         val durationSec = (endNs - startNs) / 1e9
-        if (durationSec <= 0.0) return sorted
+        if (durationSec <= 0.0) {
+            return ResamplingOutput(
+                samples = clean,
+                gapMask = BooleanArray(n) { false },
+                originalCount = n,
+                resampledCount = n,
+                maxGapMs = 0.0,
+                totalMissingTimeSec = 0.0,
+                missingTimeRatio = 0.0,
+                isContinuityPassed = true
+            )
+        }
+
+        // Measure gaps and continuity
+        var maxGapMs = 0.0
+        var totalMissingTimeSec = 0.0
+        for (i in 0 until n - 1) {
+            val dtMs = (clean[i + 1].timestampNs - clean[i].timestampNs) / 1e6
+            if (dtMs > maxGapMs) {
+                maxGapMs = dtMs
+            }
+            if (dtMs > gapThresholdMs) {
+                totalMissingTimeSec += (dtMs / 1000.0)
+            }
+        }
+
+        val missingTimeRatio = totalMissingTimeSec / durationSec
+        val isContinuityPassed = missingTimeRatio <= maxAllowedMissingRatio
 
         val targetCount = (durationSec * targetSampleRateHz).toInt() + 1
-        if (targetCount < 2) return sorted
+        if (targetCount < 2) {
+            return ResamplingOutput(
+                samples = clean,
+                gapMask = BooleanArray(n) { false },
+                originalCount = n,
+                resampledCount = n,
+                maxGapMs = maxGapMs,
+                totalMissingTimeSec = totalMissingTimeSec,
+                missingTimeRatio = missingTimeRatio,
+                isContinuityPassed = isContinuityPassed
+            )
+        }
 
-        val dtNsDouble = 1e9 / targetSampleRateHz.toDouble()
         val resampled = ArrayList<AccelerationSample>(targetCount)
+        val gapMask = BooleanArray(targetCount)
+        val dtNsDouble = 1e9 / targetSampleRateHz.toDouble()
+
+        // Precompute PCHIP derivatives if PCHIP_CUBIC
+        val h = DoubleArray(n - 1)
+        val deltaX = DoubleArray(n - 1)
+        val deltaY = DoubleArray(n - 1)
+        val deltaZ = DoubleArray(n - 1)
+        for (i in 0 until n - 1) {
+            h[i] = (clean[i + 1].timestampNs - clean[i].timestampNs) * 1e-9
+            deltaX[i] = (clean[i + 1].x - clean[i].x) / h[i]
+            deltaY[i] = (clean[i + 1].y - clean[i].y) / h[i]
+            deltaZ[i] = (clean[i + 1].z - clean[i].z) / h[i]
+        }
+
+        fun computeSlopes(delta: DoubleArray): DoubleArray {
+            val d = DoubleArray(n)
+            if (n == 2) {
+                d[0] = delta[0]
+                d[1] = delta[0]
+                return d
+            }
+            for (i in 1 until n - 1) {
+                if ((delta[i - 1] > 0.0 && delta[i] > 0.0) || (delta[i - 1] < 0.0 && delta[i] < 0.0)) {
+                    val w1 = 2.0 * h[i] + h[i - 1]
+                    val w2 = h[i] + 2.0 * h[i - 1]
+                    d[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+                } else {
+                    d[i] = 0.0
+                }
+            }
+            // Endpoint 0
+            d[0] = ((2.0 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1])
+            if ((d[0] > 0.0) != (delta[0] > 0.0)) {
+                d[0] = 0.0
+            } else if (((delta[0] > 0.0) != (delta[1] > 0.0)) && abs(d[0]) > 3.0 * abs(delta[0])) {
+                d[0] = 3.0 * delta[0]
+            }
+            // Endpoint n - 1
+            val last = n - 1
+            d[last] = ((2.0 * h[last - 1] + h[last - 2]) * delta[last - 1] - h[last - 1] * delta[last - 2]) / (h[last - 1] + h[last - 2])
+            if ((d[last] > 0.0) != (delta[last - 1] > 0.0)) {
+                d[last] = 0.0
+            } else if (((delta[last - 1] > 0.0) != (delta[last - 2] > 0.0)) && abs(d[last]) > 3.0 * abs(delta[last - 1])) {
+                d[last] = 3.0 * delta[last - 1]
+            }
+            return d
+        }
+
+        val dX = if (method == InterpolationMethod.PCHIP_CUBIC) computeSlopes(deltaX) else null
+        val dY = if (method == InterpolationMethod.PCHIP_CUBIC) computeSlopes(deltaY) else null
+        val dZ = if (method == InterpolationMethod.PCHIP_CUBIC) computeSlopes(deltaZ) else null
+
         var srcIdx = 0
+        for (k in 0 until targetCount) {
+            val tTarget = startNs + (k * dtNsDouble).roundToLong()
 
-        for (i in 0 until targetCount) {
-            val tTarget = startNs + (i * dtNsDouble).roundToLong()
-
-            // Handle boundary cases
             if (tTarget <= startNs) {
-                resampled.add(AccelerationSample(tTarget, sorted.first().x, sorted.first().y, sorted.first().z))
+                resampled.add(AccelerationSample(startNs, clean.first().x, clean.first().y, clean.first().z))
+                gapMask[k] = false
                 continue
             }
             if (tTarget >= endNs) {
-                resampled.add(AccelerationSample(tTarget, sorted.last().x, sorted.last().y, sorted.last().z))
+                resampled.add(AccelerationSample(endNs, clean.last().x, clean.last().y, clean.last().z))
+                gapMask[k] = false
                 continue
             }
 
-            // Find bounding raw samples for interpolation
-            while (srcIdx < sorted.size - 2 && sorted[srcIdx + 1].timestampNs < tTarget) {
+            while (srcIdx < n - 2 && clean[srcIdx + 1].timestampNs < tTarget) {
                 srcIdx++
             }
 
-            val p1 = sorted[srcIdx]
-            val p2 = sorted[srcIdx + 1]
-
+            val p1 = clean[srcIdx]
+            val p2 = clean[srcIdx + 1]
             val gapNs = p2.timestampNs - p1.timestampNs
-            val fraction = if (gapNs > 0) (tTarget - p1.timestampNs).toFloat() / gapNs else 0f
+            val dtMs = gapNs / 1e6
 
-            val interpX = p1.x + fraction * (p2.x - p1.x)
-            val interpY = p1.y + fraction * (p2.y - p1.y)
-            val interpZ = p1.z + fraction * (p2.z - p1.z)
-
-            resampled.add(AccelerationSample(tTarget, interpX, interpY, interpZ))
+            if (dtMs > gapThresholdMs) {
+                // Gap > 50ms: mark gapMask = true and interpolate linearly
+                if (tTarget > p1.timestampNs && tTarget < p2.timestampNs) {
+                    gapMask[k] = true
+                } else {
+                    gapMask[k] = false
+                }
+                val u = if (gapNs > 0) (tTarget - p1.timestampNs).toDouble() / gapNs.toDouble() else 0.0
+                val ix = (p1.x + u * (p2.x - p1.x)).toFloat()
+                val iy = (p1.y + u * (p2.y - p1.y)).toFloat()
+                val iz = (p1.z + u * (p2.z - p1.z)).toFloat()
+                resampled.add(AccelerationSample(tTarget, ix, iy, iz))
+            } else {
+                gapMask[k] = false
+                if (method == InterpolationMethod.LINEAR || dX == null || dY == null || dZ == null) {
+                    val u = if (gapNs > 0) (tTarget - p1.timestampNs).toDouble() / gapNs.toDouble() else 0.0
+                    val ix = (p1.x + u * (p2.x - p1.x)).toFloat()
+                    val iy = (p1.y + u * (p2.y - p1.y)).toFloat()
+                    val iz = (p1.z + u * (p2.z - p1.z)).toFloat()
+                    resampled.add(AccelerationSample(tTarget, ix, iy, iz))
+                } else {
+                    val hSec = gapNs * 1e-9
+                    val u = if (gapNs > 0) (tTarget - p1.timestampNs).toDouble() / gapNs.toDouble() else 0.0
+                    val h00 = (1.0 + 2.0 * u) * (1.0 - u) * (1.0 - u)
+                    val h10 = u * (1.0 - u) * (1.0 - u) * hSec
+                    val h01 = u * u * (3.0 - 2.0 * u)
+                    val h11 = u * u * (u - 1.0) * hSec
+                    val ix = (p1.x * h00 + dX[srcIdx] * h10 + p2.x * h01 + dX[srcIdx + 1] * h11).toFloat()
+                    val iy = (p1.y * h00 + dY[srcIdx] * h10 + p2.y * h01 + dY[srcIdx + 1] * h11).toFloat()
+                    val iz = (p1.z * h00 + dZ[srcIdx] * h10 + p2.z * h01 + dZ[srcIdx + 1] * h11).toFloat()
+                    resampled.add(AccelerationSample(tTarget, ix, iy, iz))
+                }
+            }
         }
 
-        return resampled
+        return ResamplingOutput(
+            samples = resampled,
+            gapMask = gapMask,
+            originalCount = n,
+            resampledCount = targetCount,
+            maxGapMs = maxGapMs,
+            totalMissingTimeSec = totalMissingTimeSec,
+            missingTimeRatio = missingTimeRatio,
+            isContinuityPassed = isContinuityPassed
+        )
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -319,7 +499,8 @@ class WelchPsdEngine : DspEngine {
         samples: List<AccelerationSample>,
         sampleRateHz: Float,
         params: WelchPsdParameters,
-        ambientSnrThresholdDb: Float
+        ambientSnrThresholdDb: Float,
+        gapMask: BooleanArray?
     ): MultiAxisSpectrumResult {
         val n = samples.size
         val fftSize = params.fftSize
@@ -351,6 +532,10 @@ class WelchPsdEngine : DspEngine {
             return emptyResult(freqBins, sampleRateHz, fftSize, params, settlingResult)
         }
 
+        val slicedGapMask = if (gapMask != null && gapMask.size >= n) {
+            gapMask.copyOfRange(settlingN, settlingN + usableN)
+        } else null
+
         val rawX = FloatArray(usableN) { gfSamples[it + settlingN].x }
         val rawY = FloatArray(usableN) { gfSamples[it + settlingN].y }
         val rawZ = FloatArray(usableN) { gfSamples[it + settlingN].z }
@@ -362,23 +547,25 @@ class WelchPsdEngine : DspEngine {
         // Welch PSD for each axis
         val frequencies = FloatArray(freqBins) { it * sampleRateHz / fftSize }
 
-        val psdX = welchPsdSingleAxis(filtX, fftSize, params.overlapPercentage, sampleRateHz)
-        val psdY = welchPsdSingleAxis(filtY, fftSize, params.overlapPercentage, sampleRateHz)
-        val psdZ = welchPsdSingleAxis(filtZ, fftSize, params.overlapPercentage, sampleRateHz)
+        val psdX = welchPsdSingleAxis(filtX, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask)
+        val psdY = welchPsdSingleAxis(filtY, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask)
+        val psdZ = welchPsdSingleAxis(filtZ, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask)
         
         val psdMag = FloatArray(freqBins) { k -> psdX[k] + psdY[k] + psdZ[k] }
 
         // Peak detection with persistence across halves
         val halfUsable = usableN / 2
+        val gapMask_h1 = if (slicedGapMask != null && halfUsable >= fftSize) slicedGapMask.copyOfRange(0, halfUsable) else null
+        val gapMask_h2 = if (slicedGapMask != null && halfUsable >= fftSize) slicedGapMask.copyOfRange(halfUsable, usableN) else null
         
-        val psdX_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
-        val psdX_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdX_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h1) else null
+        val psdX_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtX.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h2) else null
         
-        val psdY_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
-        val psdY_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdY_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h1) else null
+        val psdY_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtY.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h2) else null
         
-        val psdZ_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz) else null
-        val psdZ_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz) else null
+        val psdZ_h1 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(0 until halfUsable), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h1) else null
+        val psdZ_h2 = if (halfUsable >= fftSize) welchPsdSingleAxis(filtZ.sliceArray(halfUsable until usableN), fftSize, params.overlapPercentage, sampleRateHz, gapMask_h2) else null
         
         val psdMag_h1 = if (psdX_h1 != null && psdY_h1 != null && psdZ_h1 != null) FloatArray(freqBins) { k -> psdX_h1[k] + psdY_h1[k] + psdZ_h1[k] } else null
         val psdMag_h2 = if (psdX_h2 != null && psdY_h2 != null && psdZ_h2 != null) FloatArray(freqBins) { k -> psdX_h2[k] + psdY_h2[k] + psdZ_h2[k] } else null
@@ -415,7 +602,7 @@ class WelchPsdEngine : DspEngine {
      * Base: ceil(3 * fs / fc) ≈ 600 samples (6s at 100Hz/0.5Hz)
      * Extended if gravity vector unstable (up to max 10s = 1000 samples)
      */
-    private fun detectSettlingWindow(
+    internal fun detectSettlingWindow(
         gravResult: GravityRemovalResult,
         sampleRateHz: Float,
         hpfCutoffHz: Float = 0.5f,
@@ -477,7 +664,8 @@ class WelchPsdEngine : DspEngine {
         signal: FloatArray,
         fftSize: Int,
         overlapFraction: Float,
-        sampleRateHz: Float
+        sampleRateHz: Float,
+        gapMask: BooleanArray? = null
     ): FloatArray {
         val n = signal.size
         val stepSize = (fftSize * (1.0f - overlapFraction)).toInt().coerceAtLeast(1)
@@ -496,8 +684,20 @@ class WelchPsdEngine : DspEngine {
 
         // Pass 1: Compute RMS energy for all candidate segments to establish baseline
         val segmentRmsList = mutableListOf<Double>()
+        val segmentHasGapList = mutableListOf<Boolean>()
         var scanOffset = 0
         while (scanOffset + fftSize <= n) {
+            var hasGap = false
+            if (gapMask != null) {
+                for (i in 0 until fftSize) {
+                    if (gapMask[scanOffset + i]) {
+                        hasGap = true
+                        break
+                    }
+                }
+            }
+            segmentHasGapList.add(hasGap)
+
             var sumSq = 0.0
             for (i in 0 until fftSize) {
                 val v = signal[scanOffset + i].toDouble()
@@ -522,9 +722,10 @@ class WelchPsdEngine : DspEngine {
         var segIdx = 0
 
         while (offset + fftSize <= n) {
+            val hasGap = segmentHasGapList[segIdx]
             val currentSegRms = segmentRmsList[segIdx++]
-            // If fewer than 3 segments, gating is skipped; otherwise reject transient artifacts
-            if (segmentRmsList.size < 3 || currentSegRms <= rmsThreshold) {
+            // If window contains gap samples (>50ms linear bridge) or high RMS, reject window
+            if (!hasGap && (segmentRmsList.size < 3 || currentSegRms <= rmsThreshold)) {
                 // A2: Per-segment detrend (double precision)
                 val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
                 detrendDoubleInPlace(segmentDouble)
@@ -548,23 +749,48 @@ class WelchPsdEngine : DspEngine {
             offset += stepSize
         }
 
-        // Safety fallback: if all segments were gated, accumulate without gating
+        // Safety fallback: if all segments were gated
         if (segmentCount == 0) {
+            // First try non-gap segments without RMS threshold
             offset = 0
+            segIdx = 0
             while (offset + fftSize <= n) {
-                val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
-                detrendDoubleInPlace(segmentDouble)
-                val real = DoubleArray(fftSize)
-                val imag = DoubleArray(fftSize)
-                for (i in 0 until fftSize) {
-                    real[i] = segmentDouble[i] * window[i].toDouble()
+                val hasGap = segmentHasGapList[segIdx++]
+                if (!hasGap) {
+                    val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
+                    detrendDoubleInPlace(segmentDouble)
+                    val real = DoubleArray(fftSize)
+                    val imag = DoubleArray(fftSize)
+                    for (i in 0 until fftSize) {
+                        real[i] = segmentDouble[i] * window[i].toDouble()
+                    }
+                    fft(real, imag)
+                    for (k in 0 until freqBins) {
+                        psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
+                    }
+                    segmentCount++
                 }
-                fft(real, imag)
-                for (k in 0 until freqBins) {
-                    psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
-                }
-                segmentCount++
                 offset += stepSize
+            }
+
+            // If still 0 (meaning all segments contained gaps), accumulate all segments as last resort
+            if (segmentCount == 0) {
+                offset = 0
+                while (offset + fftSize <= n) {
+                    val segmentDouble = DoubleArray(fftSize) { signal[offset + it].toDouble() }
+                    detrendDoubleInPlace(segmentDouble)
+                    val real = DoubleArray(fftSize)
+                    val imag = DoubleArray(fftSize)
+                    for (i in 0 until fftSize) {
+                        real[i] = segmentDouble[i] * window[i].toDouble()
+                    }
+                    fft(real, imag)
+                    for (k in 0 until freqBins) {
+                        psdAccumulator[k] += real[k] * real[k] + imag[k] * imag[k]
+                    }
+                    segmentCount++
+                    offset += stepSize
+                }
             }
         }
 

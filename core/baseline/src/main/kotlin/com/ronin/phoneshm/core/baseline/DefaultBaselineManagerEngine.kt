@@ -127,7 +127,32 @@ class DefaultBaselineManagerEngine(
             measurementCount = entity.measurementCount,
             consecutiveAnomalyCount = entity.consecutiveAnomalyCount,
             lastUpdatedAt = entity.lastUpdatedAt,
-            recentHistory = historyEntities.map { BaselineHistoryEntry(it.timestampMs, it.f0Hz, it.qualityScorePct) }
+            recentHistory = historyEntities.map {
+                BaselineHistoryEntry(
+                    timestampMs = it.timestampMs,
+                    f0Hz = it.f0Hz,
+                    qualityScorePct = it.qualityScorePct,
+                    timeOfDay = it.timeOfDay,
+                    temperatureCelsius = it.temperatureCelsius,
+                    f0XHz = it.f0XHz,
+                    f0YHz = it.f0YHz,
+                    mode2Hz = it.mode2Hz,
+                    mode3Hz = it.mode3Hz,
+                    dampingEfdd = it.dampingEfdd,
+                    dampingSsi = it.dampingSsi,
+                    consensusVariance = it.consensusVariance
+                )
+            },
+            meanF0XHz = entity.meanF0XHz,
+            stdF0XHz = entity.stdF0XHz,
+            meanF0YHz = entity.meanF0YHz,
+            stdF0YHz = entity.stdF0YHz,
+            meanDampingEfdd = entity.meanDampingEfdd,
+            meanDampingSsi = entity.meanDampingSsi,
+            thermalSensitivityHzPerC = entity.thermalSensitivityHzPerC,
+            referenceTemperatureC = entity.referenceTemperatureC,
+            meanTempC = entity.meanTempC,
+            tempSampleCount = entity.tempSampleCount
         )
     }
 
@@ -147,19 +172,36 @@ class DefaultBaselineManagerEngine(
         ensureMigrated()
         val compositeKey = "${buildingHash}_${measurementProfileId}"
         return baselineDao.getHistory(compositeKey).map { 
-            BaselineHistoryEntry(it.timestampMs, it.f0Hz, it.qualityScorePct) 
+            BaselineHistoryEntry(
+                timestampMs = it.timestampMs,
+                f0Hz = it.f0Hz,
+                qualityScorePct = it.qualityScorePct,
+                timeOfDay = it.timeOfDay,
+                temperatureCelsius = it.temperatureCelsius,
+                f0XHz = it.f0XHz,
+                f0YHz = it.f0YHz,
+                mode2Hz = it.mode2Hz,
+                mode3Hz = it.mode3Hz,
+                dampingEfdd = it.dampingEfdd,
+                dampingSsi = it.dampingSsi,
+                consensusVariance = it.consensusVariance
+            )
         }
     }
 
     companion object {
         private const val MIN_BASELINE_SAMPLES = 10
+        private const val MIN_TEMP_M2_FOR_SLOPE = 1e-6
+        private const val MIN_THERMAL_SENSITIVITY = -0.05
+        private const val MAX_THERMAL_SENSITIVITY = 0.0
     }
 
     override suspend fun compareWithBaseline(
         buildingHash: String,
         currentF0Hz: Double,
         confidence: Double,
-        measurementProfileId: String
+        measurementProfileId: String,
+        temperatureCelsius: Float?
     ): BaselineComparisonResult {
         ensureMigrated()
         val baseline = getOrCreateBaseline(buildingHash, measurementProfileId)
@@ -175,7 +217,16 @@ class DefaultBaselineManagerEngine(
             )
         }
 
-        val percentageShift = ((currentF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
+        val effectiveF0Hz = if (temperatureCelsius != null &&
+            baseline.thermalSensitivityHzPerC != null &&
+            baseline.meanTempC != null
+        ) {
+            currentF0Hz - baseline.thermalSensitivityHzPerC * (temperatureCelsius.toDouble() - baseline.meanTempC)
+        } else {
+            currentF0Hz
+        }
+
+        val percentageShift = ((effectiveF0Hz - baseline.meanF0Hz) / baseline.meanF0Hz) * 100.0
 
         if (confidence < BaselineManagerEngine.MIN_QUALITY_CONFIDENCE_THRESHOLD) {
             return BaselineComparisonResult(
@@ -191,7 +242,7 @@ class DefaultBaselineManagerEngine(
         }
 
         val isTwoSigmaAnomaly = baseline.stdF0Hz > 0.0 &&
-                abs(currentF0Hz - baseline.meanF0Hz) > 2.0 * baseline.stdF0Hz
+                abs(effectiveF0Hz - baseline.meanF0Hz) > 2.0 * baseline.stdF0Hz
         val isLargeShift = abs(percentageShift) > 5.0
         val isAnomaly = isLargeShift || isTwoSigmaAnomaly
 
@@ -213,7 +264,7 @@ class DefaultBaselineManagerEngine(
                 }
                 if (isTwoSigmaAnomaly) {
                     append(String.format("⚠ ANOMALY: Deviation exceeds 2σ (%.4f Hz > %.4f Hz). ",
-                        abs(currentF0Hz - baseline.meanF0Hz), 2.0 * baseline.stdF0Hz))
+                        abs(effectiveF0Hz - baseline.meanF0Hz), 2.0 * baseline.stdF0Hz))
                 }
                 if (isConfirmedAnomaly) {
                     append("⚠ CONFIRMED: ${projectedCount} consecutive anomalous sessions. Investigate potential structural degradation.")
@@ -245,7 +296,14 @@ class DefaultBaselineManagerEngine(
         qualityScorePct: Int,
         measurementProfileId: String,
         timeOfDay: String?,
-        temperatureCelsius: Float?
+        temperatureCelsius: Float?,
+        f0XHz: Double?,
+        f0YHz: Double?,
+        mode2Hz: Double?,
+        mode3Hz: Double?,
+        dampingEfdd: Double?,
+        dampingSsi: Double?,
+        consensusVariance: Double?
     ) {
         if (qualityScorePct < 50) return
         ensureMigrated()
@@ -253,6 +311,23 @@ class DefaultBaselineManagerEngine(
 
         val existing = baselineDao.getProfile(compositeKey)
         val now = System.currentTimeMillis()
+        val tempC = temperatureCelsius?.toDouble()
+
+        val historyEntity = BaselineHistoryEntity(
+            buildingHash = compositeKey,
+            timestampMs = now,
+            f0Hz = currentF0Hz,
+            qualityScorePct = qualityScorePct,
+            timeOfDay = timeOfDay,
+            temperatureCelsius = temperatureCelsius,
+            f0XHz = f0XHz,
+            f0YHz = f0YHz,
+            mode2Hz = mode2Hz,
+            mode3Hz = mode3Hz,
+            dampingEfdd = dampingEfdd,
+            dampingSsi = dampingSsi,
+            consensusVariance = consensusVariance
+        )
 
         if (existing == null) {
             baselineDao.updateBaselineWithHistory(
@@ -263,53 +338,150 @@ class DefaultBaselineManagerEngine(
                     m2 = 0.0,
                     measurementCount = 1,
                     consecutiveAnomalyCount = 0,
-                    lastUpdatedAt = now
+                    lastUpdatedAt = now,
+                    meanF0XHz = f0XHz,
+                    stdF0XHz = if (f0XHz != null) 0.0 else null,
+                    m2F0X = if (f0XHz != null) 0.0 else null,
+                    meanF0YHz = f0YHz,
+                    stdF0YHz = if (f0YHz != null) 0.0 else null,
+                    m2F0Y = if (f0YHz != null) 0.0 else null,
+                    meanDampingEfdd = dampingEfdd,
+                    meanDampingSsi = dampingSsi,
+                    thermalSensitivityHzPerC = null,
+                    referenceTemperatureC = tempC ?: 25.0,
+                    meanTempC = tempC,
+                    m2Temp = if (tempC != null) 0.0 else null,
+                    coMomentTempF0 = if (tempC != null) 0.0 else null,
+                    tempSampleCount = if (tempC != null) 1 else 0
                 ),
-                BaselineHistoryEntity(
-                    buildingHash = compositeKey,
-                    timestampMs = now,
-                    f0Hz = currentF0Hz,
-                    qualityScorePct = qualityScorePct,
-                    timeOfDay = timeOfDay,
-                    temperatureCelsius = temperatureCelsius
-                )
+                historyEntity
             )
         } else {
             val oldMean = existing.meanF0Hz
             val oldM2 = existing.m2
             val nNew = existing.measurementCount + 1
 
-            val delta = currentF0Hz - oldMean
+            // Step 1: Anomaly-First Check using PRIOR thermal sensitivity (β_{n-1})
+            val priorBeta = existing.thermalSensitivityHzPerC
+            val priorMeanTemp = existing.meanTempC
+            val f0Corr = if (tempC != null && priorBeta != null && priorMeanTemp != null) {
+                currentF0Hz - priorBeta * (tempC - priorMeanTemp)
+            } else {
+                currentF0Hz
+            }
 
-            val pctShift = ((currentF0Hz - oldMean) / oldMean) * 100.0
+            val pctShift = ((f0Corr - oldMean) / oldMean) * 100.0
             val isTwoSigma = existing.stdF0Hz > 0.0 &&
-                    abs(currentF0Hz - oldMean) > 2.0 * existing.stdF0Hz
+                    abs(f0Corr - oldMean) > 2.0 * existing.stdF0Hz
             val isAnomaly = abs(pctShift) > 5.0 || isTwoSigma
 
             if (isAnomaly && nNew >= MIN_BASELINE_SAMPLES) {
-                // Phase 2-A: Anomalous sample → record in history but DO NOT update baseline statistics.
-                // This prevents structural damage or environmental shifts from silently drifting the baseline.
+                // Phase 2: Anomalous sample → record in history but DO NOT update Welford or thermal co-moment states.
                 val newAnomalyCount = existing.consecutiveAnomalyCount + 1
                 baselineDao.updateBaselineWithHistory(
                     existing.copy(
                         consecutiveAnomalyCount = newAnomalyCount,
                         lastUpdatedAt = now
                     ),
-                    BaselineHistoryEntity(
-                        buildingHash = compositeKey,
-                        timestampMs = now,
-                        f0Hz = currentF0Hz,
-                        qualityScorePct = qualityScorePct,
-                        timeOfDay = timeOfDay,
-                        temperatureCelsius = temperatureCelsius
-                    )
+                    historyEntity
                 )
             } else {
-                // Normal (non-anomalous) sample: update Welford running statistics
+                // Step 2: Normal (or calibrating n < 10) sample → update Welford running statistics & bivariate co-moments
+                val delta = currentF0Hz - oldMean
                 val newMean = oldMean + delta / nNew
                 val delta2 = currentF0Hz - newMean
                 val newM2 = oldM2 + delta * delta2
                 val newStd = if (nNew > 1) sqrt(newM2 / nNew) else 0.0
+
+                // Independent X-axis Welford update
+                val newMeanX: Double?
+                val newM2X: Double?
+                val newStdX: Double?
+                if (f0XHz != null) {
+                    val prevMeanX = existing.meanF0XHz
+                    if (prevMeanX == null) {
+                        newMeanX = f0XHz
+                        newM2X = 0.0
+                        newStdX = 0.0
+                    } else {
+                        val dX = f0XHz - prevMeanX
+                        newMeanX = prevMeanX + dX / nNew
+                        newM2X = (existing.m2F0X ?: 0.0) + dX * (f0XHz - newMeanX)
+                        newStdX = if (nNew > 1) sqrt(newM2X / nNew) else 0.0
+                    }
+                } else {
+                    newMeanX = existing.meanF0XHz
+                    newM2X = existing.m2F0X
+                    newStdX = existing.stdF0XHz
+                }
+
+                // Independent Y-axis Welford update
+                val newMeanY: Double?
+                val newM2Y: Double?
+                val newStdY: Double?
+                if (f0YHz != null) {
+                    val prevMeanY = existing.meanF0YHz
+                    if (prevMeanY == null) {
+                        newMeanY = f0YHz
+                        newM2Y = 0.0
+                        newStdY = 0.0
+                    } else {
+                        val dY = f0YHz - prevMeanY
+                        newMeanY = prevMeanY + dY / nNew
+                        newM2Y = (existing.m2F0Y ?: 0.0) + dY * (f0YHz - newMeanY)
+                        newStdY = if (nNew > 1) sqrt(newM2Y / nNew) else 0.0
+                    }
+                } else {
+                    newMeanY = existing.meanF0YHz
+                    newM2Y = existing.m2F0Y
+                    newStdY = existing.stdF0YHz
+                }
+
+                // Running damping averages
+                val newMeanDampingEfdd = if (dampingEfdd != null) {
+                    existing.meanDampingEfdd?.let { it + (dampingEfdd - it) / nNew } ?: dampingEfdd
+                } else existing.meanDampingEfdd
+
+                val newMeanDampingSsi = if (dampingSsi != null) {
+                    existing.meanDampingSsi?.let { it + (dampingSsi - it) / nNew } ?: dampingSsi
+                } else existing.meanDampingSsi
+
+                // Numerically stable bivariate Welford update for thermal drift (with zero-variance guard)
+                val newTempCount: Int
+                val newMeanTemp: Double?
+                val newM2Temp: Double?
+                val newCoMoment: Double?
+                val newBeta: Double?
+
+                if (tempC != null) {
+                    val prevTempCount = existing.tempSampleCount
+                    val prevMeanTemp = existing.meanTempC
+                    if (prevTempCount == 0 || prevMeanTemp == null) {
+                        newTempCount = 1
+                        newMeanTemp = tempC
+                        newM2Temp = 0.0
+                        newCoMoment = 0.0
+                        newBeta = existing.thermalSensitivityHzPerC
+                    } else {
+                        newTempCount = prevTempCount + 1
+                        val deltaT = tempC - prevMeanTemp
+                        newMeanTemp = prevMeanTemp + deltaT / newTempCount
+                        val deltaT2 = tempC - newMeanTemp
+                        newM2Temp = (existing.m2Temp ?: 0.0) + deltaT * deltaT2
+                        newCoMoment = (existing.coMomentTempF0 ?: 0.0) + deltaT * (currentF0Hz - newMean)
+                        newBeta = if (newTempCount >= 2 && newM2Temp > MIN_TEMP_M2_FOR_SLOPE) {
+                            (newCoMoment / newM2Temp).coerceIn(MIN_THERMAL_SENSITIVITY, MAX_THERMAL_SENSITIVITY)
+                        } else {
+                            existing.thermalSensitivityHzPerC
+                        }
+                    }
+                } else {
+                    newTempCount = existing.tempSampleCount
+                    newMeanTemp = existing.meanTempC
+                    newM2Temp = existing.m2Temp
+                    newCoMoment = existing.coMomentTempF0
+                    newBeta = existing.thermalSensitivityHzPerC
+                }
 
                 baselineDao.updateBaselineWithHistory(
                     BaselineProfileEntity(
@@ -319,16 +491,23 @@ class DefaultBaselineManagerEngine(
                         m2 = newM2,
                         measurementCount = nNew,
                         consecutiveAnomalyCount = 0,
-                        lastUpdatedAt = now
+                        lastUpdatedAt = now,
+                        meanF0XHz = newMeanX,
+                        stdF0XHz = newStdX,
+                        m2F0X = newM2X,
+                        meanF0YHz = newMeanY,
+                        stdF0YHz = newStdY,
+                        m2F0Y = newM2Y,
+                        meanDampingEfdd = newMeanDampingEfdd,
+                        meanDampingSsi = newMeanDampingSsi,
+                        thermalSensitivityHzPerC = newBeta,
+                        referenceTemperatureC = existing.referenceTemperatureC,
+                        meanTempC = newMeanTemp,
+                        m2Temp = newM2Temp,
+                        coMomentTempF0 = newCoMoment,
+                        tempSampleCount = newTempCount
                     ),
-                    BaselineHistoryEntity(
-                        buildingHash = compositeKey,
-                        timestampMs = now,
-                        f0Hz = currentF0Hz,
-                        qualityScorePct = qualityScorePct,
-                        timeOfDay = timeOfDay,
-                        temperatureCelsius = temperatureCelsius
-                    )
+                    historyEntity
                 )
             }
         }

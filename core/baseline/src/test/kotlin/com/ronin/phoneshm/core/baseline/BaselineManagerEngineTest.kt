@@ -18,7 +18,8 @@ class BaselineManagerEngineTest {
             buildingHash: String,
             currentF0Hz: Double,
             confidence: Double,
-            measurementProfileId: String
+            measurementProfileId: String,
+            temperatureCelsius: Float?
         ): BaselineComparisonResult {
             val baseline = storage[buildingHash]
             if (baseline == null) {
@@ -35,7 +36,14 @@ class BaselineManagerEngineTest {
             qualityScorePct: Int, 
             measurementProfileId: String,
             timeOfDay: String?,
-            temperatureCelsius: Float?
+            temperatureCelsius: Float?,
+            f0XHz: Double?,
+            f0YHz: Double?,
+            mode2Hz: Double?,
+            mode3Hz: Double?,
+            dampingEfdd: Double?,
+            dampingSsi: Double?,
+            consensusVariance: Double?
         ) {
             val existing = storage[buildingHash]
             if (existing == null) {

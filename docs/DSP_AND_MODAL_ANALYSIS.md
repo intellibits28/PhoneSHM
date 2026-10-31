@@ -26,12 +26,19 @@ flowchart LR
     FiltFilt --> TriEngine["Tri-Engine OMA Pipeline (Welch + EFDD + SSI)"]
 ```
 
-### A. Monotonic Verification & Resampling
-Android sensor hardware timestamps (`SensorEvent.timestamp`) are delivered in nanoseconds since boot. The preprocessing pipeline first verifies strict monotonicity:
-$$t_{i} > t_{i-1} \quad \forall i \in [1, N]$$
-Any duplicate or inverted timestamps trigger a data validation failure. Because Android OS delivery is non-uniform, signals are resampled onto a strictly uniform grid at $f_s = 100\text{ Hz}$ ($\Delta t = 10.0\text{ ms}$) via linear/cubic interpolation.
-Target grid timestamps are computed using 64-bit double precision floating-point arithmetic to prevent cumulative integer truncation drift across long sessions:
-$$t_{\text{target}, k} = t_{\text{start}} + \text{round}\left(k \cdot \frac{10^9}{f_s}\right)$$
+### A. Monotonic Verification, Fritsch-Carlson PCHIP Resampling & Gap-Mask Gating
+Android sensor hardware timestamps (`SensorEvent.timestamp`) are delivered in nanoseconds since boot. The preprocessing pipeline first verifies strict monotonicity ($t_i > t_{i-1}$), sorting out-of-order samples and deduplicating identical timestamps.
+
+Because Android OS event delivery is non-uniform and prone to OS scheduling dropouts (e.g., Xiaomi/MIUI power management stalls), signals are resampled onto a strictly uniform grid at $f_s = 100\text{ Hz}$ ($\Delta t = 10.0\text{ ms}$) via `resampleToUniformGrid`:
+1. **64-bit Target Grid**: Target timestamps are computed in 64-bit `double` precision to prevent cumulative integer truncation drift:
+   $$t_{\text{target}, k} = t_{\text{start}} + \text{round}\left(k \cdot \frac{10^9}{f_s}\right)$$
+2. **Fritsch-Carlson Monotone Cubic Hermite (`PCHIP_CUBIC`) & Gap Bridging**:
+   - For normal intervals ($\Delta t_i \le 50.0\text{ ms}$), monotone cubic Hermite interpolation preserves local extrema without overshoot (`gapMask[k] = 0`).
+   - When a sensor dropout gap exceeds `gapThresholdMs` ($> 50.0\text{ ms}$), `PCHIP_CUBIC` automatically falls back to linear bridging across that interval to prevent cubic polynomial explosion and marks every bridged sample with `gapMask[k] = 1`.
+   - Continuity quality is tracked via `maxGapMs`, `totalMissingTimeSec`, and `isContinuityPassed = (missingTimeRatio <= 0.05)`.
+3. **Settling-Aligned Gap-Mask Window Rejection**:
+   - When slicing signals after the high-pass filter settling window (`settlingN`), `gapMask` is sliced identically (`gapMask[settlingN .. settlingN + usableN]`).
+   - Any FFT window containing one or more bridged dropout samples (`gapMask != 0`) is strictly excluded from both Welch PSD (`welchPsdSingleAxis`) and EFDD CSD (`calculateFdd`) accumulation alongside the Median + $3 \times \text{MAD}$ RMS gate.
 
 ### B. Gravity Separation & Detrending
 The stationary orientation of the smartphone adds a large DC gravity component to the acceleration axes. The dynamic gravity vector $\mathbf{g}(t) = [g_x(t), g_y(t), g_z(t)]^T$ is estimated via an Exponential Moving Average (EMA) filter:
@@ -95,34 +102,44 @@ $$\Delta p = 0.5 \cdot \frac{\alpha - \gamma}{\alpha - 2\beta + \gamma}$$
 $$f_{\text{refined}} = f_k + \Delta p \cdot \Delta f$$
 where $\alpha = \ln(S_{k-1})$, $\beta = \ln(S_k)$, and $\gamma = \ln(S_{k+1})$.
 
+### Gated Transient Time-Frequency Analysis (STFT & Daubechies `db4` WPT)
+Rather than simply discarding high-energy non-stationary segments ($\text{RMS}_m > \widetilde{\text{RMS}} + 3 \times 1.4826 \cdot \text{MAD}$ and `hasGap == false`), PhoneSHM routes up to the top $K = 5$ gated transient segments into [`analyzeGatedTransients`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/dsp_core.cpp) (`wavelet_packet_core.cpp`):
+1. **Short-Time Fourier Transform (STFT)**: Computes a $256$-point Hanning STFT with $75\%$ overlap ($64$-sample hop, $129$ frequency bins) across each $512$-sample transient segment.
+2. **Daubechies `db4` Wavelet Packet Transform (Depth $J = 4$)**: Directly decomposes the $100\text{ Hz}$ vibration segment (without audio downsampling) into $2^4 = 16$ uniform subbands ($\Delta f_{\text{band}} = 3.125\text{ Hz}$ across $0\text{–}50\text{ Hz}$) using normalized 8-tap Daubechies `db4` quadrature mirror filters.
+3. **Shannon Wavelet Entropy & NaN Guard**: Computes normalized subband energies $p_j = E_j / E_{\text{total}}$ and Shannon entropy:
+   $$S_{\text{wpt}} = -\sum_{j=1, \, p_j > 10^{-12}}^{16} p_j \ln(p_j)$$
+   Guarding $p_j > 10^{-12}$ prevents $0 \cdot \ln(0) \to \text{NaN}$ on zero-energy bands. Segments with $S_{\text{wpt}} < 1.8$ and low-frequency concentration ($\sum_{j=0}^7 p_j \ge 0.55$) are flagged as `isStructuralShock = true`.
+4. **Safe JNI Timestamp Reconstruction**: To avoid 64-bit integer bitcasting into IEEE 754 `float` registers (which risks signaling NaN bit corruption on ARMv8/x86), JNI packs only the 32-bit float `onsetSampleIndex` and reconstructs exact 64-bit nanosecond timestamps in Kotlin via `reconstructOnsetTimestampNs(sessionStartTimestampNs, onsetSampleIndex, sampleRateHz)`.
+
 ---
 
-## 4. Method 2: Enhanced Frequency Domain Decomposition (EFDD)
+## 4. Method 2: Enhanced Frequency Domain Decomposition (EFDD), Tri-Axial Coherence & Roving Mode Shapes
 
 Frequency Domain Decomposition (FDD) decouples multi-degree-of-freedom structural responses into single-degree-of-freedom (SDOF) systems via Singular Value Decomposition (SVD).
 
-### Horizontal Sway Decoupling ($2 \times 2$ CSD Matrix)
+### Horizontal Sway Decoupling ($2 \times 2$ SVD) & Tri-Axial $3 \times 3$ Coherence
 Civilian buildings predominantly vibrate in orthogonal horizontal translation modes (sway along structural principal axes). In smartphone deployments, vertical ($Z$-axis) vibrations are dominated by localized floor slab vibrations that can mask or contaminate weak horizontal sway modes.
 
-To achieve true orientation independence without vertical mode interference, PhoneSHM decouples the horizontal response into a **$2 \times 2$ Cross-Spectral Density (CSD) matrix** for horizontal fundamental frequency identification:
+To achieve orientation independence while rigorously rejecting vertical slab bounce, [`fdd_core.cpp`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/fdd_core.cpp) computes both the full **$3 \times 3$ Hermitian Cross-Spectral Density (CSD) matrix** $\mathbf{G}_{3\times 3}(f_k)$ across $(X, Y, Z)$ and the **$2 \times 2$ horizontal sub-block SVD** on $\mathbf{G}_{xy}(f_k)$:
 
-1. **Horizontal CSD Matrix**: At each frequency bin $f_k$, the $2 \times 2$ spectral matrix $\mathbf{G}_{xy}(f_k)$ is constructed from horizontal axes $X$ and $Y$:
-   $$\mathbf{G}_{xy}(f_k) = \begin{bmatrix} 
-   S_{xx}(f_k) & S_{xy}(f_k) \\
-   S_{yx}(f_k) & S_{yy}(f_k)
-   \end{bmatrix}$$
-   Candidate segments are filtered via the Median + $3 \times \text{MAD}$ RMS gate prior to CSD accumulation.
-2. **Singular Value Decomposition per Frequency Bin**:
-   $$\mathbf{G}_{xy}(f_k) = \mathbf{U}_k \mathbf{\Sigma}_k \mathbf{U}_k^H = \sigma_{1}(f_k) \mathbf{u}_{1, k} \mathbf{u}_{1, k}^H + \sigma_{2}(f_k) \mathbf{u}_{2, k} \mathbf{u}_{2, k}^H$$
-   where $\sigma_1(f_k) \ge \sigma_2(f_k)$ are the singular values. The first singular value $\sigma_1(f_k)$ represents the dominant modal power in horizontal translation, independent of the smartphone's horizontal orientation angle (azimuth).
-3. **First Singular Value Line Spectrum**: Structural sway modes appear as prominent resonance peaks in the $\sigma_1(f)$ spectrum.
-4. **Modal Identification & Damping Estimation ($\zeta$)**:
-   - The SDOF auto-spectral bell surrounding a resonant peak is extracted via Modal Assurance Criterion (MAC) thresholding:
-     $$\text{MAC}(\mathbf{u}_k, \mathbf{u}_{\text{peak}}) = \frac{|\mathbf{u}_k^H \mathbf{u}_{\text{peak}}|^2}{(\mathbf{u}_k^H \mathbf{u}_k)(\mathbf{u}_{\text{peak}}^H \mathbf{u}_{\text{peak}})} \ge 0.80$$
-   - Applying the Inverse Discrete Fourier Transform (IDFT) to the SDOF bell yields the auto-correlation function (free decay).
-   - Successive positive peaks in the autocorrelation envelope are extracted using an adaptive threshold ($r[i] \ge 0.15 \cdot r_{\text{first}}$) with zero-lag anchor fallback, ensuring stable peak detection even for rapidly decaying signals.
-   - Damping ratio $\zeta$ is computed from the logarithmic decrement $\delta$:
-     $$\delta = \frac{1}{m} \ln\left(\frac{r_0}{r_m}\right), \quad \zeta = \frac{\delta}{\sqrt{4\pi^2 + \delta^2}}$$
+1. **$3 \times 3$ CSD Matrix & $2 \times 2$ Horizontal SVD**:
+   - Candidate segments without gaps (`!hasGap`) that pass the Median + $3 \times \text{MAD}$ RMS gate are accumulated into $\mathbf{G}_{3\times 3}(f_k) \in \mathbb{C}^{3\times 3}$.
+   - SVD is applied to the upper-left $2 \times 2$ horizontal block $\mathbf{G}_{xy}(f_k) = \mathbf{U}_k \mathbf{\Sigma}_k \mathbf{U}_k^H = \sigma_1(f_k)\mathbf{u}_{1,k}\mathbf{u}_{1,k}^H + \sigma_2(f_k)\mathbf{u}_{2,k}\mathbf{u}_{2,k}^H$.
+2. **Division-by-Zero Guarded Coherences & H/V Ratio**:
+   - Magnitude-squared coherences and the Horizontal-to-Vertical spectral ratio are computed with a `1e-30` denominator floor and clamped to $[0.0, 1.0]$:
+     $$\gamma_{ij}^2(f_k) = \text{clamp}\left(\frac{|G_{ij}(f_k)|^2}{\max(S_{ii}(f_k)\cdot S_{jj}(f_k), 10^{-30})}, 0.0, 1.0\right), \quad \text{H/V}(f_k) = \frac{\sigma_1(f_k)}{\max(S_{zz}(f_k), 10^{-30})}$$
+3. **Axis-Aligned Sway Gate & Dominant Sway Azimuth**:
+   - When a building sways purely along the phone's $X$ or $Y$ axis (1D sway), one horizontal channel carries minimal modal energy and $\gamma_{xy}^2(f_0)$ is naturally near zero. Therefore, PhoneSHM validates horizontal sway modes **without** requiring $\gamma_{xy}^2 \ge 0.60$:
+     $$\text{isValidHorizontalSway} \iff \left(\frac{\sigma_1(f_0)}{S_{zz}(f_0)} > 3.0\right) \land \left(\gamma_{xz}^2(f_0) \le 0.35\right) \land \left(\gamma_{yz}^2(f_0) \le 0.35\right)$$
+   - The dominant horizontal sway azimuth angle $\theta_{\text{sway}} \in [-180^\circ, 180^\circ]$ is extracted from the first singular vector $\mathbf{u}_1(f_0) = [u_x, u_y]^T$:
+     $$\theta_{\text{sway}} = \text{atan2}(\text{Re}(u_y), \text{Re}(u_x)) \times \frac{180^\circ}{\pi}$$
+4. **Modal Damping Estimation ($\zeta$)**:
+   - The SDOF auto-spectral bell surrounding a resonant peak is extracted via Modal Assurance Criterion ($\text{MAC} \ge 0.85$) and transformed to the time-domain autocorrelation free decay via IDFT to compute logarithmic decrement damping $\zeta$.
+5. **Single-Node Roving Mode Shape Synthesis ([`RovingModeShapeEngine.kt`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/modal/src/main/kotlin/com/ronin/phoneshm/core/modal/RovingModeShapeEngine.kt))**:
+   - Aggregates sequential single-phone measurements recorded across building floors ($L = 1, 2, \dots, \text{Roof}$) that match the reference $f_0$ within $5\%$ tolerance.
+   - Normalizes each floor's peak singular value $\sigma_1^{(L)}(f_0)$ by its stationary broadband ambient RMS variance $\sigma_{\text{amb}, L}^2$ to compensate for non-simultaneous wind excitation differences:
+     $$|\phi(L)| = \sqrt{\frac{\sigma_1^{(L)}(f_0)}{\max(\sigma_{\text{amb}, L}^2, 10^{-12})}}$$
+   - Assigns phase sign $\text{sign}(L) = -1.0$ if $\cos(\theta_L - \theta_{\text{Roof}}) < 0$ else $+1.0$, and normalizes by the highest floor so $\phi(\text{Roof}) = 1.0$.
 
 ---
 
@@ -166,7 +183,7 @@ To prevent false alarms caused by localized pedestrian movement, HVAC motor vibr
 Two frequencies $f_1$ and $f_2$ agree if their relative difference is within the $5\%$ structural tolerance:
 $$\frac{|f_1 - f_2|}{\frac{f_1 + f_2}{2}} \le 0.05$$
 
-### Consensus Status States
+### Consensus Status States & Inter-Engine Uncertainty
 
 | Status | Conditions | Confidence Impact |
 | :--- | :--- | :--- |
@@ -174,3 +191,6 @@ $$\frac{|f_1 - f_2|}{\frac{f_1 + f_2}{2}} \le 0.05$$
 | **`PARTIAL`** | Exactly 2 methods converge within 5% tolerance (e.g. Welch + EFDD, or Welch + SSI). | **66.7% Agreement Score**: Moderate confidence ($f_{\text{consensus}} = \text{mean}(f_{\text{pair}})$). |
 | **`DISAGREED`** | All 3 methods yield distinct frequencies exceeding 5% separation. | **33.3% Agreement Score**: Low confidence; flagged for inspection. |
 | **`INSUFFICIENT`**| Ambient excitation is too low for any method to identify distinct peaks. | **0.0% Agreement Score**: Re-measurement recommended. |
+
+For `AGREED` ($k=3$) and `PARTIAL` ($k=2$) states, [`ModalConsensusEngine`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/modal/src/main/kotlin/com/ronin/phoneshm/core/modal/ModalConsensusEngine.kt) quantifies sample variance and relative uncertainty across the agreeing engines:
+$$\sigma_{\text{consensus}}^2 = \frac{1}{k - 1} \sum_{i=1}^k \left(f_i - f_{\text{consensus}}\right)^2, \quad \text{uncertaintyRatioPct} = \frac{\sqrt{\sigma_{\text{consensus}}^2}}{f_{\text{consensus}}} \times 100\%$$

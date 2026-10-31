@@ -113,6 +113,48 @@ data class MultiAxisSpectrumResult(
     val output: WelchPsdOutput
 )
 
+enum class InterpolationMethod {
+    LINEAR,
+    PCHIP_CUBIC
+}
+
+data class ResamplingOutput(
+    val samples: List<AccelerationSample>,
+    val gapMask: BooleanArray,
+    val originalCount: Int,
+    val resampledCount: Int,
+    val maxGapMs: Double,
+    val totalMissingTimeSec: Double,
+    val missingTimeRatio: Double,
+    val isContinuityPassed: Boolean
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as ResamplingOutput
+        return samples == other.samples &&
+                gapMask.contentEquals(other.gapMask) &&
+                originalCount == other.originalCount &&
+                resampledCount == other.resampledCount &&
+                maxGapMs == other.maxGapMs &&
+                totalMissingTimeSec == other.totalMissingTimeSec &&
+                missingTimeRatio == other.missingTimeRatio &&
+                isContinuityPassed == other.isContinuityPassed
+    }
+
+    override fun hashCode(): Int {
+        var result = samples.hashCode()
+        result = 31 * result + gapMask.contentHashCode()
+        result = 31 * result + originalCount
+        result = 31 * result + resampledCount
+        result = 31 * result + maxGapMs.hashCode()
+        result = 31 * result + totalMissingTimeSec.hashCode()
+        result = 31 * result + missingTimeRatio.hashCode()
+        result = 31 * result + isContinuityPassed.hashCode()
+        return result
+    }
+}
+
 /**
  * DspEngine processes multi-axis accelerometer signals, executing gravity removal, detrending,
  * Hanning windowing, and Welch's Method PSD estimation separately across directional components.
@@ -135,6 +177,18 @@ interface DspEngine {
      * This ensures the FFT/PSD algorithms do not suffer from leakage or jitter artifacts.
      */
     fun resampleToUniformGrid(samples: List<AccelerationSample>, targetSampleRateHz: Float): List<AccelerationSample>
+
+    /**
+     * Resamples irregular acceleration samples to a uniform grid using PCHIP cubic Hermite
+     * or linear interpolation, reporting gap mask (> 50ms gaps) and continuity statistics.
+     */
+    fun resampleToUniformGrid(
+        samples: List<AccelerationSample>,
+        targetSampleRateHz: Float,
+        method: InterpolationMethod = InterpolationMethod.PCHIP_CUBIC,
+        gapThresholdMs: Double = 50.0,
+        maxAllowedMissingRatio: Double = 0.05
+    ): ResamplingOutput
 
     /**
      * Removes gravity component and detrends the signal using Exponential Moving Average.
@@ -217,7 +271,8 @@ interface DspEngine {
         samples: List<AccelerationSample>,
         sampleRateHz: Float = 100f,
         params: WelchPsdParameters = WelchPsdParameters(),
-        ambientSnrThresholdDb: Float = 1.0f
+        ambientSnrThresholdDb: Float = 1.0f,
+        gapMask: BooleanArray? = null
     ): MultiAxisSpectrumResult
 
     /**
