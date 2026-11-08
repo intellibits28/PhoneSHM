@@ -116,10 +116,25 @@ class AndroidVibrationSensorEngine(
             val systemArrivalTimesNs = mutableListOf<Long>()
             var sampleCounter = 0
 
+            val biasArr = sessionAccelerometerBias ?: capabilityReport.accelerometerBias
+            val biasX = if (biasArr.size >= 3) biasArr[0] else 0f
+            val biasY = if (biasArr.size >= 3) biasArr[1] else 0f
+            val biasZ = if (biasArr.size >= 3) biasArr[2] else 0f
+
             val flow = startStreaming(100)
 
             val streamingJob = launch {
-                flow.collect { sample ->
+                flow.collect { rawSample ->
+                    val sample = if (biasX != 0f || biasY != 0f || biasZ != 0f) {
+                        AccelerationSample(
+                            timestampNs = rawSample.timestampNs,
+                            x = rawSample.x - biasX,
+                            y = rawSample.y - biasY,
+                            z = rawSample.z - biasZ
+                        )
+                    } else {
+                        rawSample
+                    }
                     val sysTime = System.nanoTime()
                     sampleCounter++
                     onSampleReceived?.invoke(sample, sampleCounter)

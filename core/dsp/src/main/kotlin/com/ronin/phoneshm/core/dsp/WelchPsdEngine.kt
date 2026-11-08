@@ -34,7 +34,8 @@ class WelchPsdEngine : DspEngine {
         targetSampleRateHz: Float,
         method: InterpolationMethod,
         gapThresholdMs: Double,
-        maxAllowedMissingRatio: Double
+        maxAllowedMissingRatio: Double,
+        accelerometerBias: FloatArray?
     ): ResamplingOutput {
         if (samples.isEmpty()) {
             return ResamplingOutput(
@@ -48,9 +49,18 @@ class WelchPsdEngine : DspEngine {
                 isContinuityPassed = true
             )
         }
-        if (samples.size == 1) {
+        val bx = if (accelerometerBias != null && accelerometerBias.size >= 3) accelerometerBias[0] else 0f
+        val by = if (accelerometerBias != null && accelerometerBias.size >= 3) accelerometerBias[1] else 0f
+        val bz = if (accelerometerBias != null && accelerometerBias.size >= 3) accelerometerBias[2] else 0f
+        val biasCorrectedSamples = if (bx != 0f || by != 0f || bz != 0f) {
+            samples.map { s -> AccelerationSample(s.timestampNs, s.x - bx, s.y - by, s.z - bz) }
+        } else {
+            samples
+        }
+
+        if (biasCorrectedSamples.size == 1) {
             return ResamplingOutput(
-                samples = samples,
+                samples = biasCorrectedSamples,
                 gapMask = BooleanArray(1) { false },
                 originalCount = 1,
                 resampledCount = 1,
@@ -62,10 +72,10 @@ class WelchPsdEngine : DspEngine {
         }
 
         // Ensure samples are sorted by timestamp
-        val sorted = if (samples.zipWithNext().all { it.first.timestampNs <= it.second.timestampNs }) {
-            samples
+        val sorted = if (biasCorrectedSamples.zipWithNext().all { it.first.timestampNs <= it.second.timestampNs }) {
+            biasCorrectedSamples
         } else {
-            samples.sortedBy { it.timestampNs }
+            biasCorrectedSamples.sortedBy { it.timestampNs }
         }
 
         // Deduplicate consecutive identical timestamps
@@ -269,12 +279,26 @@ class WelchPsdEngine : DspEngine {
         if (samples.isEmpty()) return GravityRemovalResult(emptyList(), emptyList(), 0f)
 
         val n = samples.size
-        val alpha = 0.1f
+        // Slow orientation tracking alpha (~0.03 Hz @ 100Hz) for coupling/tilt variance only
+        val alpha = 0.002f
 
         val xRes = FloatArray(n)
         val yRes = FloatArray(n)
         val zRes = FloatArray(n)
         val gravityVectors = ArrayList<FloatArray>(n)
+
+        var sumX = 0.0
+        var sumY = 0.0
+        var sumZ = 0.0
+        for (i in 0 until n) {
+            val s = samples[i]
+            sumX += s.x
+            sumY += s.y
+            sumZ += s.z
+        }
+        val meanX = (sumX / n).toFloat()
+        val meanY = (sumY / n).toFloat()
+        val meanZ = (sumZ / n).toFloat()
 
         var gx = samples[0].x
         var gy = samples[0].y
@@ -289,9 +313,10 @@ class WelchPsdEngine : DspEngine {
             gx = alpha * s.x + (1f - alpha) * gx
             gy = alpha * s.y + (1f - alpha) * gy
             gz = alpha * s.z + (1f - alpha) * gz
-            xRes[i] = s.x - gx
-            yRes[i] = s.y - gy
-            zRes[i] = s.z - gz
+            // Mean subtraction + OLS linear detrend preserves 100% of low-frequency (0.5-2.0 Hz) structural modes
+            xRes[i] = s.x - meanX
+            yRes[i] = s.y - meanY
+            zRes[i] = s.z - meanZ
             gravityVectors.add(floatArrayOf(gx, gy, gz))
 
             val gMag = sqrt((gx * gx + gy * gy + gz * gz).toDouble())
@@ -303,7 +328,7 @@ class WelchPsdEngine : DspEngine {
         val gravMagMean = gravMagSum / n
         val gravityVectorVariance = ((gravMagSumSq / n) - gravMagMean * gravMagMean).toFloat()
 
-        // Detrend each axis
+        // Detrend each axis (OLS linear trend removal)
         detrendInPlace(xRes)
         detrendInPlace(yRes)
         detrendInPlace(zRes)
@@ -522,9 +547,18 @@ class WelchPsdEngine : DspEngine {
         val gravResult = removeGravityAndDetrend(samples)
         val gfSamples = gravResult.gravityFreeSamples
 
-        // B1: Settling window detection
-        val settlingResult = detectSettlingWindow(gravResult, sampleRateHz)
-        val settlingN = settlingResult.settlingDurationSamples
+        // B1: Settling window detection (bypassed for pre-settled sliding windows or short windows where n >= fftSize)
+        val rawSettlingResult = detectSettlingWindow(gravResult, sampleRateHz)
+        val settlingN = if (params.skipSettlingTrim || (n - rawSettlingResult.settlingDurationSamples < fftSize)) {
+            0
+        } else {
+            rawSettlingResult.settlingDurationSamples
+        }
+        val settlingResult = if (settlingN == 0 && rawSettlingResult.settlingDurationSamples != 0) {
+            SettlingWindowResult(0, 0, false)
+        } else {
+            rawSettlingResult
+        }
 
         // Extract per-axis signals AFTER settling window
         val usableN = n - settlingN
@@ -922,7 +956,7 @@ class WelchPsdEngine : DspEngine {
                 }
             }
         }
-        return peaks.sortedByDescending { it.prominence }.take(20)
+        return peaks.sortedByDescending { it.powerMagnitude }.take(20)
     }
 
     // ─────────────────────────────────────────────────────────────

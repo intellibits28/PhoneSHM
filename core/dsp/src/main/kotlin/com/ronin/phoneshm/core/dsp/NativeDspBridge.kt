@@ -481,7 +481,10 @@ object NativeDspBridge {
             hvRatio[k] = hv.toFloat()
         }
 
-        val peaks = engine.findPeaks(frequencies, firstSingularValues)
+        val allPeaks = engine.findPeaks(frequencies, firstSingularValues)
+        val structuralPeaks = allPeaks.filter { it.frequencyHz in 0.5f..30.0f }
+        val peaks = (if (structuralPeaks.isNotEmpty()) structuralPeaks else allPeaks)
+            .sortedByDescending { it.powerMagnitude }
         val peaksLen = peaks.size
         val totalLen = 2 + 6 * freqBins + 10 * peaksLen
         val buffer = FloatArray(totalLen)
@@ -649,6 +652,535 @@ object NativeDspBridge {
         maxModelOrder: Int,
         rdsDurationSec: Float
     ): FloatArray
+
+    fun calculateRdtSsi(
+        x: FloatArray,
+        y: FloatArray,
+        z: FloatArray,
+        sampleRateHz: Float,
+        minHz: Float,
+        maxHz: Float,
+        maxModelOrder: Int = 40,
+        rdsDurationSec: Float = 3.0f
+    ): FloatArray {
+        return try {
+            nativeCalculateRdtSsi(x, y, z, sampleRateHz, minHz, maxHz, maxModelOrder, rdsDurationSec)
+        } catch (e: UnsatisfiedLinkError) {
+            calculateRdtSsiJvmRaw(x, y, z, sampleRateHz, minHz, maxHz, maxModelOrder, rdsDurationSec)
+        } catch (e: Throwable) {
+            calculateRdtSsiJvmRaw(x, y, z, sampleRateHz, minHz, maxHz, maxModelOrder, rdsDurationSec)
+        }
+    }
+
+    internal fun calculateRdtSsiJvmRaw(
+        x: FloatArray,
+        y: FloatArray,
+        z: FloatArray,
+        fs: Float,
+        minHz: Float,
+        maxHz: Float,
+        maxModelOrder: Int = 40,
+        rdsDurationSec: Float = 3.0f
+    ): FloatArray {
+        val length = minOf(x.size, y.size, z.size)
+        if (length <= 0 || fs <= 0.0f) return FloatArray(0)
+
+        var mx = 0.0
+        var my = 0.0
+        var mz = 0.0
+        for (i in 0 until length) {
+            mx += x[i]
+            my += y[i]
+            mz += z[i]
+        }
+        mx /= length
+        my /= length
+        mz /= length
+
+        var nFft = 1
+        while (nFft < length) nFft = nFft shl 1
+
+        val rx = DoubleArray(nFft)
+        val ix = DoubleArray(nFft)
+        val ry = DoubleArray(nFft)
+        val iy = DoubleArray(nFft)
+        val rz = DoubleArray(nFft)
+        val iz = DoubleArray(nFft)
+
+        for (i in 0 until length) {
+            rx[i] = x[i] - mx
+            ry[i] = y[i] - my
+            rz[i] = z[i] - mz
+        }
+
+        radix2FftInPlace(rx, ix, nFft)
+        radix2FftInPlace(ry, iy, nFft)
+        radix2FftInPlace(rz, iz, nFft)
+
+        val df = fs.toDouble() / nFft
+        for (i in 0 until nFft) {
+            var freq = i * df
+            if (freq > fs / 2.0) {
+                freq = fs - freq
+            }
+            if (freq < minHz || freq > maxHz) {
+                rx[i] = 0.0; ix[i] = 0.0
+                ry[i] = 0.0; iy[i] = 0.0
+                rz[i] = 0.0; iz[i] = 0.0
+            }
+        }
+
+        for (i in 0 until nFft) {
+            ix[i] = -ix[i]
+            iy[i] = -iy[i]
+            iz[i] = -iz[i]
+        }
+        radix2FftInPlace(rx, ix, nFft)
+        radix2FftInPlace(ry, iy, nFft)
+        radix2FftInPlace(rz, iz, nFft)
+
+        for (i in 0 until nFft) {
+            rx[i] /= nFft.toDouble()
+            ry[i] /= nFft.toDouble()
+            rz[i] /= nFft.toDouble()
+        }
+
+        var varX = 0.0
+        var varY = 0.0
+        var varZ = 0.0
+        for (i in 0 until length) {
+            varX += rx[i] * rx[i]
+            varY += ry[i] * ry[i]
+            varZ += rz[i] * rz[i]
+        }
+        varX /= length
+        varY /= length
+        varZ /= length
+
+        var refArr = rx
+        var maxVar = varX
+        var refAxis = 0
+        if (varY > maxVar) { maxVar = varY; refArr = ry; refAxis = 1 }
+        if (varZ > maxVar) { maxVar = varZ; refArr = rz; refAxis = 2 }
+
+        val sigma = sqrt(maxVar)
+        if (sigma <= 1e-12) return FloatArray(0)
+
+        var rdsLength = (rdsDurationSec * fs).toInt()
+        if (rdsLength <= 0) return FloatArray(0)
+        if (rdsLength > length) rdsLength = length
+
+        val rdsX = DoubleArray(rdsLength)
+        val rdsY = DoubleArray(rdsLength)
+        val rdsZ = DoubleArray(rdsLength)
+        var triggerCount = 0
+
+        for (lvlIdx in 0 until 10) {
+            val level = sigma * (1.0 + 0.1 * lvlIdx)
+            for (i in 1..(length - rdsLength)) {
+                if (refArr[i - 1] < level && refArr[i] >= level) {
+                    for (j in 0 until rdsLength) {
+                        rdsX[j] += rx[i + j]
+                        rdsY[j] += ry[i + j]
+                        rdsZ[j] += rz[i + j]
+                    }
+                    triggerCount++
+                }
+            }
+        }
+
+        if (triggerCount <= 0) return FloatArray(0)
+        for (j in 0 until rdsLength) {
+            rdsX[j] /= triggerCount.toDouble()
+            rdsY[j] /= triggerCount.toDouble()
+            rdsZ[j] /= triggerCount.toDouble()
+        }
+
+        val outRef = when (refAxis) {
+            1 -> rdsY
+            2 -> rdsZ
+            else -> rdsX
+        }
+        var maxRef = 0.0
+        for (j in 0 until rdsLength) {
+            val a = abs(outRef[j])
+            if (a > maxRef) maxRef = a
+        }
+        if (maxRef > 0.0) {
+            for (j in 0 until rdsLength) {
+                rdsX[j] /= maxRef
+                rdsY[j] /= maxRef
+                rdsZ[j] /= maxRef
+            }
+        }
+
+        val iDim = maxModelOrder + 10
+        if (rdsLength < 2 * iDim) return FloatArray(0)
+
+        val rowsH = 3 * iDim
+        val colsH = iDim
+        val H = Array(rowsH) { DoubleArray(colsH) }
+        for (r in 0 until iDim) {
+            for (c in 0 until iDim) {
+                val idx = 1 + r + c
+                H[3 * r + 0][c] = rdsX[idx]
+                H[3 * r + 1][c] = rdsY[idx]
+                H[3 * r + 2][c] = rdsZ[idx]
+            }
+        }
+
+        // Thin SVD of H (rowsH x colsH) via Jacobi eigendecomposition of H^T * H
+        val (uMat, sVec) = thinSvdJacobi(H, rowsH, colsH)
+
+        val polesList = ArrayList<Float>()
+        val upRows = rowsH - 3
+
+        for (order in 2..maxModelOrder step 2) {
+            if (order > colsH) break
+            // Construct observability matrix O = U_n * sqrt(S_n)
+            val oMat = Array(rowsH) { DoubleArray(order) }
+            for (j in 0 until order) {
+                val sqrtSj = sqrt(max(0.0, sVec[j]))
+                for (r in 0 until rowsH) {
+                    oMat[r][j] = uMat[r][j] * sqrtSj
+                }
+            }
+
+            // O_up is top (rowsH - 3) rows, O_down is bottom (rowsH - 3) rows
+            // Solve O_up * A = O_down via SVD pseudoinverse of O_up
+            val oUp = Array(upRows) { r -> oMat[r].copyOf() }
+            val (uUp, sUp, vUp) = fullSvdJacobi(oUp, upRows, order)
+
+            // A = V_up * diag(1/sUp) * U_up^T * O_down
+            val utOdown = Array(order) { DoubleArray(order) }
+            for (i in 0 until order) {
+                val invSi = if (sUp[i] > 1e-7 * sUp[0]) 1.0 / sUp[i] else 0.0
+                for (j in 0 until order) {
+                    var sum = 0.0
+                    for (r in 0 until upRows) {
+                        sum += uUp[r][i] * oMat[r + 3][j]
+                    }
+                    utOdown[i][j] = sum * invSi
+                }
+            }
+            val aMat = Array(order) { DoubleArray(order) }
+            for (i in 0 until order) {
+                for (j in 0 until order) {
+                    var sum = 0.0
+                    for (k in 0 until order) {
+                        sum += vUp[i][k] * utOdown[k][j]
+                    }
+                    aMat[i][j] = sum
+                }
+            }
+
+            val evals = computeRealMatrixEigenvaluesQr(aMat, order)
+            for (ev in evals) {
+                val re = ev.first
+                val im = ev.second
+                val mag = sqrt(re * re + im * im)
+                if (mag <= 1e-12) continue
+                val sigmaC = ln(mag) * fs
+                val omegaC = atan2(im, re) * fs
+                val f = (abs(omegaC) / (2.0 * PI)).toFloat()
+                val damp = (-sigmaC / sqrt(sigmaC * sigmaC + omegaC * omegaC)).toFloat()
+                if (f > 0.1f && f < fs / 2.0f && damp > 0.005f && damp < 0.15f && omegaC > 0.0) {
+                    polesList.add(f)
+                    polesList.add(damp)
+                    polesList.add(order.toFloat())
+                }
+            }
+        }
+
+        return polesList.toFloatArray()
+    }
+
+    private fun jacobiSymmetricEigen(aInput: Array<DoubleArray>, n: Int): Pair<DoubleArray, Array<DoubleArray>> {
+        val a = Array(n) { r -> aInput[r].copyOf() }
+        val v = Array(n) { r -> DoubleArray(n) { c -> if (r == c) 1.0 else 0.0 } }
+        val maxSweeps = 40
+        for (sweep in 0 until maxSweeps) {
+            var offDiagNorm = 0.0
+            for (p in 0 until n - 1) {
+                for (q in p + 1 until n) {
+                    offDiagNorm += a[p][q] * a[p][q]
+                }
+            }
+            if (offDiagNorm < 1e-22) break
+            for (p in 0 until n - 1) {
+                for (q in p + 1 until n) {
+                    val apq = a[p][q]
+                    if (abs(apq) < 1e-15) continue
+                    val app = a[p][p]
+                    val aqq = a[q][q]
+                    val tau = (aqq - app) / (2.0 * apq)
+                    val t = if (tau >= 0.0) {
+                        1.0 / (tau + sqrt(1.0 + tau * tau))
+                    } else {
+                        -1.0 / (-tau + sqrt(1.0 + tau * tau))
+                    }
+                    val c = 1.0 / sqrt(1.0 + t * t)
+                    val s = t * c
+                    a[p][p] = app - t * apq
+                    a[q][q] = aqq + t * apq
+                    a[p][q] = 0.0
+                    a[q][p] = 0.0
+                    for (r in 0 until n) {
+                        if (r != p && r != q) {
+                            val arp = a[r][p]
+                            val arq = a[r][q]
+                            a[r][p] = c * arp - s * arq
+                            a[p][r] = a[r][p]
+                            a[r][q] = s * arp + c * arq
+                            a[q][r] = a[r][q]
+                        }
+                        val vrp = v[r][p]
+                        val vrq = v[r][q]
+                        v[r][p] = c * vrp - s * vrq
+                        v[r][q] = s * vrp + c * vrq
+                    }
+                }
+            }
+        }
+        val orderIdx = (0 until n).sortedByDescending { a[it][it] }
+        val evals = DoubleArray(n) { idx -> max(0.0, a[orderIdx[idx]][orderIdx[idx]]) }
+        val evecs = Array(n) { r -> DoubleArray(n) { idx -> v[r][orderIdx[idx]] } }
+        return Pair(evals, evecs)
+    }
+
+    private fun thinSvdJacobi(m: Array<DoubleArray>, rows: Int, cols: Int): Pair<Array<DoubleArray>, DoubleArray> {
+        val mTm = Array(cols) { i ->
+            DoubleArray(cols) { j ->
+                var sum = 0.0
+                for (r in 0 until rows) sum += m[r][i] * m[r][j]
+                sum
+            }
+        }
+        val (evals, v) = jacobiSymmetricEigen(mTm, cols)
+        val s = DoubleArray(cols) { sqrt(evals[it]) }
+        val u = Array(rows) { DoubleArray(cols) }
+        for (j in 0 until cols) {
+            val sj = s[j]
+            if (sj > 1e-12) {
+                val invSj = 1.0 / sj
+                for (r in 0 until rows) {
+                    var sum = 0.0
+                    for (k in 0 until cols) sum += m[r][k] * v[k][j]
+                    u[r][j] = sum * invSj
+                }
+            }
+        }
+        return Pair(u, s)
+    }
+
+    private fun fullSvdJacobi(m: Array<DoubleArray>, rows: Int, cols: Int): Triple<Array<DoubleArray>, DoubleArray, Array<DoubleArray>> {
+        val mTm = Array(cols) { i ->
+            DoubleArray(cols) { j ->
+                var sum = 0.0
+                for (r in 0 until rows) sum += m[r][i] * m[r][j]
+                sum
+            }
+        }
+        val (evals, v) = jacobiSymmetricEigen(mTm, cols)
+        val s = DoubleArray(cols) { sqrt(evals[it]) }
+        val u = Array(rows) { DoubleArray(cols) }
+        for (j in 0 until cols) {
+            val sj = s[j]
+            if (sj > 1e-12) {
+                val invSj = 1.0 / sj
+                for (r in 0 until rows) {
+                    var sum = 0.0
+                    for (k in 0 until cols) sum += m[r][k] * v[k][j]
+                    u[r][j] = sum * invSj
+                }
+            }
+        }
+        return Triple(u, s, v)
+    }
+
+    private fun computeRealMatrixEigenvaluesQr(aInput: Array<DoubleArray>, n: Int): List<Pair<Double, Double>> {
+        val h = Array(n) { r -> aInput[r].copyOf() }
+        // 1. Householder reduction to Upper Hessenberg form
+        for (k in 0 until n - 2) {
+            var scale = 0.0
+            for (i in k + 1 until n) scale += abs(h[i][k])
+            if (scale <= 1e-15) continue
+            var sumSq = 0.0
+            val v = DoubleArray(n - k - 1)
+            for (i in k + 1 until n) {
+                val u = h[i][k] / scale
+                v[i - k - 1] = u
+                sumSq += u * u
+            }
+            var norm = sqrt(sumSq)
+            if (v[0] < 0.0) norm = -norm
+            v[0] += norm
+            val beta = 1.0 / (norm * v[0])
+            // Left multiply H[k+1..n-1, k..n-1]
+            for (j in k until n) {
+                var dot = 0.0
+                for (i in k + 1 until n) dot += v[i - k - 1] * h[i][j]
+                dot *= beta
+                for (i in k + 1 until n) h[i][j] -= dot * v[i - k - 1]
+            }
+            // Right multiply H[0..n-1, k+1..n-1]
+            for (i in 0 until n) {
+                var dot = 0.0
+                for (j in k + 1 until n) dot += h[i][j] * v[j - k - 1]
+                dot *= beta
+                for (j in k + 1 until n) h[i][j] -= dot * v[j - k - 1]
+            }
+        }
+
+        // 2. Double-shift / Givens QR iteration on Upper Hessenberg H
+        val result = ArrayList<Pair<Double, Double>>(n)
+        var m = n - 1
+        var iter = 0
+        val maxIter = 80 * n
+        val cArr = DoubleArray(n)
+        val sArr = DoubleArray(n)
+
+        while (m >= 0 && iter < maxIter) {
+            if (m == 0) {
+                result.add(Pair(h[0][0], 0.0))
+                break
+            }
+            val tol = 1e-11 * (abs(h[m - 1][m - 1]) + abs(h[m][m])).coerceAtLeast(1e-12)
+            if (abs(h[m][m - 1]) <= tol) {
+                result.add(Pair(h[m][m], 0.0))
+                m--
+                continue
+            }
+            if (m == 1 || abs(h[m - 1][m - 2]) <= 1e-11 * (abs(h[m - 2][m - 2]) + abs(h[m - 1][m - 1])).coerceAtLeast(1e-12)) {
+                // 2x2 trailing block eigenvalues
+                val a11 = h[m - 1][m - 1]
+                val a12 = h[m - 1][m]
+                val a21 = h[m][m - 1]
+                val a22 = h[m][m]
+                val tr = a11 + a22
+                val det = a11 * a22 - a12 * a21
+                val disc = tr * tr - 4.0 * det
+                if (disc >= 0.0) {
+                    val sd = sqrt(disc)
+                    result.add(Pair(0.5 * (tr + sd), 0.0))
+                    result.add(Pair(0.5 * (tr - sd), 0.0))
+                } else {
+                    val sd = sqrt(-disc)
+                    result.add(Pair(0.5 * tr, 0.5 * sd))
+                    result.add(Pair(0.5 * tr, -0.5 * sd))
+                }
+                m -= 2
+                continue
+            }
+
+            // Wilkinson / Exceptional shift QR step on active submatrix 0..m
+            val a11 = h[m - 1][m - 1]
+            val a12 = h[m - 1][m]
+            val a21 = h[m][m - 1]
+            val a22 = h[m][m]
+            val tr = a11 + a22
+            val det = a11 * a22 - a12 * a21
+            val disc = tr * tr - 4.0 * det
+            val shift = if (iter % 15 == 14) {
+                abs(h[m][m - 1]) + abs(h[m - 1][m - 2])
+            } else if (disc >= 0.0) {
+                val r1 = 0.5 * (tr + sqrt(disc))
+                val r2 = 0.5 * (tr - sqrt(disc))
+                if (abs(r1 - a22) < abs(r2 - a22)) r1 else r2
+            } else {
+                // Perform two single real shifts or Francis implicit double-shift via explicit H^2 - tr*H + det*I
+                0.5 * tr
+            }
+
+            if (disc < 0.0 && iter % 15 != 14) {
+                // Francis implicit double step via Givens rotations on M = H^2 - tr*H + det*I
+                // Equivalent to two complex-conjugate shifted QR steps
+                for (i in 0..m) h[i][i] -= shift
+                for (k in 0 until m) {
+                    val xVal = h[k][k]
+                    val yVal = h[k + 1][k]
+                    val r = sqrt(xVal * xVal + yVal * yVal).coerceAtLeast(1e-30)
+                    val c = xVal / r
+                    val s = yVal / r
+                    cArr[k] = c
+                    sArr[k] = s
+                    for (j in k..m) {
+                        val t1 = h[k][j]
+                        val t2 = h[k + 1][j]
+                        h[k][j] = c * t1 + s * t2
+                        h[k + 1][j] = -s * t1 + c * t2
+                    }
+                }
+                for (k in 0 until m) {
+                    val c = cArr[k]
+                    val s = sArr[k]
+                    for (i in 0..min(k + 1, m)) {
+                        val t1 = h[i][k]
+                        val t2 = h[i][k + 1]
+                        h[i][k] = c * t1 + s * t2
+                        h[i][k + 1] = -s * t1 + c * t2
+                    }
+                }
+                for (i in 0..m) h[i][i] += shift
+            } else {
+                for (i in 0..m) h[i][i] -= shift
+                for (k in 0 until m) {
+                    val xVal = h[k][k]
+                    val yVal = h[k + 1][k]
+                    val r = sqrt(xVal * xVal + yVal * yVal).coerceAtLeast(1e-30)
+                    val c = xVal / r
+                    val s = yVal / r
+                    cArr[k] = c
+                    sArr[k] = s
+                    for (j in k..m) {
+                        val t1 = h[k][j]
+                        val t2 = h[k + 1][j]
+                        h[k][j] = c * t1 + s * t2
+                        h[k + 1][j] = -s * t1 + c * t2
+                    }
+                }
+                for (k in 0 until m) {
+                    val c = cArr[k]
+                    val s = sArr[k]
+                    for (i in 0..min(k + 1, m)) {
+                        val t1 = h[i][k]
+                        val t2 = h[i][k + 1]
+                        h[i][k] = c * t1 + s * t2
+                        h[i][k + 1] = -s * t1 + c * t2
+                    }
+                }
+                for (i in 0..m) h[i][i] += shift
+            }
+            iter++
+        }
+        // Extract any remaining 2x2 or 1x1 diagonal blocks if maxIter reached
+        var idx = m
+        while (idx >= 0) {
+            if (idx == 0 || abs(h[idx][idx - 1]) <= 1e-6) {
+                result.add(Pair(h[idx][idx], 0.0))
+                idx--
+            } else {
+                val a11 = h[idx - 1][idx - 1]
+                val a12 = h[idx - 1][idx]
+                val a21 = h[idx][idx - 1]
+                val a22 = h[idx][idx]
+                val tr = a11 + a22
+                val det = a11 * a22 - a12 * a21
+                val disc = tr * tr - 4.0 * det
+                if (disc >= 0.0) {
+                    val sd = sqrt(disc)
+                    result.add(Pair(0.5 * (tr + sd), 0.0))
+                    result.add(Pair(0.5 * (tr - sd), 0.0))
+                } else {
+                    val sd = sqrt(-disc)
+                    result.add(Pair(0.5 * tr, 0.5 * sd))
+                    result.add(Pair(0.5 * tr, -0.5 * sd))
+                }
+                idx -= 2
+            }
+        }
+        return result
+    }
 
     external fun nativeAnalyzeGatedTransientsRaw(
         signal: FloatArray,

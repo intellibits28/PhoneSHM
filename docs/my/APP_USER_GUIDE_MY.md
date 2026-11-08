@@ -78,13 +78,20 @@ flowchart LR
 |                                                             |
 |   ● SENSOR READY                                            |
 |   Target Sample Rate: 100 Hz                                |
-|   Target Duration: 60 Seconds                               |
+|   Target Duration: 300 Seconds (5 မိနစ်)                     |
+|   Profile: Ambient Baseline (Continuous Monitoring)         |
 |                                                             |
 |   Live RMS Vibration Level: [████████░░░░░░░] 0.042 m/s²    |
 |                                                             |
 |                 [ START RECORDING ]                         |
 |                                                             |
 +-------------------------------------------------------------+
+```
+
+### တိုင်းတာမှု ပရိုဖိုင်များနှင့် ကြာချိန်များ
+- **Ambient Baseline (၃၀၀ စက္ကန့် / ၅ မိနစ်)**: သုတေသနအဆင့်မီ OMA နှင့် Baseline စောင့်ကြည့်မှုအတွက် ပင်မတိုင်းတာချိန်ဖြစ်သည်။ 100 Hz တွင် samples 30,000 ရယူပြီး ထပ်နေသော ၆၀ စက္ကန့် sliding windows ၈ ခုဖြင့် frequency persistence ကို အတည်ပြုသည်။
+- **Impulse / Heel-Drop Check (၃၀ စက္ကန့်)**: ခြေဆောင့်တုန်ခါမှု သို့မဟုတ် ရုတ်တရက် shock ဖြစ်ပေါ်မှု စစ်ဆေးရန်အတွက်သာ သီးသန့် ကန့်သတ်ထားသည်။
+- **Live Preview / Sanity Check (၁၀ စက္ကန့်)**: ဖုန်းအထားအသိုနှင့် ဆူညံသံစစ်ဆေးရန် Live Preview သက်သက်ဖြစ်ပြီး Baseline consensus နှင့် ရေရှည်တွက်ချက်မှုများမှ ချန်လှပ်ထားသည်။
 ```
 
 ### အဆောက်အအုံနှင့် နေရာများ ပြောင်းလဲခြင်း
@@ -135,6 +142,13 @@ flowchart TD
 - **`GLOBAL_MODE`**: အဆောက်အအုံ အမြင့်နှင့် အမျိုးအစားအရ ထွက်ရှိသင့်သော သဘာဝတုန်ခါမှု ဘောင်အတွင်း ကျရောက်သည်။
 - **`LOCAL_MODE`**: ကြမ်းခင်း သို့မဟုတ် အခန်းကန့်များ၏ သီးခြားတုန်ခါမှု ဖြစ်သည်။
 - **`SENSOR_ARTIFACT`**: လျှပ်စစ်ဓာတ်အားလှိုင်းသံ ($50\text{Hz}/60\text{Hz}$) သို့မဟုတ် အာရုံခံကိရိယာ အပူကြောင့် ဖြစ်ပေါ်သော noise ဖြစ်သည်။
+
+### OMA Diagnostic Tabs ၄ ခု
+Analysis Screen တွင် အင်ဂျင်နီယာများ အသေးစိတ် စစ်ဆေးနိုင်ရန် Tab ၄ ခု ပါဝင်ပါသည်:
+1. **Welch PSD**: ဝင်ရိုးအလိုက် Power Spectral Density ((m/s²)²/Hz)၊ အထွတ်အထိပ် Peak များ နှင့် ၆၀ စက္ကန့် Sliding-window persistence ($\max(5\% f_0, 4\Delta f)$)။
+2. **EFDD (Spatial SVD)**: ပထမနှင့် ဒုတိယ Singular values $\sigma_1(f), \sigma_2(f)$ ((m/s²)²/Hz)၊ အဓိကယိမ်းခါရာထောင့် $\theta_{\text{sway}}$ နှင့် Damping ratio $\zeta_0$။
+3. **RDT-SSI (Time Domain)**: Continuous-time system poles များ၊ State-space model order $n \in \{2..40\}$ နှင့် Cluster stability အရေအတွက် (ဥပမာ- `n=22 (20x)`)။
+4. **Mode Shape (Roving)**: အထပ်အလိုက် တိုင်းတာမှုများမှ Excitation-normalized Mode Shape $\phi(L)$၊ $\text{sgn}(\text{Re}(G_{xz}))$ phase orientation၊ Inter-story drift $\Delta\phi$ နှင့် စံပြ linear shear building အပေါ် တိုင်းတာသည့် **Modal Assurance Criterion (MAC)**။
 
 ---
 

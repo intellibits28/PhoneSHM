@@ -448,7 +448,7 @@ fun MeasurementScreen(
                     onClick = {
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
-                            measurementId = activeMeasurementId,
+                            measurementId = "demo_sanity_preview",
                             durationSec = 10,
                             startDelaySec = startDelay
                         ) { sid, uri ->
@@ -457,13 +457,13 @@ fun MeasurementScreen(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("10s Demo")
+                    Text("10s Preview")
                 }
                 Button(
                     onClick = {
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
-                            measurementId = activeMeasurementId,
+                            measurementId = "heel_drop_floor_check",
                             durationSec = 30,
                             startDelaySec = startDelay
                         ) { sid, uri ->
@@ -472,7 +472,7 @@ fun MeasurementScreen(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("30s Quick")
+                    Text("30s Heel-Drop")
                 }
                 Button(
                     onClick = {
@@ -515,7 +515,7 @@ fun MeasurementScreen(
                 },
                 text = {
                     Text(
-                        text = "On Xiaomi/MIUI, Huawei, Oppo, and Vivo devices, background battery restrictions can cause sampling gaps during long recordings, especially if the screen turns off or the app is backgrounded.\n\nTo ensure clean 10-minute recordings:\n1. Set Battery Saver to 'No Restrictions'\n2. Enable 'Autostart' (MIUI specific)\n3. Keep screen on and remain in app during recording.",
+                        text = "On Xiaomi/MIUI, Huawei, Oppo, and Vivo devices, background battery restrictions can cause sampling gaps during long recordings, especially if the screen turns off or the app is backgrounded.\n\nTo ensure clean 5-minute (300s) recordings:\n1. Set Battery Saver to 'No Restrictions'\n2. Enable 'Autostart' (MIUI specific)\n3. Keep screen on and remain in app during recording.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },
@@ -534,8 +534,8 @@ fun MeasurementScreen(
                             showBatteryWarningDialog = false
                             viewModel.startRecording(
                                 buildingHash = activeBuildingHash,
-                                measurementId = activeMeasurementId,
-                                durationSec = 600,
+                                measurementId = "ambient_baseline_continuous",
+                                durationSec = 300,
                                 startDelaySec = startDelay
                             ) { sid, uri ->
                                 com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
@@ -548,7 +548,7 @@ fun MeasurementScreen(
             )
         }
 
-        // Ambient Baseline Mode: 10-minute continuous recording for weak-signal buildings
+        // Ambient Baseline Mode: 5-minute (300s) continuous recording for weak-signal buildings
         if (!uiState.isRecording && !uiState.isCalibrating) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(
@@ -558,8 +558,8 @@ fun MeasurementScreen(
                     } else {
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
-                            measurementId = activeMeasurementId,
-                            durationSec = 600,
+                            measurementId = "ambient_baseline_continuous",
+                            durationSec = 300,
                             startDelaySec = startDelay
                         ) { sid, uri ->
                             com.ronin.phoneshm.core.storage.SessionUploadManager.enqueueUpload(context, sid, uri)
@@ -570,7 +570,7 @@ fun MeasurementScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0E7490))
             ) {
                 Text(
-                    text = "\uD83C\uDF0A Ambient Baseline (10 min, No Impact Needed)",
+                    text = "\uD83C\uDF0A Ambient Baseline (5 min, No Impact Needed)",
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )

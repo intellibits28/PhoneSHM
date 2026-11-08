@@ -43,6 +43,7 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
 struct WelchPsdParams {
     int fftSize = 1024;
     float overlapPercentage = 0.50f;
+    bool skipSettlingTrim = false;
     // windowType is always Hanning
 };
 
@@ -58,10 +59,10 @@ struct MultiAxisSpectrumResult {
     WelchPsdOutput output;
 };
 
-// B1: Gravity removal via EMA + detrend, returns gravity vector time-series
+// B1: Gravity removal via Mean Subtraction + OLS Linear Detrend (with slow orientation EMA for coupling variance)
 GravityRemovalResult removeGravityAndDetrend(
     const std::vector<AccelerationSample>& samples,
-    float emaAlpha = 0.1f
+    float emaAlpha = 0.002f
 );
 
 // B1: Compound settling window detection
@@ -129,7 +130,8 @@ ResamplingResult resampleToUniformGrid(
     float targetSampleRateHz,
     InterpolationMode mode = InterpolationMode::PCHIP_CUBIC,
     double gapThresholdMs = 50.0,
-    double maxAllowedMissingRatio = 0.05
+    double maxAllowedMissingRatio = 0.05,
+    const std::vector<float>& accelerometerBias = {}
 );
 
 struct TransientEventAnalysis {

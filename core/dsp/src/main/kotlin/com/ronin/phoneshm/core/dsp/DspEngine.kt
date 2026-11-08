@@ -51,7 +51,8 @@ data class SettlingWindowResult(
 data class WelchPsdParameters(
     val fftSize: Int = 1024,              // 10.24 sec physical window at 100Hz (deltaF = 0.0977 Hz)
     val windowType: String = "HANNING",
-    val overlapPercentage: Float = 0.50f  // 50% overlap (5.12 sec step)
+    val overlapPercentage: Float = 0.50f, // 50% overlap (5.12 sec step)
+    val skipSettlingTrim: Boolean = false // True when slicing pre-settled sliding windows
 )
 
 /**
@@ -181,13 +182,15 @@ interface DspEngine {
     /**
      * Resamples irregular acceleration samples to a uniform grid using PCHIP cubic Hermite
      * or linear interpolation, reporting gap mask (> 50ms gaps) and continuity statistics.
+     * Optionally subtracts zero-velocity calibrated accelerometerBias [bx, by, bz] prior to interpolation.
      */
     fun resampleToUniformGrid(
         samples: List<AccelerationSample>,
         targetSampleRateHz: Float,
         method: InterpolationMethod = InterpolationMethod.PCHIP_CUBIC,
         gapThresholdMs: Double = 50.0,
-        maxAllowedMissingRatio: Double = 0.05
+        maxAllowedMissingRatio: Double = 0.05,
+        accelerometerBias: FloatArray? = null
     ): ResamplingOutput
 
     /**

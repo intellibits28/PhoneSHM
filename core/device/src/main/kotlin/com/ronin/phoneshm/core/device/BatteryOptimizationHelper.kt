@@ -39,7 +39,7 @@ object BatteryOptimizationHelper {
     }
 
     /**
-     * Determines whether a battery warning prompt should be shown before starting long (600s) ambient baseline recordings.
+     * Determines whether a battery warning prompt should be shown before starting long (300s) ambient baseline recordings.
      */
     fun shouldShowBatteryWarning(context: Context): Boolean {
         return isAggressiveOemDevice() || !isIgnoringBatteryOptimizations(context)

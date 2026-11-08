@@ -59,7 +59,8 @@ class DspEngineTest {
             targetSampleRateHz: Float,
             method: InterpolationMethod,
             gapThresholdMs: Double,
-            maxAllowedMissingRatio: Double
+            maxAllowedMissingRatio: Double,
+            accelerometerBias: FloatArray?
         ): ResamplingOutput {
             return ResamplingOutput(
                 samples = samples,

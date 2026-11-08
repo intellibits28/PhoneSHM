@@ -18,29 +18,35 @@
 
 ```mermaid
 flowchart LR
-    Raw["အာရုံခံ အချက်ပြလှိုင်း x, y, z"] --> Monotonic[Monotonic Timestamp စစ်ဆေးခြင်း]
+    Raw["အာရုံခံ အချက်ပြလှိုင်း x, y, z"] --> BiasSub["Zero-Velocity Static Bias ဖယ်ရှားခြင်း [bx, by, bz]"]
+    BiasSub --> Monotonic[Monotonic Timestamp စစ်ဆေးခြင်း]
     Monotonic --> Resample["100.0 Hz Uniform Resampling (Double Precision Grid)"]
-    Resample --> EMA[EMA ဆွဲငင်အား ခွဲထုတ်ဖယ်ရှားခြင်း]
-    EMA --> Detrend[Linear Trend ဖယ်ရှားခြင်း]
+    Resample --> MeanSub[ပျမ်းမျှတန်ဖိုး Mean ဖယ်ရှားခြင်း]
+    MeanSub --> Detrend[OLS Linear Trend ဖယ်ရှားခြင်း]
     Detrend --> FiltFilt["Zero-Phase High-pass Filtfilt @ 0.5 Hz (Float64 Biquad States)"]
     FiltFilt --> TriEngine["Tri-Engine OMA (Welch + EFDD + SSI)"]
 ```
 
-### က။ Fritsch-Carlson PCHIP Resampling နှင့် Gap-Mask Gating
+### က။ Zero-Velocity Bias ဖယ်ရှားခြင်း၊ PCHIP Resampling နှင့် Gap-Mask Gating
 Android OS သည် sensor events များကို အချိန်အခိုက်အတန့် မညီမညာ ပေးပို့လေ့ရှိပြီး Xiaomi/MIUI ကဲ့သို့သော ဖုန်းများတွင် OS scheduling ကြောင့် ခေတ္တပြတ်တောက်မှု (gaps) များ ဖြစ်ပေါ်တတ်သည်။ ထို့ကြောင့် `resampleToUniformGrid` တွင် အောက်ပါအတိုင်း တိကျစွာ ချိန်ညှိပါသည်-
-1. **64-bit Target Grid**: အချိန်ကြာမြင့်စွာ တိုင်းတာချိန်တွင် integer truncation ကြောင့် drift မဖြစ်စေရန် Target grid timestamps များကို 64-bit double precision ဖြင့် တွက်ချက်သည်:
+1. **Zero-Velocity Static Bias ဖယ်ရှားခြင်း**: တိုင်းတာမှုမစတင်မီ ၃ စက္ကန့် ငြိမ်သက်စွာတိုင်းတာထားသော static accelerometer bias vector $\mathbf{b} = [b_x, b_y, b_z]^T$ ကို raw sensor samples များမှ တိုက်ရိုက် နုတ်ထုတ်ရှင်းလင်းပေးသည်:
+   $$\mathbf{a}_{\text{unbiased}, i} = \mathbf{a}_i - \mathbf{b}$$
+2. **64-bit Target Grid**: အချိန်ကြာမြင့်စွာ တိုင်းတာချိန်တွင် integer truncation ကြောင့် drift မဖြစ်စေရန် Target grid timestamps များကို 64-bit double precision ဖြင့် တွက်ချက်သည်:
    $$t_{\text{target}, k} = t_{\text{start}} + \text{round}\left(k \cdot \frac{10^9}{f_s}\right)$$
-2. **Fritsch-Carlson Monotone Cubic Hermite (`PCHIP_CUBIC`) နှင့် Linear Gap Fallback**:
+3. **Fritsch-Carlson Monotone Cubic Hermite (`PCHIP_CUBIC`) နှင့် Linear Gap Fallback**:
    - ပုံမှန်အချိန်ခြားနားချက် ($\Delta t_i \le 50.0\text{ ms}$) များအတွက် overshoot မဖြစ်စေသော monotone cubic Hermite နည်းဖြင့် တွက်ချက်သည် (`gapMask[k] = 0`)။
    - $> 50.0\text{ ms}$ ကျော်လွန်သော gap များတွင် cubic polynomial ဖောင်းပွမှုမဖြစ်စေရန် linear bridge သို့ အလိုအလျောက် ပြောင်းလဲတွက်ချက်ပြီး `gapMask[k] = 1` အဖြစ် မှတ်သားသည်။
-3. **Gap-Mask Window Rejection**:
+4. **Gap-Mask Window Rejection**:
    - Settling window (`settlingN`) ဖြတ်ထုတ်ချိန်တွင် `gapMask` ကိုပါ ကိုက်ညီစွာ ဖြတ်ထုတ်ပြီး `gapMask != 0` ပါဝင်သော မည်သည့် FFT window ကိုမဆို Median + $3 \times \text{MAD}$ gate နှင့်အတူ Welch PSD နှင့် EFDD CSD တွက်ချက်မှုမှ ချန်လှပ်ပစ်သည်။
 
-### ခ။ ကမ္ဘာ့ဆွဲငင်အား ဖယ်ရှားခြင်း (Gravity Removal)
-ဖုန်း၏ အနေအထားကြောင့် ပါဝင်နေသော Static Gravity vector ကို Exponential Moving Average (EMA) ဖြင့် တွက်ချက်ဖယ်ရှားပါသည်:
-$$\mathbf{g}_i = \alpha \mathbf{a}_i + (1 - \alpha) \mathbf{g}_{i-1}, \quad (\alpha = 0.05)$$
-$$\mathbf{a}_{\text{free}, i} = \mathbf{a}_i - \mathbf{g}_i$$
-ထို့နောက် အပူချိန်ကြောင့် လှိုင်းတန်ဖိုး တဖြည်းဖြည်း မြင့်တက်/ကျဆင်းသွားခြင်းကို Ordinary Least Squares Linear Detrending ဖြင့် ဖြောင့်တန်းစေပါသည်။
+### ခ။ ကမ္ဘာ့ဆွဲငင်အား ဖယ်ရှားခြင်းနှင့် Linear Detrending
+ငြိမ်သက်စွာ တိုင်းတာရသော Ambient Vibration Monitoring တွင် အလွန်နိမ့်သော အဆောက်အအုံတုန်ခါမှုလှိုင်းများ ($0.2\text{ Hz} - 2.0\text{ Hz}$) ပါဝင်သည်။ Exponential Moving Average (EMA) သည် high-pass corner frequency ($f_c \approx 1.68\text{ Hz}$) ဖြစ်ပေါ်စေပြီး low-frequency structural signal များကို မှေးမှိန်သွားစေနိုင်သောကြောင့် PhoneSHM သည် **Sample Mean Subtraction** နှင့် **Ordinary Least Squares (OLS) Linear Detrending** ကို ပြောင်းလဲအသုံးပြုထားပါသည်:
+1. **Sample Mean Subtraction**:
+   $$\mu_x = \frac{1}{N}\sum_{i=0}^{N-1} x_i, \quad x'_i = x_i - \mu_x$$
+   Static $1g$ ဆွဲငင်အားကို အကြိမ်နှုန်း ပုံပျက်မှုမရှိဘဲ ဖယ်ရှားပေးသည်။
+2. **OLS Linear Detrending**:
+   $$y_i = x'_i - (m \cdot i + c)$$
+   အပူချိန်ကြောင့် sensor တန်ဖိုး တဖြည်းဖြည်း မြင့်တက်/ကျဆင်းသွားသော linear drift ကို ရှင်းလင်းပေးသည်။
 
 ### ဂ။ Zero-Phase High-Pass Filter (`filtfilt`) နှင့် 64-bit Numerical Stability
 အလွန်နိမ့်သော အပူချိန်လှိုင်းများနှင့် မိုက်ခရိုတုန်ခါမှုများကို အဆင့်မလွဲချော်စေဘဲ (Zero-phase distortion) ရှင်းလင်းရန် $f_c = 0.5\text{ Hz}$ cut-off ရှိသော forward-backward Butterworth filter ကို အသုံးပြုထားပါသည်။
@@ -51,7 +57,9 @@ Cut-off frequency သည် sampling rate နှင့်ယှဉ်လျှ�
 
 ## ၃။ Method 1: Welch Power Spectral Density (PSD)
 
-Welch ၏ Averaged Modified Periodogram နည်းပညာဖြင့် X, Y, Z နှင့် ပေါင်းစပ် Acceleration Magnitude အပေါ်တွင် Power Spectrum ကို တွက်ချက်ပါသည်-
+Welch ၏ Averaged Modified Periodogram နည်းပညာဖြင့် X, Y, Z ဝင်ရိုး ၃ ခုအတွက် Power Spectrum Density ကို တွက်ချက်ပြီး ပေါင်းစပ် Acceleration Magnitude PSD ကို spectral sum ဖြင့် တွက်ထုတ်ပါသည်:
+$$S_{\text{mag}}(f_k) = S_{xx}(f_k) + S_{yy}(f_k) + S_{zz}(f_k)$$
+ယူနစ်မှာ $(m/s^2)^2/\text{Hz}$ ဖြစ်သည်။ Time-domain Euclidean norm ($\sqrt{x^2+y^2+z^2}$) အပေါ်တွင် FFT တိုက်ရိုက်တွက်ခြင်းသည် square-root non-linear cross-modulation ကြောင့် မဟုတ်မမှန်သော harmonic distortion peaks များ ($2f_0, 4f_0$) ထွက်ပေါ်စေသည်။ Spectral sum တွက်နည်းသည် linear superposition ကို ထိန်းသိမ်းပြီး စစ်မှန်သော တုန်ခါမှုစွမ်းအင်ကို Kotlin ရော Native C++20 ပါ တစ်သမတ်တည်း ထင်ဟပ်စေပါသည်။
 
 ### သတ်မှတ်ချက်များ
 - **Sampling Frequency ($f_s$)**: $100\text{ Hz}$
@@ -59,9 +67,17 @@ Welch ၏ Averaged Modified Periodogram နည်းပညာဖြင့် X, 
 - **Window Function**: Hanning window
 - **Window Overlap**: $50\%$ ($512$ samples overlap)
 - **Spectral Resolution ($\Delta f$)**: $\frac{100}{1024} \approx 0.09766\text{ Hz}$
+- **စံပြု Ambient တိုင်းတာချိန်**: ၃၀၀ စက္ကန့် (၅ မိနစ်၊ $30,000$ samples @ $100\text{ Hz}$)
+
+### Sliding-Window Persistence စနစ်
+ရရှိလာသော peak ကြိမ်နှုန်းသည် ခေတ္တခဏဖြစ်ပေါ်သော noise လှိုင်းမဟုတ်ဘဲ အဆောက်အအုံ၏ စစ်မှန်သော သဘာဝတုန်ခါမှုဖြစ်ကြောင်း အတည်ပြုရန်:
+1. Filter settling (၆၀၀ samples) ဖြတ်ထုတ်ပြီးနောက် ၃၀၀ စက္ကန့်ကြာ signal အား **ထပ်နေသော ၆၀ စက္ကန့် sliding windows ၈ ခု** (window တစ်ခုလျှင် ၆,၀၀၀ samples၊ ၃၀ စက္ကန့် / ၃,၀၀၀ samples hop) အဖြစ် ခွဲခြမ်းသည်။
+2. Window တစ်ခုချင်းစီတွင် Welch PSD တွက်ချက်ပြီး session peak နှင့် အောက်ပါ adaptive tolerance ဖြင့် တိုက်ဆိုင်စစ်ဆေးသည်:
+   $$\Delta f_{\text{tol}} = \max\left(0.05 \cdot f_0, 4 \cdot \Delta f\right)$$
+3. ပြတင်းပေါက် အားလုံးနီးပါးတွင် တည်ငြိမ်စွာ တွေ့ရှိရသော frequency ($\text{persistence} \ge 0.70$) များကိုသာ modal consensus သို့ ဦးစားပေး ပေးပို့သည်။
 
 ### အဖျက်သဘောဆောင်သော ရုတ်တရက်လှိုင်းများ ဖယ်ထုတ်ခြင်း (Segment Gating)
-အဆောက်အအုံအတွင်း လူလျှောက်သံ၊ တံခါးပိတ်သံ သို့မဟုတ် ဖုန်းထိမိခြင်းကြောင့် ဖြစ်ပေါ်သော transient broadband impulse များ Welch PSD ကို မထိခိုက်စေရန် Median + $3 \times \text{MAD}$ RMS Gate စနစ် ထည့်သွင်းထားပါသည်-
+အဆောက်အအုံအတွင်း လူလျှောက်သံ၊ တံခါးပိတ်သံ သို့မဟုတ် ဖုန်းထိမိခြင်းကြောင့် ဖြစ်ပေါ်သော transient broadband impulse များ Welch PSD ကို မထိခိုက်စေရန် Median + $3 \times \text{MAD}$ RMS Gate စနစ် ထည့်သွင်းထားပါသည်:
 1. Segment တစ်ခုချင်းစီ၏ RMS စွမ်းအင်ကို တွက်ချက်သည်။
 2. Segments အားလုံး၏ အလယ်ကိန်း Median RMS ($\widetilde{\text{RMS}}$) နှင့် Median Absolute Deviation ($\text{MAD}$) ကို ရှာဖွေသည်။
 3. $\text{RMS}_m \le \widetilde{\text{RMS}} + 3 \times \max(\text{MAD}, 10^{-6})$ သတ်မှတ်ချက်နှင့် ကိုက်ညီသော segments များကိုသာ periodogram ပျမ်းမျှတွက်ချက်မှုထဲသို့ ထည့်သွင်းသည်။
@@ -73,7 +89,7 @@ Welch ၏ Averaged Modified Periodogram နည်းပညာဖြင့် X, 
 Discrete frequency grid $\Delta f$ ထက် ပိုမိုတိကျသော peak frequency ရရှိစေရန် logarithmic parabolic interpolation ဖြင့် ဒသမကိန်း တိကျစွာ ရှာဖွေပေးပါသည်။
 
 ### Gated Transient Time-Frequency Analysis (STFT နှင့် Daubechies `db4` WPT)
-Median + $3 \times \text{MAD}$ gate မှ ပယ်ချခံရသော စွမ်းအင်မြင့် transient segments များ (အမြင့်ဆုံး $K = 5$ ခု) ကို စွန့်ပစ်မည့်အစား [`analyzeGatedTransients`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/dsp_core.cpp) (`wavelet_packet_core.cpp`) ဖြင့် သီးသန့် ခွဲခြမ်းစိတ်ဖြာပါသည်-
+Median + $3 \times \text{MAD}$ gate မှ ပယ်ချခံရသော စွမ်းအင်မြင့် transient segments များ (အမြင့်ဆုံး $K = 5$ ခု) ကို စွန့်ပစ်မည့်အစား [`analyzeGatedTransients`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/dsp/src/main/cpp/dsp_core.cpp) (`wavelet_packet_core.cpp`) ဖြင့် သီးသန့် ခွဲခြမ်းစိတ်ဖြာပါသည်:
 1. **Short-Time Fourier Transform (STFT)**: 256-point Hanning window ($75\%$ overlap / 64-sample hop) ဖြင့် time-frequency spectrogram ကို တွက်ချက်သည်။
 2. **Daubechies `db4` Wavelet Packet Transform (Depth $J = 4$)**: $100\text{ Hz}$ vibration လှိုင်းကို audio downsampling မလုပ်ဘဲ Depth $J = 4$ ($16$ subbands, $0\text{–}50\text{ Hz}$) ဖြင့် တိုက်ရိုက် ခွဲခြမ်းစိတ်ဖြာသည်။
 3. **Shannon Wavelet Entropy နှင့် NaN Guard**: Subband energy သုညဖြစ်နေချိန်တွင် $\ln(0)$ ကြောင့် NaN မဖြစ်စေရန် $p_j > 10^{-12}$ ဖြစ်သော subband များကိုသာ $S_{\text{wpt}} = -\sum p_j \ln(p_j)$ တွင် ပေါင်းထည့်တွက်ချက်ပြီး $S_{\text{wpt}} < 1.8$ နှင့် အနိမ့်ပိုင်းကြိမ်နှုန်းစွမ်းအင် $\ge 55\%$ ရှိပါက `isStructuralShock = true` အဖြစ် သတ်မှတ်သည်။
@@ -90,6 +106,7 @@ Frequency Domain Decomposition (FDD) သည် multi-degree-of-freedom တုန
 
 1. **$3 \times 3$ CSD နှင့် $2 \times 2$ Horizontal SVD**:
    - X, Y, Z ဝင်ရိုး ၃ ခုအတွက် $3 \times 3$ Cross-Spectral Density matrix $\mathbf{G}_{3\times 3}(f_k)$ ကို တည်ဆောက်ပြီး အလျားလိုက် $2 \times 2$ sub-block $\mathbf{G}_{xy}(f_k)$ ပေါ်တွင် SVD တွက်ချက်ကာ ပထမ singular value $\sigma_1(f_k)$ နှင့် singular vector $\mathbf{u}_1(f_k)$ ကို ရယူသည်။
+   - Singular value များကို $\sigma_1 \ge \sigma_2$ အတိုင်း ကြီးစဉ်ငယ်လိုက် စီတန်းထားပြီး modal peak ရှာဖွေမှုကို structural frequency band $[0.2, 25.0]\text{ Hz}$ တွင်သာ $(m/s^2)^2/\text{Hz}$ ဖြင့် ကန့်သတ်ရှာဖွေသည်။
 2. **Coherence Division-by-Zero Guard**:
    - Auto-spectrum တန်ဖိုးများ သုညနီးပါးဖြစ်နေချိန်တွင် NaN/Inf မဖြစ်စေရန် ပိုင်းခြေ၌ `std::max(..., 1e-30)` ထားရှိပြီး $\gamma_{xy}^2, \gamma_{xz}^2, \gamma_{yz}^2 \in [0.0, 1.0]$ နှင့် Horizontal-to-Vertical ratio $\sigma_1(f_k) / S_{zz}(f_k)$ တို့ကို တွက်ချက်သည်။
 3. **Axis-Aligned Sway Gate နှင့် Azimuth SVD**:
@@ -97,7 +114,8 @@ Frequency Domain Decomposition (FDD) သည် multi-degree-of-freedom တုန
    - အဓိကလွှဲနေသော ထောင့် $\theta_{\text{sway}} = \text{atan2}(\text{Re}(u_y), \text{Re}(u_x)) \in [-180^\circ, 180^\circ]$ ကို $\mathbf{u}_1(f_0)$ မှ ထုတ်ယူသည်။
 4. **Damping Ratio ($\zeta$) နှင့် Roving Mode Shape Synthesis**:
    - Peak ပတ်ဝန်းကျင် SDOF bell ($\text{MAC} \ge 0.85$) ကို IDFT ပြုလုပ်ပြီး Logarithmic Decrement ($\delta$) မှ damping ratio ($\zeta$) ကို တွက်ချက်သည်။
-   - [`RovingModeShapeEngine.kt`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/modal/src/main/kotlin/com/ronin/phoneshm/core/modal/RovingModeShapeEngine.kt) ဖြင့် အထပ်အလိုက် တိုင်းတာချက်များကို $|\phi(L)| = \sqrt{\sigma_1^{(L)}(f_0) / \max(\sigma_{\text{amb}, L}^2, 10^{-12})}$ ဖြင့် excitation normalize လုပ်ကာ $\cos(\theta_L - \theta_{\text{ref}}) < 0$ ဖြစ်ပါက phase sign $-1.0$ သတ်မှတ်ပြီး အမြင့်ဆုံးအထပ် (Roof) ဖြင့် $\phi(\text{Roof}) = 1.0$ ဖြစ်အောင် တွက်ချက်ပေးသည်။
+   - [`RovingModeShapeEngine.kt`](file:///data/data/com.termux/files/home/play-ground/ronin_shm/core/modal/src/main/kotlin/com/ronin/phoneshm/core/modal/RovingModeShapeEngine.kt) ဖြင့် အထပ်အလိုက် တိုင်းတာချက်များကို $|\phi(L)| = \sqrt{\sigma_1^{(L)}(f_0) / \max(\sigma_{\text{amb}, L}^2, 10^{-12})}$ ဖြင့် excitation normalize လုပ်ကာ $\text{sgn}(\text{Re}(G_{xz}))$ သို့မဟုတ် $\cos(\theta_L - \theta_{\text{ref}}) < 0$ ဖြစ်ပါက phase sign $-1.0$ သတ်မှတ်ပြီး အမြင့်ဆုံးအထပ် (Roof) ဖြင့် $\phi(\text{Roof}) = 1.0$ ဖြစ်အောင် တွက်ချက်ပေးသည်။
+   - Inter-story drift ratio $\Delta\phi$ နှင့် စံပြ linear shear profile အပေါ် တိုင်းတာသည့် **Modal Assurance Criterion (MAC)** ကိုပါ တွက်ချက်ပေးသည်။
 
 ---
 
@@ -111,6 +129,10 @@ Random Decrement Technique (RDT) ဖြင့် သဘာဝကျပန်း�
 4. **Transition Matrix & Poles**:
    $$\mathbf{A} = \mathbf{O}_{\text{up}}^\dagger \mathbf{O}_{\text{down}}$$
    System matrix $\mathbf{A}$ ၏ Eigenvalues ($\lambda_i$) များမှ စစ်မှန်သော frequency ($f_i$) နှင့် damping ($\zeta_i$) များကို ရယူသည်။
+5. **State-Space Model Order နှင့် Cluster တည်ငြိမ်မှု**:
+   - Model order စုံကိန်းများ $n \in \{2, 4, \dots, 40\}$ ကို တွက်ချက်စစ်ဆေးပြီး တည်ငြိမ်သော pole များကို cluster ပြုလုပ်သည်။
+   - UI တွင် Model order $n$ နှင့် Cluster stability count ကို `n=22 (20x)` ပုံစံဖြင့် အတိအကျ ပြသသည်။
+   - Native C++20 အင်ဂျင်နှင့် JVM Fallback အင်ဂျင်တို့သည် သင်္ချာနည်းအရ ၁၀၀% တူညီသော ရလဒ် ထွက်ရှိသည်။
 
 ---
 

@@ -74,10 +74,10 @@ graph TD
 | `:app` | Application စတင်ဖွင့်လှစ်ခြင်း၊ Compose Navigation Host နှင့် Back-stack စီမံခန့်ခွဲခြင်း။ |
 | `:feature:onboarding` | ၄ ဆင့်ပါ Building Profile Wizard နှင့် တည်နေရာစီမံခန့်ခွဲမှု UI။ |
 | `:feature:measurement` | $100\text{ Hz}$ တိုက်ရိုက်တုန်ခါမှု တိုင်းတာခြင်း HUD၊ Live RMS Level နှင့် သီးခြား Sensor Calibration။ |
-| `:feature:analysis` | Tri-Engine Modal Execution (Welch + EFDD + RDT-SSI)၊ Consensus ရလဒ်နှင့် Baseline Anomaly စစ်ဆေးမှု UI။ |
+| `:feature:analysis` | Tri-Engine Modal Execution (Welch + EFDD + RDT-SSI)၊ Consensus ရလဒ်၊ Roving Mode Shape Panel (MAC) နှင့် Baseline Anomaly စစ်ဆေးမှု UI။ |
 | `:feature:report` | ပြည်သူလူထုသုံး အနှစ်ချုပ်နှင့် အင်ဂျင်နီယာသုံး အသေးစိတ် Spectrum/SVD အစီရင်ခံစာ။ |
-| `:core:dsp` | C++20 / JNI / Eigen 3.4 SVD Math Engine၊ PCHIP resampling နှင့် gap-mask gating၊ Welch PSD၊ $3 \times 3$ CSD EFDD + Axis-Aligned Sway Gate၊ Daubechies `db4` WPT + STFT transient analysis နှင့် Multi-Channel RDT-SSI။ |
-| `:core:modal` | Peak extraction၊ Parabolic interpolation၊ Modal Consensus Engine (variance/uncertainty) နှင့် `RovingModeShapeEngine` အထပ်လိုက် Mode Shape တွက်ချက်မှု။ |
+| `:core:dsp` | C++20 / JNI / Eigen 3.4 SVD Math Engine၊ Zero-velocity bias ဖယ်ရှားပြီး PCHIP resampling၊ OLS linear detrending၊ multi-axis trace sum magnitude PSD၊ $3 \times 3$ CSD EFDD + Axis-Aligned Sway Gate၊ Daubechies `db4` WPT + STFT transient analysis နှင့် Model Order အစစ်အမှန် ထိန်းသိမ်းထားသော Multi-Channel RDT-SSI။ |
+| `:core:modal` | Peak extraction၊ Parabolic interpolation၊ Modal Consensus Engine (variance/uncertainty) နှင့် Modal Assurance Criterion (MAC) ပါဝင်သော `RovingModeShapeEngine` အထပ်လိုက် Mode Shape တွက်ချက်မှု။ |
 | `:core:physics` | Eurocode / ASCE အဆောက်အအုံ အမြင့်နှင့် ကြိမ်နှုန်းဆိုင်ရာ ညီမျှခြင်းများ ($T = C_t H^{3/4}$)။ |
 | `:core:baseline` | Multi-mode Welford Online Algorithm ($f_0, f_1, \zeta_0, f_{0,x}, f_{0,y}$)၊ Anomaly-first စစ်ဆေးမှု ($\pm 5\%$) နှင့် Welford co-moment thermal drift ထိန်းညှိမှု ($k_T$)။ |
 | `:core:quality` | အချက် ၄ ချက်ပါ တိုင်းတာမှုအရည်အသွေး (Sensor, Noise, Coupling, Peak prominence) ပေါင်းစပ်တွက်ချက်မှု။ |
@@ -101,7 +101,7 @@ UI ထစ်ငေါ့ခြင်းနှင့် ANR (App Not Responding) 
 
 2. **`Dispatchers.Default`**:
    - တွက်ချက်မှုပြင်းထန်သော CPU လုပ်ငန်းစဉ်များအတွက် သီးခြား Thread Pool ဖြစ်သည်-
-     - Uniform Resampling (100Hz) နှင့် EMA gravity removal။
+     - Uniform Resampling (100Hz) နှင့် OLS linear detrending။
      - C++ JNI bridge native execution (Welch FFT, SVD decompositions, Hankel matrix)။
      - Modal Consensus multi-candidate clustering။
 

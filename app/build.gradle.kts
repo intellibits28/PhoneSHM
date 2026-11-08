@@ -28,8 +28,8 @@ android {
         applicationId = "com.ronin.phoneshm"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.2.0-research-grade"
+        versionCode = 2
+        versionName = "1.3.0-research-grade"
 
         val gitHash = getGitCommitHash()
         buildConfigField("String", "GIT_COMMIT_HASH", "\"$gitHash\"")

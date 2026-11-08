@@ -33,6 +33,16 @@ GravityRemovalResult removeGravityAndDetrend(
     result.gravityFreeSamples.reserve(n);
     result.estimatedGravityVectors.reserve(n);
 
+    double sumX = 0.0, sumY = 0.0, sumZ = 0.0;
+    for (int i = 0; i < n; ++i) {
+        sumX += samples[i].x;
+        sumY += samples[i].y;
+        sumZ += samples[i].z;
+    }
+    double meanX = sumX / n;
+    double meanY = sumY / n;
+    double meanZ = sumZ / n;
+
     float gx = samples[0].x;
     float gy = samples[0].y;
     float gz = samples[0].z;
@@ -48,9 +58,10 @@ GravityRemovalResult removeGravityAndDetrend(
         gy = emaAlpha * s.y + (1.0f - emaAlpha) * gy;
         gz = emaAlpha * s.z + (1.0f - emaAlpha) * gz;
         
-        xRes[i] = s.x - gx;
-        yRes[i] = s.y - gy;
-        zRes[i] = s.z - gz;
+        // Mean subtraction + OLS linear detrend preserves 100% of low-frequency (0.5-2.0 Hz) structural modes
+        xRes[i] = static_cast<double>(s.x) - meanX;
+        yRes[i] = static_cast<double>(s.y) - meanY;
+        zRes[i] = static_cast<double>(s.z) - meanZ;
 
         result.estimatedGravityVectors.push_back({gx, gy, gz});
 
@@ -305,7 +316,7 @@ std::vector<Peak> findPeaks(const std::vector<float>& frequencies, const std::ve
     }
 
     std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) {
-        return a.prominence > b.prominence;
+        return a.powerMagnitude > b.powerMagnitude;
     });
 
     if (peaks.size() > 20) {
@@ -524,8 +535,13 @@ MultiAxisSpectrumResult calculateMultiAxisWelchPsd(
     auto gravResult = removeGravityAndDetrend(samples);
     const auto& gfSamples = gravResult.gravityFreeSamples;
 
-    auto settlingResult = detectSettlingWindow(gravResult, sampleRateHz);
-    int settlingN = settlingResult.settlingDurationSamples;
+    auto rawSettlingResult = detectSettlingWindow(gravResult, sampleRateHz);
+    int settlingN = (params.skipSettlingTrim || (n - rawSettlingResult.settlingDurationSamples < fftSize))
+        ? 0
+        : rawSettlingResult.settlingDurationSamples;
+    SettlingWindowResult settlingResult = (settlingN == 0 && rawSettlingResult.settlingDurationSamples != 0)
+        ? SettlingWindowResult{0, 0, false}
+        : rawSettlingResult;
 
     int usableN = n - settlingN;
     if (usableN < fftSize) {
@@ -537,19 +553,17 @@ MultiAxisSpectrumResult calculateMultiAxisWelchPsd(
         slicedGapMask.assign(gapMask.begin() + settlingN, gapMask.begin() + settlingN + usableN);
     }
 
-    std::vector<float> rawX(usableN), rawY(usableN), rawZ(usableN), rawMag(usableN);
+    std::vector<float> rawX(usableN), rawY(usableN), rawZ(usableN);
     for (int i = 0; i < usableN; ++i) {
         const auto& s = gfSamples[i + settlingN];
         rawX[i] = s.x;
         rawY[i] = s.y;
         rawZ[i] = s.z;
-        rawMag[i] = std::sqrt(s.x * s.x + s.y * s.y + s.z * s.z);
     }
 
     auto filtX = highPassFilterFiltfilt(rawX, sampleRateHz, 0.5f);
     auto filtY = highPassFilterFiltfilt(rawY, sampleRateHz, 0.5f);
     auto filtZ = highPassFilterFiltfilt(rawZ, sampleRateHz, 0.5f);
-    auto filtMag = highPassFilterFiltfilt(rawMag, sampleRateHz, 0.5f);
 
     std::vector<float> frequencies(freqBins);
     for (int i = 0; i < freqBins; ++i) {
@@ -559,7 +573,10 @@ MultiAxisSpectrumResult calculateMultiAxisWelchPsd(
     auto psdX = welchPsdSingleAxis(filtX, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask);
     auto psdY = welchPsdSingleAxis(filtY, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask);
     auto psdZ = welchPsdSingleAxis(filtZ, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask);
-    auto psdMag = welchPsdSingleAxis(filtMag, fftSize, params.overlapPercentage, sampleRateHz, slicedGapMask);
+    std::vector<float> psdMag(freqBins);
+    for (int k = 0; k < freqBins; ++k) {
+        psdMag[k] = psdX[k] + psdY[k] + psdZ[k];
+    }
 
     auto peaksX = findPeaks(frequencies, psdX);
     auto peaksY = findPeaks(frequencies, psdY);
@@ -588,14 +605,26 @@ ResamplingResult resampleToUniformGrid(
     float targetSampleRateHz,
     InterpolationMode mode,
     double gapThresholdMs,
-    double maxAllowedMissingRatio
+    double maxAllowedMissingRatio,
+    const std::vector<float>& accelerometerBias
 ) {
     ResamplingResult res;
     if (samples.empty()) {
         return res;
     }
+
+    float bx = (accelerometerBias.size() >= 3) ? accelerometerBias[0] : 0.0f;
+    float by = (accelerometerBias.size() >= 3) ? accelerometerBias[1] : 0.0f;
+    float bz = (accelerometerBias.size() >= 3) ? accelerometerBias[2] : 0.0f;
+    bool hasBias = (bx != 0.0f || by != 0.0f || bz != 0.0f);
+
     if (samples.size() == 1) {
         res.samples = samples;
+        if (hasBias) {
+            res.samples[0].x -= bx;
+            res.samples[0].y -= by;
+            res.samples[0].z -= bz;
+        }
         res.gapMask = {0};
         res.originalCount = 1;
         res.resampledCount = 1;
@@ -603,8 +632,15 @@ ResamplingResult resampleToUniformGrid(
         return res;
     }
 
-    // Sort by timestamp if necessary
+    // Sort by timestamp if necessary and apply zero-velocity accelerometer bias correction
     std::vector<AccelerationSample> sorted = samples;
+    if (hasBias) {
+        for (auto& s : sorted) {
+            s.x -= bx;
+            s.y -= by;
+            s.z -= bz;
+        }
+    }
     if (!std::is_sorted(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
         return a.timestampNs < b.timestampNs;
     })) {

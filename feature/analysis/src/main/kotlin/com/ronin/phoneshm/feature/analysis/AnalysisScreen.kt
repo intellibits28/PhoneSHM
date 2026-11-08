@@ -223,7 +223,7 @@ fun AnalysisScreen(
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "This building may not respond well to short recordings. Ambient Baseline Mode records for 10 minutes using only natural vibrations (traffic, wind) — no impact needed. Go back to HUD and tap the \"Ambient Baseline\" button.",
+                                            text = "This building may not respond well to short recordings. Ambient Baseline Mode records for 5 minutes (300s) using only natural vibrations (traffic, wind) — no impact needed. Go back to HUD and tap the \"Ambient Baseline\" button.",
                                             color = Color(0xFFA5F3FC),
                                             fontSize = 12.sp,
                                             lineHeight = 17.sp
@@ -292,17 +292,22 @@ fun AnalysisScreen(
                         Tab(
                             selected = selectedTabIndex == 0,
                             onClick = { selectedTabIndex = 0 },
-                            text = { Text("Overview (Welch PSD)", fontWeight = if(selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                            text = { Text("Overview (Welch PSD)", fontWeight = if(selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
                         )
                         Tab(
                             selected = selectedTabIndex == 1,
                             onClick = { selectedTabIndex = 1 },
-                            text = { Text("Advanced (EFDD)", fontWeight = if(selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                            text = { Text("Advanced (EFDD)", fontWeight = if(selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
                         )
                         Tab(
                             selected = selectedTabIndex == 2,
                             onClick = { selectedTabIndex = 2 },
-                            text = { Text("Advanced (RDT-SSI)", fontWeight = if(selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+                            text = { Text("Advanced (RDT-SSI)", fontWeight = if(selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                        )
+                        Tab(
+                            selected = selectedTabIndex == 3,
+                            onClick = { selectedTabIndex = 3 },
+                            text = { Text("Mode Shape (Roving)", fontWeight = if(selectedTabIndex == 3) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
                         )
                     }
 
@@ -662,7 +667,7 @@ softWrap = false,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = String.format("Adaptive Matching Tolerance: ±%.3f Hz (max(1%% f₀, 2Δf)) across sequential 5s time windows.", modal.adaptiveToleranceHz),
+                                text = String.format("Adaptive Matching Tolerance: ±%.3f Hz (max(5%% f₀, 4Δf)) across sequential time windows.", modal.adaptiveToleranceHz),
                                 color = Color(0xFF94A3B8),
                                 fontSize = 12.sp
                             )
@@ -692,7 +697,7 @@ softWrap = false,
                             ) {
                                 Text(text = "Rank", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 Text(text = "Frequency (Hz)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
-                                Text(text = "Power (m²/s⁴)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+                                Text(text = "Power ((m/s²)²/Hz)", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             modal.dominantPeaksTable.forEachIndexed { index, pair ->
@@ -845,7 +850,7 @@ softWrap = false,
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Text("Peak SV₁ Magnitude", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                                            Text(String.format("%.3e m²/s⁴", maxSv), color = Color(0xFF38BDF8), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text(String.format("%.3e (m/s²)²/Hz", maxSv), color = Color(0xFF38BDF8), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                         }
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -923,7 +928,7 @@ softWrap = false,
                                                 modifier = Modifier.weight(1f)
                                             )
                                             Text(
-                                                text = "${pole.modelOrder}",
+                                                text = "n=${pole.modelOrder} (${pole.stabilityCount}x)",
                                                 color = Color(0xFF94A3B8),
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
@@ -940,6 +945,138 @@ softWrap = false,
                         } else {
                             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                                 Text("RDT-SSI Result not available", color = Color(0xFF94A3B8))
+                            }
+                        }
+                    } else if (selectedTabIndex == 3) {
+                        // Roving Mode Shape Tab Content
+                        val modeShape = uiState.modeShapeResult
+                        if (modeShape != null && modeShape.floorLevels.isNotEmpty()) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "ROVING MODE SHAPE SYNTHESIS",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = Color(0xFF94A3B8),
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Card(
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (modeShape.isMonotonicShearProfile) Color(0xFF047857) else Color(0xFFB45309)
+                                            ),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = if (modeShape.isMonotonicShearProfile) "MONOTONIC SHEAR" else "PHASE FLIP / HIGHER MODE",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Reference Mode Frequency (f₀)", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                            Text(String.format("%.3f Hz", modeShape.referenceFrequencyHz), color = Color(0xFF38BDF8), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Modal Assurance Criterion (MAC)", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                            Text(String.format("%.4f", modeShape.macValue), color = Color(0xFF10B981), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF334155), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(text = "Floor", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Text(text = "Rel. Amp φ(L)", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.4f))
+                                        Text(text = "Phase sgn(Re(Gxz))", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.6f))
+                                        Text(text = "Drift Δφ", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    for (idx in modeShape.floorLevels.indices.reversed()) {
+                                        val floorLvl = modeShape.floorLevels[idx]
+                                        val amp = modeShape.normalizedAmplitudes[idx]
+                                        val phase = modeShape.phaseSigns[idx]
+                                        val drift = modeShape.interStoryDriftRatios[idx]
+                                        val isRoof = idx == modeShape.floorLevels.lastIndex
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (isRoof) "Roof ($floorLvl)" else "Fl $floorLvl",
+                                                color = if (isRoof) Color(0xFF38BDF8) else Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                text = String.format("%+.3f", amp),
+                                                color = Color(0xFF38BDF8),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.weight(1.4f)
+                                            )
+                                            Text(
+                                                text = if (phase >= 0.0) "+1 (0° In-Phase)" else "-1 (180° Out)",
+                                                color = if (phase >= 0.0) Color(0xFF10B981) else Color(0xFFFDE047),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.weight(1.6f)
+                                            )
+                                            Text(
+                                                text = String.format("%.3f", drift),
+                                                color = Color(0xFF94A3B8),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        if (idx > 0) {
+                                            HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("Roving Mode Shape not available", color = Color(0xFF94A3B8))
                             }
                         }
                     }

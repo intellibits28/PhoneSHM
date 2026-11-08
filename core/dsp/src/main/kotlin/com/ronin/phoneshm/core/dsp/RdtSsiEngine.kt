@@ -3,7 +3,8 @@ package com.ronin.phoneshm.core.dsp
 data class RdtSsiPole(
     val frequencyHz: Float,
     val dampingRatio: Float,
-    val modelOrder: Int
+    val modelOrder: Int,
+    val stabilityCount: Int = 1
 )
 
 data class RdtSsiResult(
@@ -34,8 +35,8 @@ class DefaultRdtSsiEngine : RdtSsiEngine {
     ): RdtSsiResult {
         if (timestamps.isEmpty()) return RdtSsiResult(emptyList())
 
-        // Pass down to C++ via JNI. Max order 40, rds duration 3.0 sec.
-        val rawResult = NativeDspBridge.nativeCalculateRdtSsi(
+        // Pass down to C++ via JNI (with automatic JVM fallback during unit tests). Max order 40, rds duration 3.0 sec.
+        val rawResult = NativeDspBridge.calculateRdtSsi(
             x, y, z, sampleRateHz, minHz, maxHz, 40, 3.0f
         )
         
@@ -78,14 +79,17 @@ class DefaultRdtSsiEngine : RdtSsiEngine {
         val stablePoles = clusters
             .filter { cluster -> cluster.map { it.modelOrder }.distinct().size >= 4 }
             .map { cluster ->
+                val distinctOrders = cluster.map { it.modelOrder }.distinct().sorted()
+                val representativeModelOrder = distinctOrders[distinctOrders.size / 2]
                 RdtSsiPole(
                     frequencyHz = cluster.map { it.frequencyHz }.average().toFloat(),
                     dampingRatio = cluster.map { it.dampingRatio }.average().toFloat(),
-                    modelOrder = cluster.map { it.modelOrder }.distinct().size // Overload modelOrder as stability weight
+                    modelOrder = representativeModelOrder, // Actual state-space model order (e.g. 16, 20)
+                    stabilityCount = distinctOrders.size   // Number of distinct model orders in cluster
                 )
             }
             // Sort by stability weight (most stable first)
-            .sortedByDescending { it.modelOrder }
+            .sortedByDescending { it.stabilityCount }
         
         return RdtSsiResult(stablePoles)
     }

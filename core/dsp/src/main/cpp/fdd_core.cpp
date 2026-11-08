@@ -237,8 +237,20 @@ FddResult calculateFdd(
         result.hvRatio[k] = static_cast<float>(std::min(hv, 1e9));
     }
 
-    // Peak picking on the first singular value curve
-    auto peaks = findPeaks(result.frequencies, result.firstSingularValues);
+    // Peak picking on the first singular value curve (filtered to 0.5-30.0 Hz structural band and sorted by SV1 powerMagnitude descending)
+    auto allPeaks = findPeaks(result.frequencies, result.firstSingularValues);
+    std::vector<Peak> peaks;
+    for (const auto& p : allPeaks) {
+        if (p.frequencyHz >= 0.5f && p.frequencyHz <= 30.0f) {
+            peaks.push_back(p);
+        }
+    }
+    if (peaks.empty()) {
+        peaks = allPeaks;
+    }
+    std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) {
+        return a.powerMagnitude > b.powerMagnitude;
+    });
     for (const auto& p : peaks) {
         EfddMode mode;
         mode.frequencyHz = p.frequencyHz;

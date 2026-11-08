@@ -49,8 +49,9 @@ Each sample starting at offset `0x04` is encoded in **Little-Endian (ARM64 / x86
 ### Throughput & File Sizing
 - **Sampling Rate**: $100\text{ Hz}$ ($100\text{ samples/sec}$)
 - **Data Rate**: $100 \times 20\text{ bytes} = 2,000\text{ bytes/sec} \approx 2\text{ KB/sec}$
-- **30-Second Session**: $4 + (3,000 \times 20) = 60,004\text{ bytes} \approx 60\text{ KB}$
-- **10-Minute Continuous Session**: $4 + (60,000 \times 20) = 1,200,004\text{ bytes} \approx 1.2\text{ MB}$
+- **30-Second Impulse Check**: $4 + (3,000 \times 20) = 60,004\text{ bytes} \approx 60\text{ KB}$
+- **300-Second Standard Continuous Baseline (5 Minutes)**: $4 + (30,000 \times 20) = 600,004\text{ bytes} \approx 600\text{ KB}$
+- **10-Minute Extended Session**: $4 + (60,000 \times 20) = 1,200,004\text{ bytes} \approx 1.2\text{ MB}$
 
 ### Python / NumPy Parsing Example
 ```python

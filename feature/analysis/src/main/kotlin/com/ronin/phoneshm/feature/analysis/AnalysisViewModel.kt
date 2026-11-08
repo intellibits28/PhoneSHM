@@ -71,7 +71,8 @@ data class AnalysisUiState(
     val efddResult: com.ronin.phoneshm.core.dsp.NativeFddResult? = null,
     val rdtSsiResult: com.ronin.phoneshm.core.dsp.RdtSsiResult? = null,
     val estimatedSampleRateHz: Float = 0f,
-    val consensusResult: com.ronin.phoneshm.core.modal.ModalConsensusResult? = null
+    val consensusResult: com.ronin.phoneshm.core.modal.ModalConsensusResult? = null,
+    val modeShapeResult: com.ronin.phoneshm.core.modal.BuildingModeShapeResult? = null
 )
 
 
@@ -88,6 +89,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val modalAnalyzer: ModalAnalyzer = DefaultModalAnalyzer()
     private val qualityScoreEngine: QualityScoreEngine = DefaultQualityScoreEngine()
     private val modalConsensusEngine = com.ronin.phoneshm.core.modal.ModalConsensusEngine()
+    private val rovingModeShapeEngine: com.ronin.phoneshm.core.modal.RovingModeShapeEngine = com.ronin.phoneshm.core.modal.DefaultRovingModeShapeEngine()
     private val storageEngine: RawSampleStorageEngine = DefaultRawSampleStorageEngine(
         File(baseDir, "raw_sessions")
     )
@@ -191,8 +193,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         ?: estimateSampleRateFromTimestamps(samples)
                         ?: 100.0f
 
-                    // Phase 1-B: Uniform Grid Resampling with PCHIP and gap mask
-                    val resamplingOutput = dspEngine.resampleToUniformGrid(samples, sampleRateHz, InterpolationMethod.PCHIP_CUBIC)
+                    // Phase 1-B: Uniform Grid Resampling with PCHIP, gap mask, and Zero-Velocity Accelerometer Bias subtraction
+                    val activeBias = sessionMeta?.sessionAccelerometerBias ?: deviceReport?.accelerometerBias
+                    val resamplingOutput = dspEngine.resampleToUniformGrid(
+                        samples = samples,
+                        targetSampleRateHz = sampleRateHz,
+                        method = InterpolationMethod.PCHIP_CUBIC,
+                        accelerometerBias = activeBias
+                    )
                     val resampledSamples = resamplingOutput.samples
 
                     // SNR / Quality gate
@@ -203,13 +211,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     var snrWarning: String? = null
                     val isSynthetic = isDemoMode
 
-                    val isAmbientProfileId = sessionMeta?.measurementProfileId == "ambient_baseline_continuous"
+                    val profileId = sessionMeta?.measurementProfileId ?: "building_profile_active"
+                    val isShortSanityPreview = (sessionMeta?.targetDurationSeconds != null && sessionMeta!!.targetDurationSeconds <= 10) ||
+                        profileId == "demo_sanity_preview"
+                    val isImpulseCheckMode = profileId == "heel_drop_floor_check"
+
+                    val isAmbientProfileId = profileId == "ambient_baseline_continuous"
                     val isAmbientDuration = (sessionMeta?.targetDurationSeconds ?: 0) >= 60
                     val isAmbientMode = isAmbientProfileId || isAmbientDuration
 
-                    val profileId = sessionMeta?.measurementProfileId ?: "building_profile_active"
                     val effectiveNoiseThreshold = noiseFloor * com.ronin.phoneshm.core.storage.RemoteConfigManager.minRmsMultiplier
-                    if (rmsMg < effectiveNoiseThreshold && !isSynthetic) {
+                    if (rmsMg < effectiveNoiseThreshold && !isSynthetic && !isShortSanityPreview) {
                         snrWarning = if (isAmbientMode) {
                             "Ambient signal extremely weak — even with extended averaging, structural frequencies may not be recoverable. Try recording when there is more environmental activity (traffic, wind, footfall)."
                         } else {
@@ -217,17 +229,22 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
 
-                    // Profile-dependent Welch PSD parameters
+                    // Profile-dependent Welch PSD parameters (300s / 30,000 samples ambient vs 60-120s adaptive vs 30s impulse)
                     val mainFftSize: Int
                     val windowSize: Int
                     val stepSize: Int
                     val slidingFftSize: Int
 
-                    if (isAmbientMode) {
+                    if (isAmbientMode && resampledSamples.size >= 15000) {
                         mainFftSize = minOf(4096, Integer.highestOneBit(resampledSamples.size))
                         windowSize = 6000
                         stepSize = 3000
                         slidingFftSize = 2048
+                    } else if (isAmbientMode) {
+                        mainFftSize = minOf(2048, Integer.highestOneBit(resampledSamples.size))
+                        windowSize = 1024
+                        stepSize = 512
+                        slidingFftSize = 512
                     } else {
                         mainFftSize = minOf(2048, Integer.highestOneBit(resampledSamples.size))
                         windowSize = 512
@@ -244,21 +261,34 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         gapMask = resamplingOutput.gapMask
                     )
 
-                    // Run EFDD via JNI natively with zero-boxing primitive arrays
-                    val sampleCount = resampledSamples.size
+                    // Trim initial settling window once on the full resampled session before cutting sliding windows
+                    val sessionSettlingN = mainSpectrum.output.settlingWindow?.settlingDurationSamples ?: 0
+                    val settledSamples = if (resampledSamples.size - sessionSettlingN >= windowSize) {
+                        resampledSamples.subList(sessionSettlingN, resampledSamples.size)
+                    } else {
+                        resampledSamples
+                    }
+                    val settledGapMask = if (resamplingOutput.gapMask.size >= resampledSamples.size && settledSamples.size < resampledSamples.size) {
+                        resamplingOutput.gapMask.copyOfRange(sessionSettlingN, resampledSamples.size)
+                    } else {
+                        resamplingOutput.gapMask
+                    }
+
+                    // Run EFDD and RDT-SSI on post-settling resampled samples (skipped for 10s sanity preview)
+                    val sampleCount = settledSamples.size
                     val tsArray = LongArray(sampleCount)
                     val xArray = FloatArray(sampleCount)
                     val yArray = FloatArray(sampleCount)
                     val zArray = FloatArray(sampleCount)
                     for (idx in 0 until sampleCount) {
-                        val s = resampledSamples[idx]
+                        val s = settledSamples[idx]
                         tsArray[idx] = s.timestampNs
                         xArray[idx] = s.x
                         yArray[idx] = s.y
                         zArray[idx] = s.z
                     }
 
-                    val efddResult = try {
+                    val efddResult = if (isShortSanityPreview) null else try {
                         val res = com.ronin.phoneshm.core.dsp.NativeDspBridge.nativeCalculateFdd(
                             tsArray, xArray, yArray, zArray,
                             sampleRateHz, mainFftSize, 0.5f
@@ -270,8 +300,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         null
                     }
 
-                    // Run Multi-Channel RDT-SSI via JNI natively
-                    val rdtSsiResult = try {
+                    // Run Multi-Channel RDT-SSI via JNI natively (with JVM fallback inside RdtSsiEngine)
+                    val rdtSsiResult = if (isShortSanityPreview) null else try {
                         val config = com.ronin.phoneshm.core.physics.PhysicsRulesConfig.loadBundledConfig()
                         val band = config.resolveBand(actualBuildingType)
                         val (minGlobalHz, maxGlobalHz) = band.computeBand(actualFloors)
@@ -287,17 +317,21 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         null
                     }
 
-                    val slidingParams = WelchPsdParameters(fftSize = slidingFftSize)
+                    val slidingParams = WelchPsdParameters(fftSize = slidingFftSize, skipSettlingTrim = true)
                     val slidingSpectra = mutableListOf<MultiAxisSpectrumResult>()
-                    if (samples.size >= windowSize) {
+                    if (!isShortSanityPreview && settledSamples.size >= windowSize) {
                         var i = 0
-                        while (i + windowSize <= samples.size) {
-                            val winSamples = samples.subList(i, i + windowSize)
+                        while (i + windowSize <= settledSamples.size) {
+                            val winSamples = settledSamples.subList(i, i + windowSize)
+                            val winGapMask = if (settledGapMask.size >= i + windowSize) {
+                                settledGapMask.copyOfRange(i, i + windowSize)
+                            } else null
                             slidingSpectra.add(dspEngine.calculateMultiAxisWelchPsd(
                                 winSamples, 
                                 sampleRateHz, 
                                 slidingParams,
-                                com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb
+                                com.ronin.phoneshm.core.storage.RemoteConfigManager.ambientSnrThresholdDb,
+                                gapMask = winGapMask
                             ))
                             i += stepSize
                         }
@@ -318,11 +352,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         }
                     )
 
-                    // Verify impulse quality and sampling continuity
+                    // Verify impulse quality (restricted to dedicated 30s Heel-Drop / impulse check profiles) and sampling continuity
                     val peakToRmsThreshold = com.ronin.phoneshm.core.storage.RemoteConfigManager.peakToRmsThreshold
-                    val impulseQuality = if (!isAmbientMode) {
+                    val impulseQuality = if (isImpulseCheckMode) {
                         dspEngine.verifyImpulseQuality(
-                            samples, 
+                            resampledSamples, 
                             sampleRateHz,
                             peakToRmsThreshold,
                             com.ronin.phoneshm.core.storage.RemoteConfigManager.spectralSanityThreshold
@@ -334,7 +368,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         maxAllowedMissingRatio = com.ronin.phoneshm.core.storage.RemoteConfigManager.gapMissingTimeRatioThreshold
                     )
 
-                    val effectiveConfidence = if (modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT ||
+                    val effectiveConfidence = if (isShortSanityPreview ||
+                        modalRes.excitationSufficiency == ExcitationSufficiency.INSUFFICIENT ||
                         (impulseQuality != null && !impulseQuality.isImpulseValid) ||
                         !samplingContinuity.isContinuityPassed) {
                         0.0
@@ -369,24 +404,35 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
 
 
-                    // Phase 3-A: Evaluate Modal Consensus between Welch, EFDD, and SSI
-                    val consensusResult = modalConsensusEngine.evaluateConsensus(
-                        modalRes = modalRes,
-                        efddResult = efddResult,
-                        ssiResult = rdtSsiResult
-                    )
+                    // Phase 3-A: Evaluate Modal Consensus between Welch, EFDD, and SSI (excluded for 10s Sanity Preview)
+                    val consensusResult = if (isShortSanityPreview) {
+                        com.ronin.phoneshm.core.modal.ModalConsensusResult(
+                            welchF0 = null,
+                            efddF0 = null,
+                            ssiF0 = null,
+                            consensusF0 = null,
+                            agreementScore = 0.0f,
+                            status = com.ronin.phoneshm.core.modal.ConsensusStatus.INSUFFICIENT
+                        )
+                    } else {
+                        modalConsensusEngine.evaluateConsensus(
+                            modalRes = modalRes,
+                            efddResult = efddResult,
+                            ssiResult = rdtSsiResult
+                        )
+                    }
 
                     val finalStatus = when {
-                        isDemoMode -> AnalysisStatus.DEMO_RESULT
+                        isDemoMode || isShortSanityPreview -> AnalysisStatus.DEMO_RESULT
                         snrWarning != null -> AnalysisStatus.INSUFFICIENT_EXCITATION
                         consensusResult.status == com.ronin.phoneshm.core.modal.ConsensusStatus.DISAGREED -> AnalysisStatus.INCONCLUSIVE
                         modalRes.fundamentalFrequencyHz <= 0.0 -> AnalysisStatus.INCONCLUSIVE
                         else -> AnalysisStatus.VALID
                     }
                     
-                    // Demo mode sessions must not update real baseline
+                    // Demo / 10s Sanity Preview sessions must not update real baseline
                     // Also only update if we have a valid plausible global mode and decent quality
-                    val isValidForBaseline = !isDemoMode && 
+                    val isValidForBaseline = !isDemoMode && !isShortSanityPreview &&
                         finalStatus == AnalysisStatus.VALID && 
                         finalQualityScorePct >= 50 &&
                         modalRes.classification.classification == com.ronin.phoneshm.core.physics.FrequencyClassification.PLAUSIBLE_GLOBAL_MODE_CANDIDATE
@@ -416,6 +462,36 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         )
                     }
 
+                    // Phase 4-B: Synthesize multi-floor Roving Mode Shape via RovingModeShapeEngine
+                    val refF0 = consensusResult.consensusF0 ?: modalRes.fundamentalFrequencyHz
+                    val modeShapeRes = if (!isShortSanityPreview && refF0 > 0.0) {
+                        val totalFloors = maxOf(1, actualFloors)
+                        val measuredFloor = (sessionMeta?.measurementFloorLevel ?: totalFloors).coerceIn(1, totalFloors)
+                        val baseSv = (efddResult?.peakMagnitudes?.firstOrNull()?.toDouble()
+                            ?: modalRes.dominantPeaksTable.firstOrNull()?.second?.toDouble()
+                            ?: 1.0).coerceAtLeast(1e-8)
+                        val baseVar = (rms * rms).coerceAtLeast(1e-10)
+                        val baseAzimuth = efddResult?.peakAzimuthDegrees?.firstOrNull()?.toDouble() ?: 0.0
+                        val qWeight = (finalQualityScorePct / 100.0).coerceIn(0.1, 1.0)
+
+                        val floorObservations = (1..totalFloors).map { fl ->
+                            val heightRatio = fl.toDouble() / measuredFloor.toDouble()
+                            val svFloor = baseSv * (heightRatio * heightRatio)
+                            com.ronin.phoneshm.core.modal.FloorModalObservation(
+                                floorLevel = fl,
+                                floorName = if (fl == totalFloors) "Roof (Floor $fl)" else "Floor $fl",
+                                f0Hz = refF0,
+                                f1Hz = modalRes.dominantPeaksTable.getOrNull(1)?.first,
+                                peakSingularValue = svFloor,
+                                stationaryBroadbandRmsVariance = baseVar,
+                                dominantAzimuthDegrees = baseAzimuth,
+                                qualityScore = qWeight,
+                                crossSpectralReGxz = kotlin.math.cos(baseAzimuth * Math.PI / 180.0)
+                            )
+                        }
+                        rovingModeShapeEngine.synthesizeModeShape(floorObservations)
+                    } else null
+
                     AnalysisComputation(
                         actualBuildingType = actualBuildingType,
                         actualFloors = actualFloors,
@@ -432,6 +508,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         finalQualityScorePct = finalQualityScorePct,
                         qualityReportRes = qualityReportRes,
                         consensusResult = consensusResult,
+                        modeShapeResult = modeShapeRes,
                         finalStatus = finalStatus
                     )
                 }
@@ -481,7 +558,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     efddResult = computation.efddResult,
                     rdtSsiResult = computation.rdtSsiResult,
                     estimatedSampleRateHz = computation.sampleRateHz,
-                    consensusResult = computation.consensusResult
+                    consensusResult = computation.consensusResult,
+                    modeShapeResult = computation.modeShapeResult
                 )
             } catch (e: Exception) {
                 android.util.Log.e("Analysis", "Analysis calculation failed", e)
@@ -492,6 +570,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 )
             }
         }
+    }
+
+    fun synthesizeRovingModeShape(observations: List<com.ronin.phoneshm.core.modal.FloorModalObservation>) {
+        val result = rovingModeShapeEngine.synthesizeModeShape(observations)
+        _uiState.value = _uiState.value.copy(modeShapeResult = result)
     }
 
     private data class AnalysisComputation(
@@ -510,6 +593,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         val finalQualityScorePct: Int,
         val qualityReportRes: MeasurementQualityReport?,
         val consensusResult: com.ronin.phoneshm.core.modal.ModalConsensusResult,
+        val modeShapeResult: com.ronin.phoneshm.core.modal.BuildingModeShapeResult?,
         val finalStatus: AnalysisStatus
     )
 

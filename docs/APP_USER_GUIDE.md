@@ -80,7 +80,8 @@ Specify where in the building this phone will be placed:
 |                                                             |
 |   ● SENSOR READY                                            |
 |   Target Sample Rate: 100 Hz                                |
-|   Target Duration: 60 Seconds                               |
+|   Target Duration: 300 Seconds (5 Minutes)                  |
+|   Profile: Ambient Baseline (Continuous Monitoring)         |
 |                                                             |
 |   Live RMS Vibration Level: [████████░░░░░░░] 0.042 m/s²    |
 |                                                             |
@@ -88,6 +89,11 @@ Specify where in the building this phone will be placed:
 |                                                             |
 +-------------------------------------------------------------+
 ```
+
+### Measurement Profiles & Durations
+- **Ambient Baseline (300 Seconds / 5 Minutes)**: Primary measurement profile for research-grade Operational Modal Analysis and baseline tracking. Records 30,000 samples @ 100 Hz, enabling 8 overlapping 60-second sliding windows for robust persistence evaluation.
+- **Impulse / Heel-Drop Check (30 Seconds)**: Restricted to impact or impulse excitation testing (`heel_drop_floor_check`).
+- **Live Preview / Sanity Check (10 Seconds)**: Quick sensor coupling and noise check; strictly excluded from long-term baseline consensus and modal physics tracking.
 
 ### Managing Locations & Buildings
 - **"Switch" Button**: Opens the Building Switcher dialog to select a different building profile or create a new one.
@@ -137,6 +143,13 @@ flowchart TD
 - **`GLOBAL_MODE`**: The frequency falls within the theoretical natural frequency bounds for the building's height and structural archetype.
 - **`LOCAL_MODE`**: The frequency corresponds to higher-order floor diaphragm or beam vibration.
 - **`SENSOR_ARTIFACT`**: Mains electricity hum ($50\text{Hz}/60\text{Hz}$) or thermal sensor drift.
+
+### Interactive OMA Diagnostic Panels
+The Analysis Screen provides four specialized diagnostic tabs:
+1. **Welch PSD**: Multi-axis Power Spectral Density in $(m/s^2)^2/\text{Hz}$, sub-bin interpolated peaks, and sliding-window persistence ($\max(5\% f_0, 4\Delta f)$).
+2. **EFDD (Spatial SVD)**: First and second singular values $\sigma_1(f), \sigma_2(f)$ in $(m/s^2)^2/\text{Hz}$, dominant sway azimuth $\theta_{\text{sway}}$, and logarithmic decrement damping $\zeta_0$.
+3. **RDT-SSI (Time Domain)**: Continuous-time system poles, true state-space model order $n \in \{2..40\}$, and cluster stability count (e.g. `n=22 (20x)`).
+4. **Mode Shape (Roving)**: Sequential multi-floor building mode shape synthesis. Displays roof-normalized relative amplitudes ($\phi(\text{Roof}) = 1.0$), phase signs from $\text{sgn}(\text{Re}(G_{xz}))$, inter-story drift ratios $\Delta\phi$, and the **Modal Assurance Criterion (MAC)** against the ideal linear shear profile.
 
 ---
 

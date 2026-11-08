@@ -75,10 +75,10 @@ graph TD
 | `:app` | Application bootstrap, Compose navigation host, dynamic ViewModel factories, and system back-stack handling. |
 | `:feature:onboarding` | 4-step building profile wizard, multi-measurement location manager, and building metadata validation. |
 | `:feature:measurement` | Real-time 100Hz vibration acquisition HUD, live RMS vibration meter, per-session dynamic sensor calibration, and local session history. |
-| `:feature:analysis` | Tri-engine modal identification execution (Welch PSD + EFDD + RDT-SSI), consensus status visualization, singular value spectrum, and baseline anomaly comparison. |
+| `:feature:analysis` | Tri-engine modal identification execution (Welch PSD + EFDD + RDT-SSI), consensus status visualization, singular value spectrum, Roving Mode Shape synthesis with MAC, and baseline anomaly comparison. |
 | `:feature:report` | Dual-mode presentation: Citizen Science executive summary vs. Senior Structural Engineer interactive diagnostics. |
-| `:core:dsp` | High-performance C++20 DSP engine with JNI bindings: Fritsch-Carlson PCHIP resampling & gap-mask gating, Eigen 3.4 SVD, FFT, Welch PSD, $3 \times 3$ CSD EFDD with tri-axial coherence & Axis-Aligned Sway Gate, Daubechies `db4` WPT & STFT transient analysis, and Multi-Channel RDT-SSI. |
-| `:core:modal` | Peak extraction, sub-sample parabolic interpolation, adaptive peak persistence tracking, Tri-Engine Modal Consensus Engine with inter-engine variance/uncertainty, and `RovingModeShapeEngine` for excitation-normalized multi-floor mode shapes. |
+| `:core:dsp` | High-performance C++20 DSP engine with JNI bindings: Fritsch-Carlson PCHIP resampling with zero-velocity bias subtraction & gap-mask gating, OLS linear detrending, spectral trace sum magnitude PSD, Eigen 3.4 SVD, FFT, Welch PSD, $3 \times 3$ CSD EFDD with tri-axial coherence & Axis-Aligned Sway Gate, Daubechies `db4` WPT & STFT transient analysis, and Multi-Channel RDT-SSI preserving state-space model orders. |
+| `:core:modal` | Peak extraction, sub-sample parabolic interpolation, adaptive peak persistence tracking, Tri-Engine Modal Consensus Engine with inter-engine variance/uncertainty, and `RovingModeShapeEngine` for excitation-normalized multi-floor mode shapes with Modal Assurance Criterion (MAC). |
 | `:core:physics` | Structural design period heuristics ($T = C_t H^{3/4}$), plausibility boundaries, and frequency categorization (`GLOBAL_MODE`, `LOCAL_MODE`, `SENSOR_ARTIFACT`). |
 | `:core:baseline` | Online Welford multi-mode longitudinal baseline tracking ($f_0, f_1, \zeta_0, f_{0,x}, f_{0,y}$), 10-session baseline calibration, anomaly-first verification ($\pm 5\%$), Welford co-moment thermal drift compensation ($k_T$), and environmental stratification. |
 | `:core:quality` | 4-factor multi-metric measurement quality score fusion (Sensor capability, Noise floor, Surface coupling stability, Frequency peak prominence). |
@@ -106,7 +106,7 @@ sequenceDiagram
     participant DSP as Native C++ DSP / JNI
     participant Consensus as ModalConsensusEngine
     participant Base as BaselineManagerEngine
-    participant DB as Room Database (v7)
+    participant DB as Room Database (v8)
 
     UI->>VM: User taps "Record" (or Scheduled)
     VM->>Dev: Run 3-second zero-velocity calibration
