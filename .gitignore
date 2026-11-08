@@ -32,6 +32,7 @@ local.properties
 
 # Termux / Local temp files
 scratch/
+build_artifacts/
 *.log
 logs_and_others/
 sessions.json
