@@ -29,6 +29,7 @@ import java.util.*
 @Composable
 fun SessionHistoryScreen(
     measurementProfileId: String,
+    buildingHash: String = "",
     onNavigateBack: () -> Unit,
     onSessionSelected: (String) -> Unit // Passes the .bin file path
 ) {
@@ -36,31 +37,49 @@ fun SessionHistoryScreen(
     var sessions by remember { mutableStateOf<List<Pair<MeasurementSessionMetadata, Boolean>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(measurementProfileId) {
+    LaunchedEffect(measurementProfileId, buildingHash) {
         withContext(Dispatchers.IO) {
-            val filesDir = context.filesDir
-            val metaFiles = filesDir.listFiles { _, name -> name.endsWith(".meta.json") }
+            val directoriesToScan = listOfNotNull(
+                context.filesDir,
+                File(
+                    android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                    "PhoneSHM"
+                ).takeIf { it.exists() && it.canRead() }
+            )
             val loadedSessions = mutableListOf<Pair<MeasurementSessionMetadata, Boolean>>()
-            
-            metaFiles?.forEach { file ->
-                try {
-                    val content = file.readText()
-                    val decoded = SessionMetadataJsonCodec.decode(content)
-                    if (decoded != null && decoded.first.measurementProfileId == measurementProfileId) {
-                        // Fallback to lastModified if recordedAtEpochMs is null
-                        val isApproximate = decoded.first.recordedAtEpochMs == null
-                        val meta = if (isApproximate) {
-                            decoded.first.copy(recordedAtEpochMs = file.lastModified())
-                        } else {
-                            decoded.first
+            val seenSessionIds = mutableSetOf<String>()
+
+            directoriesToScan.forEach { dir ->
+                val metaFiles = dir.listFiles { _, name -> name.endsWith(".meta.json") }
+                metaFiles?.forEach { file ->
+                    try {
+                        val content = file.readText()
+                        val decoded = SessionMetadataJsonCodec.decode(content)
+                        if (decoded != null && seenSessionIds.add(decoded.first.sessionId)) {
+                            val sMeta = decoded.first
+                            val matchesBuilding = buildingHash.isEmpty() || sMeta.buildingHash == null || sMeta.buildingHash == buildingHash
+                            val matchesProfile = measurementProfileId.isEmpty() ||
+                                sMeta.measurementProfileId == measurementProfileId ||
+                                sMeta.measurementProfileId == "ambient_baseline_continuous" ||
+                                sMeta.measurementProfileId == "heel_drop_floor_check" ||
+                                sMeta.measurementProfileId == "demo_sanity_preview"
+
+                            if (matchesBuilding && matchesProfile) {
+                                val isApproximate = sMeta.recordedAtEpochMs == null
+                                val meta = if (isApproximate) {
+                                    sMeta.copy(recordedAtEpochMs = file.lastModified())
+                                } else {
+                                    sMeta
+                                }
+                                loadedSessions.add(Pair(meta, isApproximate))
+                            }
                         }
-                        loadedSessions.add(Pair(meta, isApproximate))
+                    } catch (e: Exception) {
+                        // Ignore parse errors
                     }
-                } catch (e: Exception) {
-                    // Ignore parse errors
                 }
             }
-            
+
             // Sort newest first
             sessions = loadedSessions.sortedByDescending { it.first.recordedAtEpochMs ?: 0L }
             isLoading = false
@@ -97,8 +116,17 @@ fun SessionHistoryScreen(
             ) {
                 items(sessions) { (session, isApprox) ->
                     SessionHistoryCard(session = session, isApproximate = isApprox, onClick = {
-                        val binPath = session.rawStorageFileUri
-                        onSessionSelected(binPath)
+                        val binFile = File(session.rawStorageFileUri)
+                        val resolvedBinPath = if (binFile.exists()) {
+                            binFile.absolutePath
+                        } else {
+                            val downloadsBin = File(
+                                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                                "PhoneSHM/${binFile.name}"
+                            )
+                            if (downloadsBin.exists()) downloadsBin.absolutePath else binFile.absolutePath
+                        }
+                        onSessionSelected(resolvedBinPath)
                     })
                 }
             }
@@ -111,6 +139,17 @@ fun SessionHistoryCard(session: MeasurementSessionMetadata, isApproximate: Boole
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy HH:mm:ss", Locale.getDefault()) }
     val dateStr = session.recordedAtEpochMs?.let { dateFormat.format(Date(it)) } ?: "Unknown Date"
     val finalDateStr = if (isApproximate) "$dateStr (~Approx)" else dateStr
+
+    val profileTag = when (session.measurementProfileId) {
+        "ambient_baseline_continuous" -> "🌊 Ambient Baseline (300s Continuous)"
+        "heel_drop_floor_check" -> "⚡ Impulse Check (30s Heel-Drop)"
+        "demo_sanity_preview" -> "⏱️ 10s Live Preview"
+        else -> {
+            val floorStr = session.measurementFloorLevel?.let { "Floor $it" } ?: "Floor N/A"
+            val locStr = session.locationType ?: "Adaptive SHM"
+            "🏢 $floorStr • $locStr"
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -131,14 +170,21 @@ fun SessionHistoryCard(session: MeasurementSessionMetadata, isApproximate: Boole
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = profileTag,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Duration: ${session.targetDurationSeconds}s",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
             }
-            
+
             // Quality Gate Status
             if (session.qualityGatePassed == true) {
                 Icon(
@@ -155,7 +201,7 @@ fun SessionHistoryCard(session: MeasurementSessionMetadata, isApproximate: Boole
                     modifier = Modifier.size(28.dp)
                 )
             } else {
-                Text("Pending", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text("Recorded", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             }
         }
     }

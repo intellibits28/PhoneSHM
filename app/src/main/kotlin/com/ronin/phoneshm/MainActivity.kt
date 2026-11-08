@@ -268,6 +268,7 @@ fun PhoneShmAppHost(
     } else if (currentScreen == "HISTORY") {
         SessionHistoryScreen(
             measurementProfileId = activeMeasurementId,
+            buildingHash = activeBuildingId,
             onNavigateBack = { currentScreen = "MEASUREMENT" },
             onSessionSelected = { fileUri ->
                 val onboardState = onboardingViewModel.state.value

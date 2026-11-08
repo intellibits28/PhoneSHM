@@ -44,9 +44,13 @@ class MeasurementViewModel(
     private var recordingJob: Job? = null
     private var streamingJob: Job? = null
 
-    fun checkPastSessions(measurementProfileId: String) {
+    fun checkPastSessions(measurementProfileId: String, buildingHash: String? = null) {
         viewModelScope.launch {
-            val hasSessions = profileRepository?.hasAnyRecordingForMeasurementProfile(measurementProfileId) ?: false
+            val hasForProfile = profileRepository?.hasAnyRecordingForMeasurementProfile(measurementProfileId) ?: false
+            val hasForBuilding = if (buildingHash?.isNotEmpty() == true) {
+                profileRepository?.hasAnyRecordingForBuilding(buildingHash) ?: false
+            } else false
+            val hasSessions = hasForProfile || hasForBuilding
             _uiState.value = _uiState.value.copy(hasPastSessions = hasSessions)
         }
     }
@@ -136,6 +140,7 @@ class MeasurementViewModel(
                 _uiState.value = _uiState.value.copy(
                     isRecording = false,
                     recordingFinished = true,
+                    hasPastSessions = true,
                     currentSampleRateHz = metadata.actualAverageSampleRateHz,
                     clockJitterMs = metadata.sampleJitterStdMs,
                     clockDriftPpm = metadata.clockDriftPpm,

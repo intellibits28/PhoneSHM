@@ -110,10 +110,12 @@ class ProfileRepositoryImpl(
     }
 
     override suspend fun hasAnyRecordingForBuilding(buildingHash: String): Boolean {
-        // Query the raw sessions directory (applicationContext.filesDir) to check if any .meta.json file exists for this buildingHash
-        val filesDir = context.filesDir
-        val metaFiles = filesDir.listFiles { _, name -> name.endsWith(".meta.json") }
-        if (metaFiles != null) {
+        val directoriesToScan = listOfNotNull(
+            context.filesDir,
+            java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PhoneSHM").takeIf { it.exists() && it.canRead() }
+        )
+        for (dir in directoriesToScan) {
+            val metaFiles = dir.listFiles { _, name -> name.endsWith(".meta.json") } ?: continue
             for (file in metaFiles) {
                 try {
                     val content = file.readText()
@@ -130,15 +132,18 @@ class ProfileRepositoryImpl(
     }
 
     override suspend fun hasAnyRecordingForMeasurementProfile(measurementId: String): Boolean {
-        // Query the raw sessions directory (applicationContext.filesDir) to check if any .meta.json file exists for this measurementId
-        val filesDir = context.filesDir
-        val metaFiles = filesDir.listFiles { _, name -> name.endsWith(".meta.json") }
-        if (metaFiles != null) {
+        val directoriesToScan = listOfNotNull(
+            context.filesDir,
+            java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "PhoneSHM").takeIf { it.exists() && it.canRead() }
+        )
+        for (dir in directoriesToScan) {
+            val metaFiles = dir.listFiles { _, name -> name.endsWith(".meta.json") } ?: continue
             for (file in metaFiles) {
                 try {
                     val content = file.readText()
                     val json = org.json.JSONObject(content)
-                    if (json.optJSONObject("metadata")?.optString("measurementProfileId") == measurementId) {
+                    val mId = json.optJSONObject("metadata")?.optString("measurementProfileId")
+                    if (mId == measurementId || mId == "ambient_baseline_continuous" || mId == "heel_drop_floor_check" || measurementId.isEmpty()) {
                         return true
                     }
                 } catch (e: Exception) {

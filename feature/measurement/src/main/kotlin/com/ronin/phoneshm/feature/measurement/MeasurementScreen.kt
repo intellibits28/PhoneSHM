@@ -50,8 +50,8 @@ fun MeasurementScreen(
     var startDelay by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(5) }
     var showConfigDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    androidx.compose.runtime.LaunchedEffect(activeMeasurementId) {
-        viewModel.checkPastSessions(activeMeasurementId)
+    androidx.compose.runtime.LaunchedEffect(activeMeasurementId, activeBuildingHash) {
+        viewModel.checkPastSessions(activeMeasurementId, activeBuildingHash)
     }
 
     androidx.compose.runtime.LaunchedEffect(uiState.recordingFinished) {
@@ -534,7 +534,7 @@ fun MeasurementScreen(
                             showBatteryWarningDialog = false
                             viewModel.startRecording(
                                 buildingHash = activeBuildingHash,
-                                measurementId = "ambient_baseline_continuous",
+                                measurementId = if (activeMeasurementId.isNotEmpty()) activeMeasurementId else "ambient_baseline_continuous",
                                 durationSec = 300,
                                 startDelaySec = startDelay
                             ) { sid, uri ->
@@ -558,7 +558,7 @@ fun MeasurementScreen(
                     } else {
                         viewModel.startRecording(
                             buildingHash = activeBuildingHash,
-                            measurementId = "ambient_baseline_continuous",
+                            measurementId = if (activeMeasurementId.isNotEmpty()) activeMeasurementId else "ambient_baseline_continuous",
                             durationSec = 300,
                             startDelaySec = startDelay
                         ) { sid, uri ->
