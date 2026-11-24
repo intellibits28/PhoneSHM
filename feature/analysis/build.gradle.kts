@@ -48,7 +48,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
-    testImplementation("org.json:json:20231013")
+    testImplementation("org.json:json:20260719")
     testImplementation("io.mockk:mockk:1.13.11")
     testImplementation(libs.kotlinx.coroutines.test)
 }

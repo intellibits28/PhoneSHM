@@ -54,5 +54,5 @@ dependencies {
     implementation(project(":core:device"))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation("org.json:json:20231013")
+    testImplementation("org.json:json:20260719")
 }
